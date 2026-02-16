@@ -330,6 +330,40 @@ ipcMain.handle("legacy.selectClassFolder", async () => {
   return res.filePaths[0];
 });
 
+ipcMain.handle("files.pickSave", async (_evt, payload) => {
+  if (process.env.MARKBOOK_E2E_PICK_SAVE_PATH) {
+    return process.env.MARKBOOK_E2E_PICK_SAVE_PATH;
+  }
+
+  const options = {
+    title: payload?.title || "Save File",
+    defaultPath: payload?.defaultPath,
+    filters: Array.isArray(payload?.filters) ? payload.filters : undefined,
+  };
+  const res = mainWindow
+    ? await dialog.showSaveDialog(mainWindow, options)
+    : await dialog.showSaveDialog(options);
+  if (res.canceled || !res.filePath) return null;
+  return res.filePath;
+});
+
+ipcMain.handle("files.pickOpen", async (_evt, payload) => {
+  if (process.env.MARKBOOK_E2E_PICK_OPEN_PATH) {
+    return process.env.MARKBOOK_E2E_PICK_OPEN_PATH;
+  }
+
+  const options = {
+    title: payload?.title || "Open File",
+    properties: ["openFile"],
+    filters: Array.isArray(payload?.filters) ? payload.filters : undefined,
+  };
+  const res = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  if (res.canceled || !res.filePaths[0]) return null;
+  return res.filePaths[0];
+});
+
 ipcMain.handle("pdf.exportHtml", async (_evt, payload) => {
   const { html, outPath } = payload || {};
   if (!html || !outPath) throw new Error("missing html or outPath");

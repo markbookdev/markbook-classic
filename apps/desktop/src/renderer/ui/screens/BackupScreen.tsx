@@ -15,6 +15,41 @@ export function BackupScreen(props: {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
 
+  function defaultBundleName() {
+    const ws = props.workspacePath?.split("/").filter(Boolean).pop() || "workspace";
+    return `${ws}.mbcbackup.zip`;
+  }
+
+  async function browseExportPath() {
+    props.onError(null);
+    try {
+      const picked = await window.markbook.files.pickSave({
+        title: "Export Workspace Bundle",
+        defaultPath: defaultBundleName(),
+        filters: [{ name: "MarkBook Backup", extensions: ["mbcbackup", "zip"] }]
+      });
+      if (picked) setExportPath(picked);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function browseImportPath() {
+    props.onError(null);
+    try {
+      const picked = await window.markbook.files.pickOpen({
+        title: "Import Workspace Bundle",
+        filters: [
+          { name: "MarkBook Backup", extensions: ["mbcbackup", "zip"] },
+          { name: "SQLite", extensions: ["sqlite3"] }
+        ]
+      });
+      if (picked) setImportPath(picked);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   async function exportBundle() {
     if (!exportPath.trim()) {
       props.onError("Enter an output file path first.");
@@ -80,9 +115,16 @@ export function BackupScreen(props: {
             data-testid="backup-export-path-input"
             value={exportPath}
             onChange={(e) => setExportPath(e.currentTarget.value)}
-            placeholder="/absolute/path/to/backup.markbook.sqlite3"
+            placeholder="/absolute/path/to/workspace.mbcbackup.zip"
             style={{ flex: "1 1 520px", padding: "6px 8px" }}
           />
+          <button
+            data-testid="backup-export-browse-btn"
+            disabled={busy}
+            onClick={() => void browseExportPath()}
+          >
+            Browse
+          </button>
           <button data-testid="backup-export-btn" disabled={busy} onClick={() => void exportBundle()}>
             {busy ? "Working..." : "Export"}
           </button>
@@ -96,9 +138,16 @@ export function BackupScreen(props: {
             data-testid="backup-import-path-input"
             value={importPath}
             onChange={(e) => setImportPath(e.currentTarget.value)}
-            placeholder="/absolute/path/to/backup.markbook.sqlite3"
+            placeholder="/absolute/path/to/workspace.mbcbackup.zip"
             style={{ flex: "1 1 520px", padding: "6px 8px" }}
           />
+          <button
+            data-testid="backup-import-browse-btn"
+            disabled={busy}
+            onClick={() => void browseImportPath()}
+          >
+            Browse
+          </button>
           <button data-testid="backup-import-btn" disabled={busy} onClick={() => void importBundle()}>
             {busy ? "Working..." : "Import"}
           </button>

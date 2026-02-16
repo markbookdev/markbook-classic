@@ -4,7 +4,12 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 test("class exchange CSV export/import roundtrip", async () => {
-  const { app, page, repoRoot } = await launchElectronApp();
+  const outDir = mkdtemp("markbook-exchange-");
+  const csvPath = path.join(outDir, "class-exchange.csv");
+  const { app, page, repoRoot } = await launchElectronApp({
+    MARKBOOK_E2E_PICK_SAVE_PATH: csvPath,
+    MARKBOOK_E2E_PICK_OPEN_PATH: csvPath,
+  });
   try {
     const { classId } = await importLegacyFixture(
       page,
@@ -13,28 +18,20 @@ test("class exchange CSV export/import roundtrip", async () => {
     );
     expect(classId).toBeTruthy();
 
-    const outDir = mkdtemp("markbook-exchange-");
-    const csvPath = path.join(outDir, "class-exchange.csv");
+    await page.getByTestId("nav-exchange").click();
+    await page.waitForSelector('[data-testid="exchange-screen"]');
+    await page.getByTestId("exchange-export-browse-btn").click();
+    await expect(page.getByTestId("exchange-export-path-input")).toHaveValue(csvPath);
+    await page.getByTestId("exchange-export-btn").click();
+    await expect(page.getByText("Exported", { exact: false })).toBeVisible();
 
-    const exported = await page.evaluate(async ({ classId, csvPath }) => {
-      return await window.markbook.request("exchange.exportClassCsv", {
-        classId,
-        outPath: csvPath,
-      });
-    }, { classId, csvPath });
-
-    expect(exported.rowsExported).toBeGreaterThan(0);
     expect(fs.existsSync(csvPath)).toBeTruthy();
+    expect(fs.statSync(csvPath).size).toBeGreaterThan(0);
 
-    const imported = await page.evaluate(async ({ classId, csvPath }) => {
-      return await window.markbook.request("exchange.importClassCsv", {
-        classId,
-        inPath: csvPath,
-        mode: "upsert",
-      });
-    }, { classId, csvPath });
-
-    expect(imported.updated).toBeGreaterThan(0);
+    await page.getByTestId("exchange-import-browse-btn").click();
+    await expect(page.getByTestId("exchange-import-path-input")).toHaveValue(csvPath);
+    await page.getByTestId("exchange-import-btn").click();
+    await expect(page.getByText("Imported", { exact: false })).toBeVisible();
   } finally {
     await app.close();
   }

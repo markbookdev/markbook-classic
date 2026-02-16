@@ -31,6 +31,17 @@ declare global {
         html: string,
         defaultFilename: string
       ) => Promise<{ canceled: boolean; path?: string }>;
+      files: {
+        pickSave: (options: {
+          title?: string;
+          defaultPath?: string;
+          filters?: Array<{ name: string; extensions: string[] }>;
+        }) => Promise<string | null>;
+        pickOpen: (options: {
+          title?: string;
+          filters?: Array<{ name: string; extensions: string[] }>;
+        }) => Promise<string | null>;
+      };
     };
   }
 }

@@ -1,19 +1,13 @@
-use crate::{calc, db, legacy};
+use super::handlers;
+use super::types::{AppState, Request};
+use crate::{backup, calc, db, legacy};
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use uuid::Uuid;
-
-#[derive(Debug, Deserialize)]
-pub struct Request {
-    pub id: String,
-    pub method: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
 
 #[derive(Debug, Serialize)]
 struct OkResp {
@@ -37,12 +31,48 @@ struct ErrResp {
     error: ErrObj,
 }
 
-pub struct AppState {
-    pub workspace: Option<PathBuf>,
-    pub db: Option<Connection>,
+pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
+    if let Some(resp) = handlers::core::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::classes::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::import_legacy::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::grid::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::students::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::markset_setup::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::attendance::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::seating::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::comments::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::reports::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::backup_exchange::try_handle(state, &req) {
+        return resp;
+    }
+    if let Some(resp) = handlers::assets::try_handle(state, &req) {
+        return resp;
+    }
+
+    handle_request_legacy(state, req)
 }
 
-pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
+pub(crate) fn handle_request_legacy(state: &mut AppState, req: Request) -> serde_json::Value {
     match req.method.as_str() {
         "health" => {
             let result = json!({
@@ -618,26 +648,14 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 });
             };
 
-            let db_path = workspace_path.join("markbook.sqlite3");
-            if !db_path.is_file() {
-                return json!(ErrResp {
-                    id: req.id,
-                    ok: false,
-                    error: ErrObj {
-                        code: "not_found".into(),
-                        message: "workspace database not found".into(),
-                        details: Some(json!({ "path": db_path.to_string_lossy() }))
-                    }
-                });
-            }
-
             if let Some(conn) = state.db.as_ref() {
                 let _ = conn.execute_batch("PRAGMA wal_checkpoint(FULL)");
             }
 
             let out = PathBuf::from(&out_path);
-            if let Some(parent) = out.parent() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
+            let export = match backup::export_workspace_bundle(&workspace_path, &out) {
+                Ok(v) => v,
+                Err(e) => {
                     return json!(ErrResp {
                         id: req.id,
                         ok: false,
@@ -646,35 +664,19 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                             message: e.to_string(),
                             details: Some(json!({ "path": out_path }))
                         }
-                    });
+                    })
                 }
-            }
-            if let Err(e) = std::fs::copy(&db_path, &out) {
-                return json!(ErrResp {
-                    id: req.id,
-                    ok: false,
-                    error: ErrObj {
-                        code: "io_failed".into(),
-                        message: e.to_string(),
-                        details: Some(json!({ "path": out_path }))
-                    }
-                });
-            }
-            let manifest_path = format!("{}.manifest.json", out_path);
-            let _ = std::fs::write(
-                &manifest_path,
-                serde_json::to_string_pretty(&json!({
-                    "format": "markbook-classic-workspace-v1",
-                    "dbFile": "markbook.sqlite3",
-                    "sourceWorkspace": workspace_path.to_string_lossy(),
-                }))
-                .unwrap_or_else(|_| "{}".to_string()),
-            );
+            };
 
             json!(OkResp {
                 id: req.id,
                 ok: true,
-                result: json!({ "ok": true, "path": out_path, "manifestPath": manifest_path })
+                result: json!({
+                    "ok": true,
+                    "path": out_path,
+                    "bundleFormat": export.bundle_format,
+                    "entryCount": export.entry_count
+                })
             })
         }
         "backup.importWorkspaceBundle" => {
@@ -737,18 +739,21 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             // Drop open handle before replacing file.
             state.db = None;
 
-            let dst = workspace_path.join("markbook.sqlite3");
-            if let Err(e) = std::fs::copy(&src, &dst) {
-                return json!(ErrResp {
-                    id: req.id,
-                    ok: false,
-                    error: ErrObj {
-                        code: "io_failed".into(),
-                        message: e.to_string(),
-                        details: Some(json!({ "path": dst.to_string_lossy() }))
-                    }
-                });
-            }
+            let import = match backup::import_workspace_bundle(&src, &workspace_path) {
+                Ok(v) => v,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "io_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "path": src.to_string_lossy() }))
+                        }
+                    })
+                }
+            };
+
             match db::open_db(&workspace_path) {
                 Ok(conn) => {
                     state.workspace = Some(workspace_path.clone());
@@ -758,7 +763,8 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                         ok: true,
                         result: json!({
                             "ok": true,
-                            "workspacePath": workspace_path.to_string_lossy()
+                            "workspacePath": workspace_path.to_string_lossy(),
+                            "bundleFormatDetected": import.bundle_format_detected
                         })
                     })
                 }

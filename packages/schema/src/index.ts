@@ -709,12 +709,15 @@ export const LearningSkillsReportModelResultSchema = z.object({
 export const BackupExportWorkspaceBundleResultSchema = z.object({
   ok: z.literal(true),
   path: z.string(),
-  manifestPath: z.string().optional()
+  manifestPath: z.string().optional(),
+  bundleFormat: z.string().optional(),
+  entryCount: z.number().optional()
 });
 
 export const BackupImportWorkspaceBundleResultSchema = z.object({
   ok: z.literal(true),
-  workspacePath: z.string().optional()
+  workspacePath: z.string().optional(),
+  bundleFormatDetected: z.string().optional()
 });
 
 export const ExchangeExportClassCsvResultSchema = z.object({

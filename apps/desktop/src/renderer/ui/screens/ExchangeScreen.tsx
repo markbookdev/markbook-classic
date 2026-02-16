@@ -15,6 +15,33 @@ export function ExchangeScreen(props: {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
 
+  async function browseExportPath() {
+    props.onError(null);
+    try {
+      const picked = await window.markbook.files.pickSave({
+        title: "Export Class CSV",
+        defaultPath: "class-exchange.csv",
+        filters: [{ name: "CSV", extensions: ["csv"] }]
+      });
+      if (picked) setExportPath(picked);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function browseImportPath() {
+    props.onError(null);
+    try {
+      const picked = await window.markbook.files.pickOpen({
+        title: "Import Class CSV",
+        filters: [{ name: "CSV", extensions: ["csv"] }]
+      });
+      if (picked) setImportPath(picked);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   async function exportCsv() {
     if (!exportPath.trim()) {
       props.onError("Enter an export path first.");
@@ -77,6 +104,13 @@ export function ExchangeScreen(props: {
             placeholder="/absolute/path/to/class-export.csv"
             style={{ flex: "1 1 560px", padding: "6px 8px" }}
           />
+          <button
+            data-testid="exchange-export-browse-btn"
+            disabled={busy}
+            onClick={() => void browseExportPath()}
+          >
+            Browse
+          </button>
           <button data-testid="exchange-export-btn" disabled={busy} onClick={() => void exportCsv()}>
             {busy ? "Working..." : "Export"}
           </button>
@@ -93,6 +127,13 @@ export function ExchangeScreen(props: {
             placeholder="/absolute/path/to/class-export.csv"
             style={{ flex: "1 1 560px", padding: "6px 8px" }}
           />
+          <button
+            data-testid="exchange-import-browse-btn"
+            disabled={busy}
+            onClick={() => void browseImportPath()}
+          >
+            Browse
+          </button>
           <label>
             Mode{" "}
             <select

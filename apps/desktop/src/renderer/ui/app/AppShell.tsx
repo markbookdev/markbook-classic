@@ -19,6 +19,8 @@ import { SeatingPlanScreen } from "../screens/SeatingPlanScreen";
 import { LearningSkillsScreen } from "../screens/LearningSkillsScreen";
 import { BackupScreen } from "../screens/BackupScreen";
 import { ExchangeScreen } from "../screens/ExchangeScreen";
+import { LoanedItemsScreen } from "../screens/LoanedItemsScreen";
+import { DeviceMappingsScreen } from "../screens/DeviceMappingsScreen";
 
 type Screen =
   | "dashboard"
@@ -30,6 +32,8 @@ type Screen =
   | "notes"
   | "seating_plan"
   | "learning_skills"
+  | "loaned_items"
+  | "device_mappings"
   | "backup"
   | "exchange";
 
@@ -406,6 +410,15 @@ export function AppShell() {
               >
                 Learning Skills
               </button>
+              <button data-testid="nav-loaned-items" onClick={() => setScreen("loaned_items")}>
+                Loaned Items
+              </button>
+              <button
+                data-testid="nav-device-mappings"
+                onClick={() => setScreen("device_mappings")}
+              >
+                Device Mappings
+              </button>
               <button data-testid="nav-backup" onClick={() => setScreen("backup")}>
                 Backup
               </button>
@@ -484,6 +497,10 @@ export function AppShell() {
             <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "learning_skills" ? (
             <LearningSkillsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "loaned_items" ? (
+            <LoanedItemsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "device_mappings" ? (
+            <DeviceMappingsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "backup" ? (
             <BackupScreen
               workspacePath={health.workspacePath}
