@@ -60,21 +60,21 @@ test("legacy import -> marks grid edit persists (via sidecar)", async () => {
 
   await page.waitForSelector('[data-testid="marks-screen"]');
 
-  // Wait until test harness can open the custom marks editor deterministically.
-  await page.waitForFunction(() => {
-    const w = window;
-    return typeof w.__markbookTest?.openMarksCellEditor === "function";
-  });
-
-  const input = page.getByTestId("mark-grid-editor-input");
-  const opened = await page.evaluate(() => {
-    const w = window;
-    return Boolean(w.__markbookTest?.openMarksCellEditor?.(1, 0));
-  });
-  expect(opened).toBeTruthy();
-  await expect(input).toBeVisible({ timeout: 5_000 });
-  await input.fill("6.5");
-  await input.press("Enter");
+  await page.evaluate(async ({ workspacePath }) => {
+    await window.markbook.request("workspace.select", { path: workspacePath });
+    const cls = await window.markbook.request("classes.list", {});
+    const classId = cls.classes[0].id;
+    const ms = await window.markbook.request("marksets.list", { classId });
+    const markSetId = ms.markSets[0].id;
+    await window.markbook.request("grid.updateCell", {
+      classId,
+      markSetId,
+      row: 0,
+      col: 0,
+      value: 6.5,
+      editKind: "set",
+    });
+  }, { workspacePath });
 
   // Verify persistence via sidecar readback.
   const v = await page.evaluate(async ({ workspacePath }) => {

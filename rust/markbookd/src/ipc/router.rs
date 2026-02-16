@@ -3,7 +3,6 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -436,6 +435,35 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 });
             }
 
+            if let Err(e) = tx.execute("DELETE FROM loaned_items WHERE class_id = ?", [&class_id]) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "loaned_items" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM student_device_map WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "student_device_map" }))
+                    }
+                });
+            }
+
             if let Err(e) = tx.execute(
                 "DELETE FROM assessments
                  WHERE mark_set_id IN (SELECT id FROM mark_sets WHERE class_id = ?)",
@@ -497,6 +525,22 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 });
             }
 
+            if let Err(e) = tx.execute(
+                "DELETE FROM learning_skills_cells WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "learning_skills_cells" }))
+                    }
+                });
+            }
+
             if let Err(e) = tx.execute("DELETE FROM students WHERE class_id = ?", [&class_id]) {
                 let _ = tx.rollback();
                 return json!(ErrResp {
@@ -539,6 +583,537 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 id: req.id,
                 ok: true,
                 result: json!({ "ok": true })
+            })
+        }
+        "backup.exportWorkspaceBundle" => {
+            let out_path = match req.params.get("outPath").and_then(|v| v.as_str()) {
+                Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing outPath".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let workspace_path = req
+                .params
+                .get("workspacePath")
+                .and_then(|v| v.as_str())
+                .map(PathBuf::from)
+                .or_else(|| state.workspace.clone());
+            let Some(workspace_path) = workspace_path else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let db_path = workspace_path.join("markbook.sqlite3");
+            if !db_path.is_file() {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "not_found".into(),
+                        message: "workspace database not found".into(),
+                        details: Some(json!({ "path": db_path.to_string_lossy() }))
+                    }
+                });
+            }
+
+            if let Some(conn) = state.db.as_ref() {
+                let _ = conn.execute_batch("PRAGMA wal_checkpoint(FULL)");
+            }
+
+            let out = PathBuf::from(&out_path);
+            if let Some(parent) = out.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "io_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "path": out_path }))
+                        }
+                    });
+                }
+            }
+            if let Err(e) = std::fs::copy(&db_path, &out) {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "io_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "path": out_path }))
+                    }
+                });
+            }
+            let manifest_path = format!("{}.manifest.json", out_path);
+            let _ = std::fs::write(
+                &manifest_path,
+                serde_json::to_string_pretty(&json!({
+                    "format": "markbook-classic-workspace-v1",
+                    "dbFile": "markbook.sqlite3",
+                    "sourceWorkspace": workspace_path.to_string_lossy(),
+                }))
+                .unwrap_or_else(|_| "{}".to_string()),
+            );
+
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({ "ok": true, "path": out_path, "manifestPath": manifest_path })
+            })
+        }
+        "backup.importWorkspaceBundle" => {
+            let in_path = match req.params.get("inPath").and_then(|v| v.as_str()) {
+                Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing inPath".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let workspace_path = req
+                .params
+                .get("workspacePath")
+                .and_then(|v| v.as_str())
+                .map(PathBuf::from)
+                .or_else(|| state.workspace.clone());
+            let Some(workspace_path) = workspace_path else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let src = PathBuf::from(&in_path);
+            if !src.is_file() {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "not_found".into(),
+                        message: "bundle file not found".into(),
+                        details: Some(json!({ "path": in_path }))
+                    }
+                });
+            }
+            if let Err(e) = std::fs::create_dir_all(&workspace_path) {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "io_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "path": workspace_path.to_string_lossy() }))
+                    }
+                });
+            }
+
+            // Drop open handle before replacing file.
+            state.db = None;
+
+            let dst = workspace_path.join("markbook.sqlite3");
+            if let Err(e) = std::fs::copy(&src, &dst) {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "io_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "path": dst.to_string_lossy() }))
+                    }
+                });
+            }
+            match db::open_db(&workspace_path) {
+                Ok(conn) => {
+                    state.workspace = Some(workspace_path.clone());
+                    state.db = Some(conn);
+                    json!(OkResp {
+                        id: req.id,
+                        ok: true,
+                        result: json!({
+                            "ok": true,
+                            "workspacePath": workspace_path.to_string_lossy()
+                        })
+                    })
+                }
+                Err(e) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_open_failed".into(),
+                        message: e.to_string(),
+                        details: None
+                    }
+                }),
+            }
+        }
+        "exchange.exportClassCsv" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let out_path = match req.params.get("outPath").and_then(|v| v.as_str()) {
+                Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing outPath".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mut stmt = match conn.prepare(
+                "SELECT s.id, s.last_name, s.first_name, ms.code, a.idx, a.title, sc.status, sc.raw_value
+                 FROM scores sc
+                 JOIN assessments a ON a.id = sc.assessment_id
+                 JOIN mark_sets ms ON ms.id = a.mark_set_id
+                 JOIN students s ON s.id = sc.student_id
+                 WHERE s.class_id = ?
+                 ORDER BY s.sort_order, ms.sort_order, a.idx",
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let rows = match stmt
+                .query_map([&class_id], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, String>(5)?,
+                        r.get::<_, String>(6)?,
+                        r.get::<_, Option<f64>>(7)?,
+                    ))
+                })
+                .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mut csv = String::from(
+                "student_id,student_name,mark_set_code,assessment_idx,assessment_title,status,raw_value\n",
+            );
+            let rows_exported = rows.len();
+            for (
+                student_id,
+                last,
+                first,
+                mark_set_code,
+                assessment_idx,
+                title,
+                status,
+                raw_value,
+            ) in rows
+            {
+                let display_name = format!("{}, {}", last, first);
+                csv.push_str(&format!(
+                    "{},{},{},{},{},{},{}\n",
+                    csv_quote(&student_id),
+                    csv_quote(&display_name),
+                    csv_quote(&mark_set_code),
+                    assessment_idx,
+                    csv_quote(&title),
+                    csv_quote(&status),
+                    raw_value.map(|v| v.to_string()).unwrap_or_default()
+                ));
+            }
+
+            let out = PathBuf::from(&out_path);
+            if let Some(parent) = out.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "io_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "path": out_path }))
+                        }
+                    });
+                }
+            }
+            if let Err(e) = std::fs::write(&out, csv) {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "io_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "path": out_path }))
+                    }
+                });
+            }
+
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({ "ok": true, "rowsExported": rows_exported, "path": out_path })
+            })
+        }
+        "exchange.importClassCsv" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let in_path = match req.params.get("inPath").and_then(|v| v.as_str()) {
+                Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing inPath".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mode = req
+                .params
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("upsert")
+                .to_ascii_lowercase();
+            let text = match std::fs::read_to_string(&in_path) {
+                Ok(t) => t,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "io_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "path": in_path }))
+                        }
+                    })
+                }
+            };
+
+            let tx = match conn.unchecked_transaction() {
+                Ok(t) => t,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_tx_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            if mode == "replace" {
+                if let Err(e) = tx.execute(
+                    "DELETE FROM scores
+                     WHERE assessment_id IN (
+                       SELECT a.id
+                       FROM assessments a
+                       JOIN mark_sets ms ON ms.id = a.mark_set_id
+                       WHERE ms.class_id = ?
+                     )",
+                    [&class_id],
+                ) {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_delete_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "table": "scores" }))
+                        }
+                    });
+                }
+            }
+
+            let mut updated = 0usize;
+            for (line_no, raw_line) in text.lines().enumerate() {
+                if line_no == 0 {
+                    continue;
+                }
+                let line = raw_line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let fields = parse_csv_record(line);
+                if fields.len() < 7 {
+                    continue;
+                }
+                let student_id = fields[0].trim();
+                let mark_set_code = fields[2].trim();
+                let assessment_idx = match fields[3].trim().parse::<i64>() {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let status = fields[5].trim().to_ascii_lowercase();
+                let raw_value = if fields[6].trim().is_empty() {
+                    None
+                } else {
+                    fields[6].trim().parse::<f64>().ok()
+                };
+
+                let student_ok = tx
+                    .query_row(
+                        "SELECT 1 FROM students WHERE id = ? AND class_id = ?",
+                        (student_id, &class_id),
+                        |r| r.get::<_, i64>(0),
+                    )
+                    .optional()
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if !student_ok {
+                    continue;
+                }
+                let assessment_id: Option<String> = tx
+                    .query_row(
+                        "SELECT a.id
+                         FROM assessments a
+                         JOIN mark_sets ms ON ms.id = a.mark_set_id
+                         WHERE ms.class_id = ? AND ms.code = ? AND a.idx = ?",
+                        (&class_id, mark_set_code, assessment_idx),
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .ok()
+                    .flatten();
+                let Some(assessment_id) = assessment_id else {
+                    continue;
+                };
+                let (resolved_raw, resolved_state) =
+                    match resolve_score_state(Some(&status), raw_value) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                if let Err(e) = upsert_score(
+                    &tx,
+                    &assessment_id,
+                    student_id,
+                    resolved_raw,
+                    resolved_state,
+                ) {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: e
+                    });
+                }
+                updated += 1;
+            }
+
+            if let Err(e) = tx.commit() {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_commit_failed".into(),
+                        message: e.to_string(),
+                        details: None
+                    }
+                });
+            }
+
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({ "ok": true, "updated": updated })
             })
         }
         "students.list" => {
@@ -1727,6 +2302,231 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 result: json!({ "ok": true })
             })
         }
+        "loaned.list" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match loaned_list(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "loaned.get" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match loaned_get(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "loaned.update" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match loaned_update(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "devices.list" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match devices_list(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "devices.get" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match devices_get(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "devices.update" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match devices_update(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "learningSkills.open" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match learning_skills_open(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "learningSkills.updateCell" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match learning_skills_update_cell(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "learningSkills.reportModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match learning_skills_report_model(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
         "attendance.monthOpen" => {
             let Some(conn) = state.db.as_ref() else {
                 return json!(ErrResp {
@@ -1743,7 +2543,7 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 Ok(result) => json!(OkResp {
                     id: req.id,
                     ok: true,
-                    result
+                    result: json!(result)
                 }),
                 Err(error) => json!(ErrResp {
                     id: req.id,
@@ -1768,7 +2568,7 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 Ok(result) => json!(OkResp {
                     id: req.id,
                     ok: true,
-                    result
+                    result: json!(result)
                 }),
                 Err(error) => json!(ErrResp {
                     id: req.id,
@@ -2379,6 +3179,9 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             let mut banks_imported = 0usize;
             let mut comment_sets_imported = 0usize;
             let mut comment_remarks_imported = 0usize;
+            let mut loaned_items_imported = 0usize;
+            let mut device_mappings_imported = 0usize;
+            let mut combined_comment_sets_imported = 0usize;
             let mut warnings: Vec<serde_json::Value> = Vec::new();
 
             // Best-effort attendance import (.ATN).
@@ -2597,6 +3400,88 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 }
             }
 
+            // Best-effort ICC import (device/class codes matrix).
+            match legacy::find_icc_file(&legacy_folder) {
+                Ok(Some(icc_file)) => {
+                    let icc = match legacy::parse_legacy_icc_file(&icc_file) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "legacy_parse_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "iccFile": icc_file.to_string_lossy() }))
+                                }
+                            });
+                        }
+                    };
+
+                    let max_students = std::cmp::min(student_ids_by_sort.len(), icc.last_student);
+                    for s_idx in 0..max_students {
+                        let student_id = &student_ids_by_sort[s_idx];
+                        let codes_row = icc
+                            .codes
+                            .get(s_idx + 1)
+                            .cloned()
+                            .unwrap_or_else(|| vec![String::new(); icc.subject_count + 1]);
+                        let primary_code = codes_row
+                            .iter()
+                            .skip(1)
+                            .map(|s| s.trim())
+                            .find(|s| !s.is_empty())
+                            .unwrap_or("")
+                            .to_string();
+                        let raw_line = serde_json::to_string(&json!({
+                            "subjectCount": icc.subject_count,
+                            "codes": codes_row
+                        }))
+                        .unwrap_or_else(|_| "[]".to_string());
+                        let did = Uuid::new_v4().to_string();
+                        if let Err(e) = tx.execute(
+                            "INSERT INTO student_device_map(id, class_id, student_id, device_code, raw_line)
+                             VALUES(?, ?, ?, ?, ?)
+                             ON CONFLICT(class_id, student_id) DO UPDATE SET
+                               device_code = excluded.device_code,
+                               raw_line = excluded.raw_line",
+                            (&did, &class_id, student_id, &primary_code, &raw_line),
+                        ) {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_insert_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "student_device_map" }))
+                                }
+                            });
+                        }
+                        device_mappings_imported += 1;
+                    }
+                }
+                Ok(None) => {
+                    warnings.push(json!({
+                        "code": "legacy_missing_icc_file",
+                        "folder": legacy_folder.to_string_lossy()
+                    }));
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": legacy_folder.to_string_lossy() }))
+                        }
+                    });
+                }
+            }
+
             // Best-effort bank import from parent fixture folder.
             let bnk_folder = legacy_folder
                 .parent()
@@ -2741,6 +3626,7 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             let mut scores_imported = 0usize;
             let mut imported_mark_files: Vec<String> = Vec::new();
             let mut missing_mark_files: Vec<serde_json::Value> = Vec::new();
+            let mut mark_set_id_by_source_stem: HashMap<String, String> = HashMap::new();
 
             for def in &parsed.mark_sets {
                 let mark_file = match legacy::find_mark_file(&legacy_folder, &def.file_prefix) {
@@ -2841,6 +3727,10 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                             details: Some(json!({ "table": "mark_sets" }))
                         }
                     });
+                }
+                if let Some(stem) = mark_file.file_stem().and_then(|s| s.to_str()) {
+                    mark_set_id_by_source_stem
+                        .insert(stem.to_ascii_uppercase(), mark_set_id.clone());
                 }
 
                 for (i, cat) in parsed_mark.categories.iter().enumerate() {
@@ -3205,6 +4095,312 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 imported_mark_files.push(mark_filename);
             }
 
+            // Best-effort import TBK companion files (loaned items).
+            match legacy::find_tbk_files(&legacy_folder) {
+                Ok(tbk_files) => {
+                    if tbk_files.is_empty() {
+                        warnings.push(json!({
+                            "code": "legacy_missing_tbk_file",
+                            "folder": legacy_folder.to_string_lossy()
+                        }));
+                    }
+                    for tbk_file in tbk_files {
+                        let parsed_tbk = match legacy::parse_legacy_tbk_file(&tbk_file) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "legacy_parse_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(
+                                            json!({ "tbkFile": tbk_file.to_string_lossy() })
+                                        )
+                                    }
+                                });
+                            }
+                        };
+                        let source_stem = tbk_file
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_ascii_uppercase();
+                        let mark_set_id = mark_set_id_by_source_stem.get(&source_stem).cloned();
+                        let max_students =
+                            std::cmp::min(student_ids_by_sort.len(), parsed_tbk.last_student);
+                        for item in parsed_tbk.items {
+                            for s_idx in 0..max_students {
+                                let item_id = item
+                                    .assignments
+                                    .get(s_idx)
+                                    .map(|a| a.item_id.trim().to_string())
+                                    .unwrap_or_default();
+                                let note = item
+                                    .assignments
+                                    .get(s_idx)
+                                    .map(|a| a.note.trim().to_string())
+                                    .unwrap_or_default();
+                                if item_id.is_empty() && note.is_empty() {
+                                    continue;
+                                }
+                                let raw_line = serde_json::to_string(&json!({
+                                    "title": item.title,
+                                    "publisher": item.publisher,
+                                    "cost": item.cost,
+                                    "itemId": item_id,
+                                    "note": note
+                                }))
+                                .unwrap_or_else(|_| "{}".to_string());
+                                let loaned_id = Uuid::new_v4().to_string();
+                                let student_id = &student_ids_by_sort[s_idx];
+                                if let Err(e) = tx.execute(
+                                    "INSERT INTO loaned_items(id, class_id, student_id, mark_set_id, item_name, quantity, notes, raw_line)
+                                     VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                                    (
+                                        &loaned_id,
+                                        &class_id,
+                                        student_id,
+                                        mark_set_id.as_deref(),
+                                        &item.title,
+                                        item.cost,
+                                        if note.is_empty() { None } else { Some(note.as_str()) },
+                                        &raw_line,
+                                    ),
+                                ) {
+                                    let _ = tx.rollback();
+                                    return json!(ErrResp {
+                                        id: req.id,
+                                        ok: false,
+                                        error: ErrObj {
+                                            code: "db_insert_failed".into(),
+                                            message: e.to_string(),
+                                            details: Some(json!({ "table": "loaned_items" }))
+                                        }
+                                    });
+                                }
+                                loaned_items_imported += 1;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": legacy_folder.to_string_lossy() }))
+                        }
+                    });
+                }
+            }
+
+            // Best-effort merge ALL!<class>.IDX combined comment sets.
+            match legacy::find_all_idx_file(&legacy_folder) {
+                Ok(Some(all_idx_file)) => {
+                    let parsed_idx = match legacy::parse_legacy_idx_file(&all_idx_file) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "legacy_parse_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(
+                                        json!({ "idxFile": all_idx_file.to_string_lossy() })
+                                    )
+                                }
+                            });
+                        }
+                    };
+
+                    let mut mark_set_ids: Vec<String> =
+                        mark_set_id_by_source_stem.values().cloned().collect();
+                    mark_set_ids.sort();
+                    mark_set_ids.dedup();
+
+                    let idx_bank_short = parsed_idx.bank_short.clone();
+                    for mark_set_id in mark_set_ids {
+                        for set in &parsed_idx.sets {
+                            let existing_id: Option<String> = match tx
+                                .query_row(
+                                    "SELECT id FROM comment_set_indexes WHERE mark_set_id = ? AND set_number = ?",
+                                    (&mark_set_id, set.set_number as i64),
+                                    |r| r.get(0),
+                                )
+                                .optional()
+                            {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    let _ = tx.rollback();
+                                    return json!(ErrResp {
+                                        id: req.id,
+                                        ok: false,
+                                        error: ErrObj {
+                                            code: "db_query_failed".into(),
+                                            message: e.to_string(),
+                                            details: Some(json!({ "table": "comment_set_indexes" }))
+                                        }
+                                    });
+                                }
+                            };
+                            let target_set_number = if existing_id.is_some() {
+                                match tx.query_row(
+                                    "SELECT COALESCE(MAX(set_number), 0) FROM comment_set_indexes WHERE mark_set_id = ?",
+                                    [&mark_set_id],
+                                    |r| r.get::<_, i64>(0),
+                                ) {
+                                    Ok(v) => v + 1,
+                                    Err(e) => {
+                                        let _ = tx.rollback();
+                                        return json!(ErrResp {
+                                            id: req.id,
+                                            ok: false,
+                                            error: ErrObj {
+                                                code: "db_query_failed".into(),
+                                                message: e.to_string(),
+                                                details: Some(json!({ "table": "comment_set_indexes" }))
+                                            }
+                                        });
+                                    }
+                                }
+                            } else {
+                                set.set_number as i64
+                            };
+
+                            let csi_id = Uuid::new_v4().to_string();
+                            let bank_short = set
+                                .bank_short
+                                .clone()
+                                .or_else(|| idx_bank_short.clone())
+                                .map(|s| s.trim().to_string())
+                                .and_then(|s| if s.is_empty() { None } else { Some(s) });
+                            if let Err(e) = tx.execute(
+                                "INSERT INTO comment_set_indexes(
+                                   id,
+                                   class_id,
+                                   mark_set_id,
+                                   set_number,
+                                   title,
+                                   fit_mode,
+                                   fit_font_size,
+                                   fit_width,
+                                   fit_lines,
+                                   fit_subj,
+                                   max_chars,
+                                   is_default,
+                                   bank_short
+                                 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (
+                                    &csi_id,
+                                    &class_id,
+                                    &mark_set_id,
+                                    target_set_number,
+                                    &set.title,
+                                    set.fit_mode as i64,
+                                    set.fit_font_size as i64,
+                                    set.fit_width as i64,
+                                    set.fit_lines as i64,
+                                    &set.fit_subj,
+                                    set.max_chars as i64,
+                                    if set.is_default { 1 } else { 0 },
+                                    bank_short.as_deref(),
+                                ),
+                            ) {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "db_insert_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(json!({ "table": "comment_set_indexes" }))
+                                    }
+                                });
+                            }
+                            comment_sets_imported += 1;
+                            combined_comment_sets_imported += 1;
+
+                            let r_file =
+                                all_idx_file.with_extension(format!("R{}", set.set_number));
+                            if !r_file.is_file() {
+                                continue;
+                            }
+                            let parsed_r = match legacy::parse_legacy_r_comment_file(&r_file) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    let _ = tx.rollback();
+                                    return json!(ErrResp {
+                                        id: req.id,
+                                        ok: false,
+                                        error: ErrObj {
+                                            code: "legacy_parse_failed".into(),
+                                            message: e.to_string(),
+                                            details: Some(
+                                                json!({ "remarkFile": r_file.to_string_lossy() })
+                                            )
+                                        }
+                                    });
+                                }
+                            };
+                            let max_students =
+                                std::cmp::min(student_ids_by_sort.len(), parsed_r.remarks.len());
+                            for s_idx in 0..max_students {
+                                let remark = parsed_r.remarks[s_idx].trim().to_string();
+                                if remark.is_empty() {
+                                    continue;
+                                }
+                                let rid = Uuid::new_v4().to_string();
+                                let student_id = &student_ids_by_sort[s_idx];
+                                if let Err(e) = tx.execute(
+                                    "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+                                     VALUES(?, ?, ?, ?)
+                                     ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+                                       remark = excluded.remark",
+                                    (&rid, &csi_id, student_id, &remark),
+                                ) {
+                                    let _ = tx.rollback();
+                                    return json!(ErrResp {
+                                        id: req.id,
+                                        ok: false,
+                                        error: ErrObj {
+                                            code: "db_insert_failed".into(),
+                                            message: e.to_string(),
+                                            details: Some(json!({ "table": "comment_set_remarks" }))
+                                        }
+                                    });
+                                }
+                                comment_remarks_imported += 1;
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    warnings.push(json!({
+                        "code": "legacy_missing_all_idx_file",
+                        "folder": legacy_folder.to_string_lossy()
+                    }));
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": legacy_folder.to_string_lossy() }))
+                        }
+                    });
+                }
+            }
+
             if let Err(e) = tx.commit() {
                 return json!(ErrResp {
                     id: req.id,
@@ -3232,6 +4428,9 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                     "banksImported": banks_imported,
                     "commentSetsImported": comment_sets_imported,
                     "commentRemarksImported": comment_remarks_imported,
+                    "loanedItemsImported": loaned_items_imported,
+                    "deviceMappingsImported": device_mappings_imported,
+                    "combinedCommentSetsImported": combined_comment_sets_imported,
                     "sourceClFile": cl_file.to_string_lossy(),
                     "importedMarkFiles": imported_mark_files,
                     "missingMarkFiles": missing_mark_files,
@@ -5735,106 +6934,44 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             };
 
             let value = req.params.get("value").and_then(|v| v.as_f64());
-            let (raw_value, status) = match value {
-                Some(v) if v < 0.0 => {
-                    return json!(ErrResp {
-                        id: req.id,
-                        ok: false,
-                        error: ErrObj {
-                            code: "bad_params".into(),
-                            message: "negative marks are not allowed".into(),
-                            details: Some(json!({ "value": v }))
-                        }
-                    })
-                }
-                Some(v) if v > 0.0 => (Some(v), "scored"),
-                // Legacy parity: blank or 0 means "No Mark" (excluded, displays blank).
-                _ => (Some(0.0), "no_mark"),
-            };
-
-            let student_id: Option<String> = match conn
-                .query_row(
-                    "SELECT id FROM students WHERE class_id = ? AND sort_order = ?",
-                    (&class_id, row),
-                    |r| r.get(0),
-                )
-                .optional()
-            {
+            let (raw_value, status) = match resolve_score_state(None, value) {
                 Ok(v) => v,
-                Err(e) => {
+                Err(err) => {
                     return json!(ErrResp {
                         id: req.id,
                         ok: false,
-                        error: ErrObj {
-                            code: "db_query_failed".into(),
-                            message: e.to_string(),
-                            details: None
-                        }
+                        error: err
                     })
                 }
             };
-            let Some(student_id) = student_id else {
-                return json!(ErrResp {
-                    id: req.id,
-                    ok: false,
-                    error: ErrObj {
-                        code: "not_found".into(),
-                        message: "student not found".into(),
-                        details: None
-                    }
-                });
-            };
 
-            let assessment_id: Option<String> = match conn
-                .query_row(
-                    "SELECT id FROM assessments WHERE mark_set_id = ? AND idx = ?",
-                    (&mark_set_id, col),
-                    |r| r.get(0),
-                )
-                .optional()
-            {
+            let student_id = match resolve_student_id_by_row(conn, &class_id, row) {
                 Ok(v) => v,
-                Err(e) => {
+                Err(err) => {
                     return json!(ErrResp {
                         id: req.id,
                         ok: false,
-                        error: ErrObj {
-                            code: "db_query_failed".into(),
-                            message: e.to_string(),
-                            details: None
-                        }
+                        error: err
                     })
                 }
             };
-            let Some(assessment_id) = assessment_id else {
-                return json!(ErrResp {
-                    id: req.id,
-                    ok: false,
-                    error: ErrObj {
-                        code: "not_found".into(),
-                        message: "assessment not found".into(),
-                        details: None
-                    }
-                });
+
+            let assessment_id = match resolve_assessment_id_by_col(conn, &mark_set_id, col) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
             };
 
-            let score_id = Uuid::new_v4().to_string();
-            if let Err(e) = conn.execute(
-                "INSERT INTO scores(id, assessment_id, student_id, raw_value, status)
-                 VALUES(?, ?, ?, ?, ?)
-                 ON CONFLICT(assessment_id, student_id) DO UPDATE SET
-                   raw_value = excluded.raw_value,
-                   status = excluded.status",
-                (&score_id, &assessment_id, &student_id, raw_value, status),
-            ) {
+            if let Err(err) = upsert_score(conn, &assessment_id, &student_id, raw_value, status) {
                 return json!(ErrResp {
                     id: req.id,
                     ok: false,
-                    error: ErrObj {
-                        code: "db_insert_failed".into(),
-                        message: e.to_string(),
-                        details: Some(json!({ "table": "scores" }))
-                    }
+                    error: err
                 });
             }
 
@@ -5842,6 +6979,215 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 id: req.id,
                 ok: true,
                 result: json!({ "ok": true })
+            })
+        }
+        "grid.setState" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing markSetId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let row = match req.params.get("row").and_then(|v| v.as_i64()) {
+                Some(v) if v >= 0 => v,
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing/invalid row".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let col = match req.params.get("col").and_then(|v| v.as_i64()) {
+                Some(v) if v >= 0 => v,
+                _ => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing/invalid col".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let state_value = req.params.get("state").and_then(|v| v.as_str());
+            let value = req.params.get("value").and_then(|v| v.as_f64());
+            let (raw_value, status) = match resolve_score_state(state_value, value) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
+            };
+
+            let student_id = match resolve_student_id_by_row(conn, &class_id, row) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
+            };
+            let assessment_id = match resolve_assessment_id_by_col(conn, &mark_set_id, col) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
+            };
+            if let Err(err) = upsert_score(conn, &assessment_id, &student_id, raw_value, status) {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: err
+                });
+            }
+
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({ "ok": true })
+            })
+        }
+        "grid.bulkUpdate" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing markSetId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let Some(edits_arr) = req.params.get("edits").and_then(|v| v.as_array()) else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "bad_params".into(),
+                        message: "missing edits[]".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let mut updated: usize = 0;
+            for edit in edits_arr {
+                let Some(obj) = edit.as_object() else {
+                    continue;
+                };
+                let Some(row) = obj.get("row").and_then(|v| v.as_i64()) else {
+                    continue;
+                };
+                let Some(col) = obj.get("col").and_then(|v| v.as_i64()) else {
+                    continue;
+                };
+                if row < 0 || col < 0 {
+                    continue;
+                }
+                let state_value = obj.get("state").and_then(|v| v.as_str());
+                let value = obj.get("value").and_then(|v| v.as_f64());
+                let (raw_value, status) = match resolve_score_state(state_value, value) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                let student_id = match resolve_student_id_by_row(conn, &class_id, row) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let assessment_id = match resolve_assessment_id_by_col(conn, &mark_set_id, col) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                if upsert_score(conn, &assessment_id, &student_id, raw_value, status).is_ok() {
+                    updated += 1;
+                }
+            }
+
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({ "ok": true, "updated": updated })
             })
         }
         "markset.settings.get" => {
@@ -6281,21 +7627,23 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 }
             };
 
-            let summary = match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
+            let assessments = match calc::compute_assessment_stats(
+                &calc::CalcContext {
+                    conn,
+                    class_id: &class_id,
+                    mark_set_id: &mark_set_id,
+                },
+                &filters,
+            ) {
                 Ok(v) => v,
                 Err(err) => {
                     return json!(ErrResp {
                         id: req.id,
                         ok: false,
-                        error: err
+                        error: calc_err_to_err_obj(err)
                     })
                 }
             };
-
-            let assessments = summary
-                .get("perAssessment")
-                .cloned()
-                .unwrap_or_else(|| json!([]));
             json!(OkResp {
                 id: req.id,
                 ok: true,
@@ -6360,7 +7708,7 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 Ok(result) => json!(OkResp {
                     id: req.id,
                     ok: true,
-                    result
+                    result: json!(result)
                 }),
                 Err(err) => json!(ErrResp {
                     id: req.id,
@@ -6411,12 +7759,12 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 }
             };
 
-            let filters = SummaryFilters::default();
+            let filters = calc::SummaryFilters::default();
             match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
                 Ok(result) => json!(OkResp {
                     id: req.id,
                     ok: true,
-                    result
+                    result: json!(result)
                 }),
                 Err(err) => json!(ErrResp {
                     id: req.id,
@@ -6478,13 +7826,13 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
                 Ok(summary) => {
                     let result = json!({
-                        "class": summary.get("class").cloned().unwrap_or_else(|| json!({})),
-                        "markSet": summary.get("markSet").cloned().unwrap_or_else(|| json!({})),
-                        "settings": summary.get("settings").cloned().unwrap_or_else(|| json!({})),
-                        "filters": summary.get("filters").cloned().unwrap_or_else(|| json!({})),
-                        "categories": summary.get("categories").cloned().unwrap_or_else(|| json!([])),
-                        "perCategory": summary.get("perCategory").cloned().unwrap_or_else(|| json!([])),
-                        "perAssessment": summary.get("perAssessment").cloned().unwrap_or_else(|| json!([])),
+                        "class": summary.class,
+                        "markSet": summary.mark_set,
+                        "settings": summary.settings,
+                        "filters": summary.filters,
+                        "categories": summary.categories,
+                        "perCategory": summary.per_category,
+                        "perAssessment": summary.per_assessment,
                     });
                     json!(OkResp {
                         id: req.id,
@@ -6566,16 +7914,9 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
                 Ok(summary) => {
                     let student = summary
-                        .get("perStudent")
-                        .and_then(|v| v.as_array())
-                        .and_then(|arr| {
-                            arr.iter().find(|s| {
-                                s.get("studentId")
-                                    .and_then(|v| v.as_str())
-                                    .map(|sid| sid == student_id)
-                                    .unwrap_or(false)
-                            })
-                        })
+                        .per_student
+                        .iter()
+                        .find(|s| s.student_id == student_id)
                         .cloned();
                     let Some(student) = student else {
                         return json!(ErrResp {
@@ -6590,13 +7931,13 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                     };
 
                     let result = json!({
-                        "class": summary.get("class").cloned().unwrap_or_else(|| json!({})),
-                        "markSet": summary.get("markSet").cloned().unwrap_or_else(|| json!({})),
-                        "settings": summary.get("settings").cloned().unwrap_or_else(|| json!({})),
-                        "filters": summary.get("filters").cloned().unwrap_or_else(|| json!({})),
+                        "class": summary.class,
+                        "markSet": summary.mark_set,
+                        "settings": summary.settings,
+                        "filters": summary.filters,
                         "student": student,
-                        "assessments": summary.get("assessments").cloned().unwrap_or_else(|| json!([])),
-                        "perAssessment": summary.get("perAssessment").cloned().unwrap_or_else(|| json!([])),
+                        "assessments": summary.assessments,
+                        "perAssessment": summary.per_assessment,
                     });
                     json!(OkResp {
                         id: req.id,
@@ -6608,6 +7949,239 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                     id: req.id,
                     ok: false,
                     error: err
+                }),
+            }
+        }
+        "reports.attendanceMonthlyModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let month = match req.params.get("month").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing month".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let class_name: Option<String> = match conn
+                .query_row("SELECT name FROM classes WHERE id = ?", [&class_id], |r| {
+                    r.get(0)
+                })
+                .optional()
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let Some(class_name) = class_name else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "not_found".into(),
+                        message: "class not found".into(),
+                        details: None
+                    }
+                });
+            };
+            match attendance_month_open(conn, &json!({ "classId": class_id, "month": month })) {
+                Ok(model) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result: json!({
+                        "class": { "id": class_id, "name": class_name },
+                        "attendance": model
+                    })
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "reports.classListModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let class_name: Option<String> = match conn
+                .query_row("SELECT name FROM classes WHERE id = ?", [&class_id], |r| {
+                    r.get(0)
+                })
+                .optional()
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let Some(class_name) = class_name else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "not_found".into(),
+                        message: "class not found".into(),
+                        details: None
+                    }
+                });
+            };
+
+            let mut stmt = match conn.prepare(
+                "SELECT s.id, s.last_name, s.first_name, s.student_no, s.birth_date, s.active, s.sort_order, sn.note
+                 FROM students s
+                 LEFT JOIN student_notes sn
+                   ON sn.class_id = s.class_id AND sn.student_id = s.id
+                 WHERE s.class_id = ?
+                 ORDER BY s.sort_order",
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let students = match stmt
+                .query_map([&class_id], |r| {
+                    let id: String = r.get(0)?;
+                    let last: String = r.get(1)?;
+                    let first: String = r.get(2)?;
+                    let student_no: Option<String> = r.get(3)?;
+                    let birth_date: Option<String> = r.get(4)?;
+                    let active: i64 = r.get(5)?;
+                    let sort_order: i64 = r.get(6)?;
+                    let note: Option<String> = r.get(7)?;
+                    Ok(json!({
+                        "id": id,
+                        "displayName": format!("{}, {}", last, first),
+                        "studentNo": student_no,
+                        "birthDate": birth_date,
+                        "active": active != 0,
+                        "sortOrder": sort_order,
+                        "note": note.unwrap_or_default()
+                    }))
+                })
+                .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "db_query_failed".into(),
+                            message: e.to_string(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            json!(OkResp {
+                id: req.id,
+                ok: true,
+                result: json!({
+                    "class": { "id": class_id, "name": class_name },
+                    "students": students
+                })
+            })
+        }
+        "reports.learningSkillsSummaryModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match learning_skills_report_model(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
                 }),
             }
         }
@@ -7003,679 +8577,33 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-struct SummaryFilters {
-    term: Option<i64>,
-    category_name: Option<String>,
-    types_mask: Option<i64>,
-}
-
-#[derive(Debug, Clone)]
-struct SummaryStudent {
-    id: String,
-    display_name: String,
-    sort_order: i64,
-    active: bool,
-}
-
-#[derive(Debug, Clone)]
-struct SummaryCategory {
-    name: String,
-    weight: f64,
-    sort_order: i64,
-}
-
-#[derive(Debug, Clone)]
-struct SummaryAssessment {
-    id: String,
-    idx: i64,
-    date: Option<String>,
-    category_name: Option<String>,
-    title: String,
-    term: Option<i64>,
-    legacy_type: Option<i64>,
-    weight: f64,
-    out_of: f64,
-}
-
-fn parse_summary_filters(raw: Option<&serde_json::Value>) -> Result<SummaryFilters, ErrObj> {
-    let Some(raw) = raw else {
-        return Ok(SummaryFilters::default());
-    };
-    let Some(obj) = raw.as_object() else {
-        return Err(ErrObj {
-            code: "bad_params".into(),
-            message: "filters must be an object".into(),
-            details: None,
-        });
-    };
-
-    let term = match obj.get("term") {
-        None => None,
-        Some(v) if v.is_null() => None,
-        Some(v)
-            if v.as_str()
-                .map(|s| s.eq_ignore_ascii_case("ALL"))
-                .unwrap_or(false) =>
-        {
-            None
-        }
-        Some(v) => {
-            let Some(n) = v.as_i64() else {
-                return Err(ErrObj {
-                    code: "bad_params".into(),
-                    message: "filters.term must be integer or 'ALL'".into(),
-                    details: None,
-                });
-            };
-            Some(n)
-        }
-    };
-
-    let category_name = match obj.get("categoryName") {
-        None => None,
-        Some(v) if v.is_null() => None,
-        Some(v) => {
-            let Some(s) = v.as_str() else {
-                return Err(ErrObj {
-                    code: "bad_params".into(),
-                    message: "filters.categoryName must be string or null".into(),
-                    details: None,
-                });
-            };
-            let t = s.trim();
-            if t.is_empty() || t.eq_ignore_ascii_case("ALL") {
-                None
-            } else {
-                Some(t.to_ascii_lowercase())
-            }
-        }
-    };
-
-    let types_mask = match obj.get("typesMask") {
-        None => None,
-        Some(v) if v.is_null() => None,
-        Some(v) => {
-            let Some(n) = v.as_i64() else {
-                return Err(ErrObj {
-                    code: "bad_params".into(),
-                    message: "filters.typesMask must be an integer bitmask".into(),
-                    details: None,
-                });
-            };
-            Some(n)
-        }
-    };
-
-    Ok(SummaryFilters {
-        term,
-        category_name,
-        types_mask,
-    })
-}
-
-fn matches_types_mask(mask: Option<i64>, legacy_type: Option<i64>) -> bool {
-    let Some(mask) = mask else {
-        return true;
-    };
-    let t = legacy_type.unwrap_or(0);
-    if t < 0 {
-        return false;
+fn calc_err_to_err_obj(err: calc::CalcError) -> ErrObj {
+    ErrObj {
+        code: err.code,
+        message: err.message,
+        details: err.details,
     }
-    let shift = t as u32;
-    if shift >= 63 {
-        return false;
-    }
-    (mask & (1_i64 << shift)) != 0
 }
 
-fn compute_median(values: &[f64]) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-    let n = sorted.len();
-    if n % 2 == 1 {
-        sorted[n / 2]
-    } else {
-        (sorted[(n / 2) - 1] + sorted[n / 2]) / 2.0
-    }
+fn parse_summary_filters(raw: Option<&serde_json::Value>) -> Result<calc::SummaryFilters, ErrObj> {
+    calc::parse_summary_filters(raw).map_err(calc_err_to_err_obj)
 }
 
 fn compute_markset_summary(
     conn: &Connection,
     class_id: &str,
     mark_set_id: &str,
-    filters: &SummaryFilters,
-) -> Result<serde_json::Value, ErrObj> {
-    let class_name: Option<String> = conn
-        .query_row("SELECT name FROM classes WHERE id = ?", [class_id], |r| {
-            r.get(0)
-        })
-        .optional()
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-    let Some(class_name) = class_name else {
-        return Err(ErrObj {
-            code: "not_found".into(),
-            message: "class not found".into(),
-            details: None,
-        });
-    };
-
-    let mark_set_row: Option<(
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        i64,
-        i64,
-    )> = conn
-        .query_row(
-            "SELECT code, description, full_code, room, day, period, weight_method, calc_method
-             FROM mark_sets
-             WHERE id = ? AND class_id = ?",
-            (mark_set_id, class_id),
-            |r| {
-                Ok((
-                    r.get(0)?,
-                    r.get(1)?,
-                    r.get(2)?,
-                    r.get(3)?,
-                    r.get(4)?,
-                    r.get(5)?,
-                    r.get(6)?,
-                    r.get(7)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-    let Some((ms_code, ms_desc, full_code, room, day, period, weight_method, calc_method)) =
-        mark_set_row
-    else {
-        return Err(ErrObj {
-            code: "not_found".into(),
-            message: "mark set not found".into(),
-            details: None,
-        });
-    };
-
-    let mut students_stmt = conn
-        .prepare(
-            "SELECT id, last_name, first_name, sort_order, active
-             FROM students
-             WHERE class_id = ?
-             ORDER BY sort_order",
-        )
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-    let students: Vec<SummaryStudent> = students_stmt
-        .query_map([class_id], |r| {
-            let last: String = r.get(1)?;
-            let first: String = r.get(2)?;
-            Ok(SummaryStudent {
-                id: r.get(0)?,
-                display_name: format!("{}, {}", last, first),
-                sort_order: r.get(3)?,
-                active: r.get::<_, i64>(4)? != 0,
-            })
-        })
-        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-
-    let mut categories_stmt = conn
-        .prepare(
-            "SELECT name, COALESCE(weight, 0), sort_order
-             FROM categories
-             WHERE mark_set_id = ?
-             ORDER BY sort_order",
-        )
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-    let categories: Vec<SummaryCategory> = categories_stmt
-        .query_map([mark_set_id], |r| {
-            Ok(SummaryCategory {
-                name: r.get(0)?,
-                weight: r.get::<_, f64>(1)?,
-                sort_order: r.get(2)?,
-            })
-        })
-        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-
-    let mut assessments_stmt = conn
-        .prepare(
-            "SELECT id, idx, date, category_name, title, term, legacy_type, weight, out_of
-             FROM assessments
-             WHERE mark_set_id = ?
-             ORDER BY idx",
-        )
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-    let all_assessments: Vec<SummaryAssessment> = assessments_stmt
-        .query_map([mark_set_id], |r| {
-            Ok(SummaryAssessment {
-                id: r.get(0)?,
-                idx: r.get(1)?,
-                date: r.get(2)?,
-                category_name: r.get(3)?,
-                title: r.get(4)?,
-                term: r.get(5)?,
-                legacy_type: r.get(6)?,
-                weight: r.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
-                out_of: r.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
-            })
-        })
-        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
-        .map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-
-    let selected_assessments: Vec<SummaryAssessment> = all_assessments
-        .iter()
-        .filter(|a| {
-            let term_ok = filters.term.map(|t| a.term == Some(t)).unwrap_or(true);
-            let cat_ok = filters
-                .category_name
-                .as_ref()
-                .map(|cat| {
-                    a.category_name
-                        .as_deref()
-                        .map(|v| v.to_ascii_lowercase() == *cat)
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-            let type_ok = matches_types_mask(filters.types_mask, a.legacy_type);
-            term_ok && cat_ok && type_ok
-        })
-        .cloned()
-        .collect();
-
-    let mut score_by_pair: HashMap<(String, String), calc::ScoreState> = HashMap::new();
-    if !students.is_empty() && !all_assessments.is_empty() {
-        let assessment_ids: Vec<String> = all_assessments.iter().map(|a| a.id.clone()).collect();
-        let student_ids: Vec<String> = students.iter().map(|s| s.id.clone()).collect();
-
-        let assess_placeholders = std::iter::repeat("?")
-            .take(assessment_ids.len())
-            .collect::<Vec<_>>()
-            .join(",");
-        let stud_placeholders = std::iter::repeat("?")
-            .take(student_ids.len())
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql = format!(
-            "SELECT assessment_id, student_id, raw_value, status
-             FROM scores
-             WHERE assessment_id IN ({}) AND student_id IN ({})",
-            assess_placeholders, stud_placeholders
-        );
-        let mut bind_values: Vec<Value> =
-            Vec::with_capacity(assessment_ids.len() + student_ids.len());
-        for id in &assessment_ids {
-            bind_values.push(Value::Text(id.clone()));
-        }
-        for id in &student_ids {
-            bind_values.push(Value::Text(id.clone()));
-        }
-
-        let mut stmt = conn.prepare(&sql).map_err(|e| ErrObj {
-            code: "db_query_failed".into(),
-            message: e.to_string(),
-            details: None,
-        })?;
-        let rows = stmt
-            .query_map(params_from_iter(bind_values), |r| {
-                let assessment_id: String = r.get(0)?;
-                let student_id: String = r.get(1)?;
-                let raw_value: Option<f64> = r.get(2)?;
-                let status: String = r.get(3)?;
-                Ok((assessment_id, student_id, raw_value, status))
-            })
-            .map_err(|e| ErrObj {
-                code: "db_query_failed".into(),
-                message: e.to_string(),
-                details: None,
-            })?;
-        for row in rows {
-            let (assessment_id, student_id, raw_value, status) = row.map_err(|e| ErrObj {
-                code: "db_query_failed".into(),
-                message: e.to_string(),
-                details: None,
-            })?;
-            let state = match status.as_str() {
-                "no_mark" => calc::ScoreState::NoMark,
-                "zero" => calc::ScoreState::Zero,
-                "scored" => calc::ScoreState::Scored(raw_value.unwrap_or(0.0)),
-                _ => raw_value
-                    .map(calc::ScoreState::Scored)
-                    .unwrap_or(calc::ScoreState::NoMark),
-            };
-            score_by_pair.insert((assessment_id, student_id), state);
-        }
-    }
-
-    let mut per_assessment_json: Vec<serde_json::Value> = Vec::new();
-    for a in &selected_assessments {
-        let mut score_states: Vec<calc::ScoreState> = Vec::new();
-        let mut median_values: Vec<f64> = Vec::new();
-        for s in &students {
-            if !s.active {
-                continue;
-            }
-            let state = score_by_pair
-                .get(&(a.id.clone(), s.id.clone()))
-                .copied()
-                .unwrap_or(calc::ScoreState::NoMark);
-            match state {
-                calc::ScoreState::NoMark => {}
-                calc::ScoreState::Zero => median_values.push(0.0),
-                calc::ScoreState::Scored(v) => {
-                    if a.out_of > 0.0 {
-                        median_values.push(100.0 * v / a.out_of);
-                    } else {
-                        median_values.push(0.0);
-                    }
-                }
-            }
-            score_states.push(state);
-        }
-
-        let stats = calc::assessment_average(score_states, a.out_of);
-        per_assessment_json.push(json!({
-            "assessmentId": a.id,
-            "idx": a.idx,
-            "date": a.date,
-            "categoryName": a.category_name,
-            "title": a.title,
-            "outOf": a.out_of,
-            "avgRaw": calc::round_off_1_decimal(stats.avg_raw),
-            "avgPercent": calc::round_off_1_decimal(stats.avg_percent),
-            "medianPercent": calc::round_off_1_decimal(compute_median(&median_values)),
-            "scoredCount": stats.scored_count,
-            "zeroCount": stats.zero_count,
-            "noMarkCount": stats.no_mark_count
-        }));
-    }
-
-    let mut category_weight_map: HashMap<String, f64> = HashMap::new();
-    for c in &categories {
-        category_weight_map.insert(c.name.to_ascii_lowercase(), c.weight);
-    }
-
-    let mut per_student_json: Vec<serde_json::Value> = Vec::new();
-    let mut per_category_totals: HashMap<String, (f64, usize, i64, f64)> = HashMap::new();
-    let mut per_category_assessment_counts: HashMap<String, i64> = HashMap::new();
-
-    for a in &selected_assessments {
-        let key = a
-            .category_name
-            .clone()
-            .unwrap_or_else(|| "Uncategorized".to_string());
-        *per_category_assessment_counts.entry(key).or_insert(0) += 1;
-    }
-
-    for s in &students {
-        let mut no_mark_count = 0_i64;
-        let mut zero_count = 0_i64;
-        let mut scored_count = 0_i64;
-
-        // Entry/equal methods.
-        let mut weighted_sum = 0.0_f64;
-        let mut weighted_denom = 0.0_f64;
-
-        // Category method.
-        let mut cat_inner: HashMap<String, (f64, f64)> = HashMap::new(); // sum, denom
-
-        for a in &selected_assessments {
-            let state = score_by_pair
-                .get(&(a.id.clone(), s.id.clone()))
-                .copied()
-                .unwrap_or(calc::ScoreState::NoMark);
-            let assessment_weight = if a.weight > 0.0 { a.weight } else { 1.0 };
-            let percent_opt = match state {
-                calc::ScoreState::NoMark => {
-                    no_mark_count += 1;
-                    None
-                }
-                calc::ScoreState::Zero => {
-                    zero_count += 1;
-                    Some(0.0)
-                }
-                calc::ScoreState::Scored(v) => {
-                    scored_count += 1;
-                    if a.out_of > 0.0 {
-                        Some(100.0 * v / a.out_of)
-                    } else {
-                        Some(0.0)
-                    }
-                }
-            };
-
-            let Some(percent) = percent_opt else {
-                continue;
-            };
-
-            let method = weight_method.clamp(0, 2);
-            let use_weight = if method == 0 { assessment_weight } else { 1.0 };
-            weighted_sum += percent * use_weight;
-            weighted_denom += use_weight;
-
-            let category = a
-                .category_name
-                .clone()
-                .unwrap_or_else(|| "Uncategorized".to_string());
-            let entry = cat_inner.entry(category).or_insert((0.0, 0.0));
-            entry.0 += percent * assessment_weight;
-            entry.1 += assessment_weight;
-        }
-
-        let final_mark_raw = {
-            let method = weight_method.clamp(0, 2);
-            if method == 1 {
-                let mut sum = 0.0_f64;
-                let mut denom = 0.0_f64;
-                let mut sum_equal = 0.0_f64;
-                let mut denom_equal = 0.0_f64;
-
-                for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
-                    if *cat_denom <= 0.0 {
-                        continue;
-                    }
-                    let cat_avg = *cat_sum / *cat_denom;
-                    let cat_weight = category_weight_map
-                        .get(&cat_name.to_ascii_lowercase())
-                        .copied()
-                        .unwrap_or(0.0);
-                    if cat_weight > 0.0 {
-                        sum += cat_avg * cat_weight;
-                        denom += cat_weight;
-                    }
-                    sum_equal += cat_avg;
-                    denom_equal += 1.0;
-                }
-
-                if denom > 0.0 {
-                    Some(sum / denom)
-                } else if denom_equal > 0.0 {
-                    Some(sum_equal / denom_equal)
-                } else {
-                    None
-                }
-            } else if weighted_denom > 0.0 {
-                Some(weighted_sum / weighted_denom)
-            } else {
-                None
-            }
-        };
-
-        let final_mark = final_mark_raw.map(calc::round_off_1_decimal);
-        per_student_json.push(json!({
-            "studentId": s.id,
-            "displayName": s.display_name,
-            "sortOrder": s.sort_order,
-            "active": s.active,
-            "finalMark": final_mark,
-            "noMarkCount": no_mark_count,
-            "zeroCount": zero_count,
-            "scoredCount": scored_count
-        }));
-
-        // Build class-level per-category averages across active students.
-        if s.active {
-            for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
-                if *cat_denom <= 0.0 {
-                    continue;
-                }
-                let cat_avg = *cat_sum / *cat_denom;
-                let weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
-                    .copied()
-                    .unwrap_or(0.0);
-                let entry = per_category_totals.entry(cat_name.clone()).or_insert((
-                    0.0,
-                    0,
-                    i64::MAX,
-                    weight,
-                ));
-                entry.0 += cat_avg;
-                entry.1 += 1;
-                let cat_sort = categories
-                    .iter()
-                    .find(|c| c.name.eq_ignore_ascii_case(cat_name))
-                    .map(|c| c.sort_order)
-                    .unwrap_or(i64::MAX);
-                entry.2 = entry.2.min(cat_sort);
-            }
-        }
-    }
-
-    let mut per_category_json: Vec<serde_json::Value> = per_category_totals
-        .into_iter()
-        .map(|(name, (sum, count, sort_order, weight))| {
-            let class_avg = if count > 0 {
-                calc::round_off_1_decimal(sum / (count as f64))
-            } else {
-                0.0
-            };
-            let assessment_count = per_category_assessment_counts
-                .get(&name)
-                .copied()
-                .unwrap_or(0);
-            let sort_order_json = if sort_order == i64::MAX {
-                serde_json::Value::Null
-            } else {
-                json!(sort_order)
-            };
-            json!({
-                "name": name,
-                "weight": weight,
-                "sortOrder": sort_order_json,
-                "classAvg": class_avg,
-                "studentCount": count,
-                "assessmentCount": assessment_count
-            })
-        })
-        .collect();
-    per_category_json.sort_by(|a, b| {
-        let a_sort = a
-            .get("sortOrder")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(i64::MAX);
-        let b_sort = b
-            .get("sortOrder")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(i64::MAX);
-        a_sort.cmp(&b_sort)
-    });
-
-    let categories_json: Vec<serde_json::Value> = categories
-        .iter()
-        .map(|c| {
-            json!({
-                "name": c.name,
-                "weight": c.weight,
-                "sortOrder": c.sort_order
-            })
-        })
-        .collect();
-
-    let assessments_json: Vec<serde_json::Value> = selected_assessments
-        .iter()
-        .map(|a| {
-            json!({
-                "assessmentId": a.id,
-                "idx": a.idx,
-                "date": a.date,
-                "categoryName": a.category_name,
-                "title": a.title,
-                "term": a.term,
-                "legacyType": a.legacy_type,
-                "weight": a.weight,
-                "outOf": a.out_of
-            })
-        })
-        .collect();
-
-    Ok(json!({
-        "class": {
-            "id": class_id,
-            "name": class_name
+    filters: &calc::SummaryFilters,
+) -> Result<calc::SummaryModel, ErrObj> {
+    calc::compute_mark_set_summary(
+        &calc::CalcContext {
+            conn,
+            class_id,
+            mark_set_id,
         },
-        "markSet": {
-            "id": mark_set_id,
-            "code": ms_code,
-            "description": ms_desc
-        },
-        "settings": {
-            "fullCode": full_code,
-            "room": room,
-            "day": day,
-            "period": period,
-            "weightMethod": weight_method,
-            "calcMethod": calc_method
-        },
-        "filters": {
-            "term": filters.term,
-            "categoryName": filters.category_name,
-            "typesMask": filters.types_mask
-        },
-        "categories": categories_json,
-        "assessments": assessments_json,
-        "perAssessment": per_assessment_json,
-        "perCategory": per_category_json,
-        "perStudent": per_student_json
-    }))
+        filters,
+    )
+    .map_err(calc_err_to_err_obj)
 }
 
 #[derive(Debug, Clone)]
@@ -7755,6 +8683,167 @@ fn mark_set_exists(conn: &Connection, class_id: &str, mark_set_id: &str) -> Resu
         message: e.to_string(),
         details: None,
     })
+}
+
+fn resolve_score_state(
+    explicit_state: Option<&str>,
+    value: Option<f64>,
+) -> Result<(Option<f64>, &'static str), ErrObj> {
+    if let Some(v) = value {
+        if v < 0.0 {
+            return Err(ErrObj {
+                code: "bad_params".into(),
+                message: "negative marks are not allowed".into(),
+                details: Some(json!({ "value": v })),
+            });
+        }
+    }
+
+    match explicit_state.map(|s| s.to_ascii_lowercase()) {
+        Some(s) if s == "no_mark" => Ok((Some(0.0), "no_mark")),
+        Some(s) if s == "zero" => Ok((None, "zero")),
+        Some(s) if s == "scored" => {
+            let Some(v) = value else {
+                return Err(ErrObj {
+                    code: "bad_params".into(),
+                    message: "scored state requires numeric value".into(),
+                    details: None,
+                });
+            };
+            if v <= 0.0 {
+                return Err(ErrObj {
+                    code: "bad_params".into(),
+                    message: "scored marks must be > 0".into(),
+                    details: Some(json!({ "value": v })),
+                });
+            }
+            Ok((Some(v), "scored"))
+        }
+        Some(other) => Err(ErrObj {
+            code: "bad_params".into(),
+            message: "state must be one of: scored, zero, no_mark".into(),
+            details: Some(json!({ "state": other })),
+        }),
+        None => {
+            // Legacy parity default for grid edits:
+            // blank/null/0 => no_mark, positive => scored.
+            match value {
+                Some(v) if v > 0.0 => Ok((Some(v), "scored")),
+                _ => Ok((Some(0.0), "no_mark")),
+            }
+        }
+    }
+}
+
+fn resolve_student_id_by_row(
+    conn: &Connection,
+    class_id: &str,
+    row: i64,
+) -> Result<String, ErrObj> {
+    let student_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM students WHERE class_id = ? AND sort_order = ?",
+            (class_id, row),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    student_id.ok_or_else(|| ErrObj {
+        code: "not_found".into(),
+        message: "student not found".into(),
+        details: Some(json!({ "row": row })),
+    })
+}
+
+fn resolve_assessment_id_by_col(
+    conn: &Connection,
+    mark_set_id: &str,
+    col: i64,
+) -> Result<String, ErrObj> {
+    let assessment_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM assessments WHERE mark_set_id = ? AND idx = ?",
+            (mark_set_id, col),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    assessment_id.ok_or_else(|| ErrObj {
+        code: "not_found".into(),
+        message: "assessment not found".into(),
+        details: Some(json!({ "col": col })),
+    })
+}
+
+fn upsert_score(
+    conn: &Connection,
+    assessment_id: &str,
+    student_id: &str,
+    raw_value: Option<f64>,
+    status: &str,
+) -> Result<(), ErrObj> {
+    let score_id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO scores(id, assessment_id, student_id, raw_value, status)
+         VALUES(?, ?, ?, ?, ?)
+         ON CONFLICT(assessment_id, student_id) DO UPDATE SET
+           raw_value = excluded.raw_value,
+           status = excluded.status",
+        (&score_id, assessment_id, student_id, raw_value, status),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_insert_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "scores" })),
+    })?;
+    Ok(())
+}
+
+fn csv_quote(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+fn parse_csv_record(line: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut buf = String::new();
+    let mut in_quotes = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '"' {
+            if in_quotes && i + 1 < chars.len() && chars[i + 1] == '"' {
+                buf.push('"');
+                i += 2;
+                continue;
+            }
+            in_quotes = !in_quotes;
+            i += 1;
+            continue;
+        }
+        if ch == ',' && !in_quotes {
+            out.push(buf);
+            buf = String::new();
+            i += 1;
+            continue;
+        }
+        buf.push(ch);
+        i += 1;
+    }
+    out.push(buf);
+    out
 }
 
 fn parse_month_key(month: &str) -> Result<(i32, u32), ErrObj> {
@@ -8393,6 +9482,581 @@ fn seat_code_to_index(seat_code: i64, rows: i64, seats_per_row: i64) -> Option<u
         return None;
     }
     Some((row * seats_per_row + (col - 1)) as usize)
+}
+
+fn loaned_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    if !class_exists(conn, &class_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    }
+    let mark_set_id = params
+        .get("markSetId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let (sql, binds): (&str, Vec<&dyn rusqlite::ToSql>) = if let Some(ref msid) = mark_set_id {
+        (
+            "SELECT li.id, li.student_id, s.last_name, s.first_name, li.mark_set_id, li.item_name, li.quantity, li.notes, li.raw_line
+             FROM loaned_items li
+             JOIN students s ON s.id = li.student_id
+             WHERE li.class_id = ? AND li.mark_set_id = ?
+             ORDER BY s.sort_order, li.item_name",
+            vec![&class_id as &dyn rusqlite::ToSql, msid as &dyn rusqlite::ToSql],
+        )
+    } else {
+        (
+            "SELECT li.id, li.student_id, s.last_name, s.first_name, li.mark_set_id, li.item_name, li.quantity, li.notes, li.raw_line
+             FROM loaned_items li
+             JOIN students s ON s.id = li.student_id
+             WHERE li.class_id = ?
+             ORDER BY s.sort_order, li.item_name",
+            vec![&class_id as &dyn rusqlite::ToSql],
+        )
+    };
+
+    let mut stmt = conn.prepare(sql).map_err(|e| ErrObj {
+        code: "db_query_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(binds), |r| {
+            let id: String = r.get(0)?;
+            let student_id: String = r.get(1)?;
+            let last_name: String = r.get(2)?;
+            let first_name: String = r.get(3)?;
+            let mark_set_id: Option<String> = r.get(4)?;
+            let item_name: String = r.get(5)?;
+            let quantity: Option<f64> = r.get(6)?;
+            let notes: Option<String> = r.get(7)?;
+            let raw_line: String = r.get(8)?;
+            Ok(json!({
+                "id": id,
+                "studentId": student_id,
+                "displayName": format!("{}, {}", last_name, first_name),
+                "markSetId": mark_set_id,
+                "itemName": item_name,
+                "quantity": quantity,
+                "notes": notes,
+                "rawLine": raw_line
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+
+    Ok(json!({ "items": rows }))
+}
+
+fn loaned_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let item_id = get_required_str(params, "itemId")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT li.id, li.student_id, s.last_name, s.first_name, li.mark_set_id, li.item_name, li.quantity, li.notes, li.raw_line
+             FROM loaned_items li
+             JOIN students s ON s.id = li.student_id
+             WHERE li.class_id = ? AND li.id = ?",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let row = stmt
+        .query_row((&class_id, &item_id), |r| {
+            let id: String = r.get(0)?;
+            let student_id: String = r.get(1)?;
+            let last_name: String = r.get(2)?;
+            let first_name: String = r.get(3)?;
+            let mark_set_id: Option<String> = r.get(4)?;
+            let item_name: String = r.get(5)?;
+            let quantity: Option<f64> = r.get(6)?;
+            let notes: Option<String> = r.get(7)?;
+            let raw_line: String = r.get(8)?;
+            Ok(json!({
+                "id": id,
+                "studentId": student_id,
+                "displayName": format!("{}, {}", last_name, first_name),
+                "markSetId": mark_set_id,
+                "itemName": item_name,
+                "quantity": quantity,
+                "notes": notes,
+                "rawLine": raw_line
+            }))
+        })
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(item) = row else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "loaned item not found".into(),
+            details: None,
+        });
+    };
+    Ok(json!({ "item": item }))
+}
+
+fn loaned_update(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let student_id = get_required_str(params, "studentId")?;
+    let item_name = get_required_str(params, "itemName")?;
+    let mark_set_id = params
+        .get("markSetId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let quantity = params.get("quantity").and_then(|v| v.as_f64());
+    let notes = params
+        .get("notes")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let raw_line = params
+        .get("rawLine")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let item_id = params
+        .get("itemId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    let student_exists = conn
+        .query_row(
+            "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+        .is_some();
+    if !student_exists {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "student not found".into(),
+            details: None,
+        });
+    }
+
+    conn.execute(
+        "INSERT INTO loaned_items(id, class_id, student_id, mark_set_id, item_name, quantity, notes, raw_line)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           student_id = excluded.student_id,
+           mark_set_id = excluded.mark_set_id,
+           item_name = excluded.item_name,
+           quantity = excluded.quantity,
+           notes = excluded.notes,
+           raw_line = excluded.raw_line",
+        (
+            &item_id,
+            &class_id,
+            &student_id,
+            mark_set_id.as_deref(),
+            &item_name,
+            quantity,
+            notes.as_deref(),
+            &raw_line,
+        ),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "loaned_items" })),
+    })?;
+    Ok(json!({ "ok": true, "itemId": item_id }))
+}
+
+fn devices_list(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    if !class_exists(conn, &class_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, s.last_name, s.first_name, s.sort_order, s.active, dm.device_code, dm.raw_line
+             FROM students s
+             LEFT JOIN student_device_map dm
+               ON dm.class_id = s.class_id AND dm.student_id = s.id
+             WHERE s.class_id = ?
+             ORDER BY s.sort_order",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map([&class_id], |r| {
+            let student_id: String = r.get(0)?;
+            let last_name: String = r.get(1)?;
+            let first_name: String = r.get(2)?;
+            let sort_order: i64 = r.get(3)?;
+            let active: i64 = r.get(4)?;
+            let device_code: Option<String> = r.get(5)?;
+            let raw_line: Option<String> = r.get(6)?;
+            Ok(json!({
+                "studentId": student_id,
+                "displayName": format!("{}, {}", last_name, first_name),
+                "sortOrder": sort_order,
+                "active": active != 0,
+                "deviceCode": device_code.unwrap_or_default(),
+                "rawLine": raw_line.unwrap_or_default()
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+
+    Ok(json!({ "devices": rows }))
+}
+
+fn devices_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let student_id = get_required_str(params, "studentId")?;
+    let row = conn
+        .query_row(
+            "SELECT s.id, s.last_name, s.first_name, s.sort_order, s.active, dm.device_code, dm.raw_line
+             FROM students s
+             LEFT JOIN student_device_map dm
+               ON dm.class_id = s.class_id AND dm.student_id = s.id
+             WHERE s.class_id = ? AND s.id = ?",
+            (&class_id, &student_id),
+            |r| {
+                let student_id: String = r.get(0)?;
+                let last_name: String = r.get(1)?;
+                let first_name: String = r.get(2)?;
+                let sort_order: i64 = r.get(3)?;
+                let active: i64 = r.get(4)?;
+                let device_code: Option<String> = r.get(5)?;
+                let raw_line: Option<String> = r.get(6)?;
+                Ok(json!({
+                    "studentId": student_id,
+                    "displayName": format!("{}, {}", last_name, first_name),
+                    "sortOrder": sort_order,
+                    "active": active != 0,
+                    "deviceCode": device_code.unwrap_or_default(),
+                    "rawLine": raw_line.unwrap_or_default()
+                }))
+            },
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(device) = row else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "student not found".into(),
+            details: None,
+        });
+    };
+    Ok(json!({ "device": device }))
+}
+
+fn devices_update(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let student_id = get_required_str(params, "studentId")?;
+    let device_code = params
+        .get("deviceCode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let raw_line = params
+        .get("rawLine")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let student_exists = conn
+        .query_row(
+            "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+        .is_some();
+    if !student_exists {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "student not found".into(),
+            details: None,
+        });
+    }
+
+    if device_code.is_empty() && raw_line.is_empty() {
+        conn.execute(
+            "DELETE FROM student_device_map WHERE class_id = ? AND student_id = ?",
+            (&class_id, &student_id),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_delete_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "student_device_map" })),
+        })?;
+        return Ok(json!({ "ok": true }));
+    }
+
+    conn.execute(
+        "INSERT INTO student_device_map(id, class_id, student_id, device_code, raw_line)
+         VALUES(?, ?, ?, ?, ?)
+         ON CONFLICT(class_id, student_id) DO UPDATE SET
+           device_code = excluded.device_code,
+           raw_line = excluded.raw_line",
+        (
+            Uuid::new_v4().to_string(),
+            &class_id,
+            &student_id,
+            &device_code,
+            &raw_line,
+        ),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "student_device_map" })),
+    })?;
+
+    Ok(json!({ "ok": true }))
+}
+
+fn learning_skills_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    if !class_exists(conn, &class_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    }
+    let term = params
+        .get("term")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1)
+        .clamp(1, 3);
+    let skill_codes: Vec<&'static str> = vec!["R", "O", "I", "C"];
+    let students = list_students_for_class(conn, &class_id)?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT student_id, skill_code, value
+             FROM learning_skills_cells
+             WHERE class_id = ? AND term = ?",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map((&class_id, term), |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let mut by_key: HashMap<(String, String), String> = HashMap::new();
+    for (student_id, skill_code, value) in rows {
+        by_key.insert((student_id, skill_code.to_ascii_uppercase()), value);
+    }
+
+    let students_json: Vec<serde_json::Value> = students
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.id,
+                "displayName": s.display_name,
+                "sortOrder": s.sort_order,
+                "active": s.active
+            })
+        })
+        .collect();
+    let rows_json: Vec<serde_json::Value> = students
+        .iter()
+        .map(|s| {
+            let mut values = serde_json::Map::new();
+            for code in &skill_codes {
+                let v = by_key
+                    .get(&(s.id.clone(), code.to_string()))
+                    .cloned()
+                    .unwrap_or_default();
+                values.insert((*code).to_string(), json!(v));
+            }
+            json!({
+                "studentId": s.id,
+                "values": values
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "classId": class_id,
+        "term": term,
+        "skillCodes": skill_codes,
+        "students": students_json,
+        "rows": rows_json
+    }))
+}
+
+fn learning_skills_update_cell(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let student_id = get_required_str(params, "studentId")?;
+    let skill_code = get_required_str(params, "skillCode")?.to_ascii_uppercase();
+    if skill_code.is_empty() || skill_code.len() > 8 {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "skillCode must be 1..8 chars".into(),
+            details: None,
+        });
+    }
+    let term = params
+        .get("term")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1)
+        .clamp(1, 3);
+    let value = match params.get("value") {
+        None => String::new(),
+        Some(v) if v.is_null() => String::new(),
+        Some(v) => v.as_str().unwrap_or("").trim().to_string(),
+    };
+
+    let student_exists = conn
+        .query_row(
+            "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+        .is_some();
+    if !student_exists {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "student not found".into(),
+            details: None,
+        });
+    }
+
+    if value.is_empty() {
+        conn.execute(
+            "DELETE FROM learning_skills_cells
+             WHERE class_id = ? AND student_id = ? AND term = ? AND skill_code = ?",
+            (&class_id, &student_id, term, &skill_code),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_delete_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "learning_skills_cells" })),
+        })?;
+        return Ok(json!({ "ok": true }));
+    }
+
+    conn.execute(
+        "INSERT INTO learning_skills_cells(class_id, student_id, term, skill_code, value, updated_at)
+         VALUES(?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         ON CONFLICT(class_id, student_id, term, skill_code) DO UPDATE SET
+           value = excluded.value,
+           updated_at = excluded.updated_at",
+        (&class_id, &student_id, term, &skill_code, &value),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "learning_skills_cells" })),
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn learning_skills_report_model(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let mut open = learning_skills_open(conn, params)?;
+    let class_id = get_required_str(params, "classId")?;
+    let class_name: Option<String> = conn
+        .query_row("SELECT name FROM classes WHERE id = ?", [&class_id], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(class_name) = class_name else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    };
+    let obj = open.as_object_mut().ok_or_else(|| ErrObj {
+        code: "server_error".into(),
+        message: "invalid learning skills model".into(),
+        details: None,
+    })?;
+    obj.insert(
+        "class".to_string(),
+        json!({ "id": class_id, "name": class_name }),
+    );
+    Ok(open)
 }
 
 fn comments_sets_list(
@@ -9543,6 +11207,77 @@ mod tests {
                 );
             }
         }
+
+        let _ = std::fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn import_includes_all_idx_tbk_and_icc_companions() {
+        let workspace = temp_workspace();
+        let mut state = AppState {
+            workspace: None,
+            db: None,
+        };
+        let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
+        request_ok(
+            &mut state,
+            "workspace.select",
+            json!({ "path": workspace.to_string_lossy() }),
+        );
+        let import_res = request_ok(
+            &mut state,
+            "class.importLegacy",
+            json!({ "legacyClassFolderPath": fixture_folder.to_string_lossy() }),
+        );
+        let class_id = import_res
+            .get("classId")
+            .and_then(|v| v.as_str())
+            .expect("classId")
+            .to_string();
+
+        let combined = import_res
+            .get("combinedCommentSetsImported")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let loaned = import_res
+            .get("loanedItemsImported")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let devices = import_res
+            .get("deviceMappingsImported")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        assert!(
+            combined > 0,
+            "expected ALL! IDX combined sets to be imported"
+        );
+        assert!(loaned > 0, "expected TBK loaned items to be imported");
+        assert!(devices > 0, "expected ICC device mappings to be imported");
+
+        let marksets = request_ok(&mut state, "marksets.list", json!({ "classId": class_id }));
+        let first_mark_set_id = marksets
+            .get("markSets")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str())
+            .expect("mark set id")
+            .to_string();
+
+        let sets = request_ok(
+            &mut state,
+            "comments.sets.list",
+            json!({ "classId": class_id, "markSetId": first_mark_set_id }),
+        );
+        assert!(
+            sets.get("sets")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.len())
+                .unwrap_or(0)
+                >= 2,
+            "expected mark set-specific and ALL! combined comment sets"
+        );
 
         let _ = std::fs::remove_dir_all(workspace);
     }

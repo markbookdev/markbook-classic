@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CompactSelection,
   DataEditor,
   DataEditorRef,
+  GridSelection,
+  Item,
   GridCell,
   GridCellKind,
   GridColumn,
@@ -11,7 +14,9 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import {
   CalcAssessmentStatsResultSchema,
   CalcMarkSetSummaryResultSchema,
+  GridBulkUpdateResultSchema,
   GridGetResultSchema,
+  GridSetStateResultSchema,
   GridUpdateCellResultSchema,
   MarkSetOpenResultSchema
 } from "@markbook/schema";
@@ -32,6 +37,13 @@ type AssessmentRow = {
   title: string;
   weight: number | null;
   outOf: number | null;
+};
+
+type BulkScoreEdit = {
+  row: number;
+  col: number;
+  state: "scored" | "zero" | "no_mark";
+  value: number | null;
 };
 
 export function MarksScreen(props: {
@@ -57,6 +69,13 @@ export function MarksScreen(props: {
     }>
   >([]);
   const [studentFinalMarks, setStudentFinalMarks] = useState<Record<string, number | null>>({});
+  const [gridSelection, setGridSelection] = useState<GridSelection>({
+    current: undefined,
+    rows: CompactSelection.empty(),
+    columns: CompactSelection.empty()
+  });
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+  const [scoredInput, setScoredInput] = useState("1");
 
   const editorRef = useRef<DataEditorRef | null>(null);
   const [editingCell, setEditingCell] = useState<{
@@ -101,6 +120,155 @@ export function MarksScreen(props: {
     } catch {
       // Keep existing values if calc endpoints fail.
     }
+  }
+
+  function makeEditFromDisplayValue(row: number, gridCol: number, value: number | null): BulkScoreEdit {
+    if (value == null) {
+      return { row, col: gridCol, state: "no_mark", value: null };
+    }
+    if (value === 0) {
+      return { row, col: gridCol, state: "zero", value: 0 };
+    }
+    return { row, col: gridCol, state: "scored", value };
+  }
+
+  function applyEditsLocally(edits: BulkScoreEdit[]) {
+    setCells((prev) => {
+      const next = prev.map((r) => r.slice());
+      for (const e of edits) {
+        if (!next[e.row]) continue;
+        next[e.row][e.col] =
+          e.state === "no_mark" ? null : e.state === "zero" ? 0 : e.value ?? null;
+      }
+      return next;
+    });
+  }
+
+  async function applyBulkEdits(edits: BulkScoreEdit[]) {
+    if (edits.length === 0) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "grid.bulkUpdate",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          edits
+        },
+        GridBulkUpdateResultSchema
+      );
+      applyEditsLocally(edits);
+      void refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  function selectedEditableCells(): Array<{ row: number; col: number }> {
+    const out: Array<{ row: number; col: number }> = [];
+    const r = gridSelection.current?.range;
+    if (r) {
+      for (let rr = 0; rr < r.height; rr += 1) {
+        const row = r.y + rr;
+        if (row < 0 || row >= students.length) continue;
+        for (let cc = 0; cc < r.width; cc += 1) {
+          const col = r.x + cc;
+          if (col <= 0 || col > assessments.length) continue;
+          out.push({ row, col });
+        }
+      }
+      if (out.length > 0) return out;
+    }
+
+    if (selectedCell && selectedCell.col > 0 && selectedCell.col <= assessments.length) {
+      return [selectedCell];
+    }
+    return [];
+  }
+
+  async function setSelectedCellsState(
+    state: "scored" | "zero" | "no_mark",
+    scoreValue: number | null
+  ) {
+    const targets = selectedEditableCells();
+    if (targets.length === 0) return;
+    const edits: BulkScoreEdit[] = targets.map((t) => ({
+      row: t.row,
+      col: t.col - 1,
+      state,
+      value: scoreValue
+    }));
+    await applyBulkEdits(edits);
+  }
+
+  async function fillDown() {
+    const r = gridSelection.current?.range;
+    if (!r || r.height <= 1) return;
+    const edits: BulkScoreEdit[] = [];
+    for (let cc = 0; cc < r.width; cc += 1) {
+      const col = r.x + cc;
+      if (col <= 0 || col > assessments.length) continue;
+      const source = cells[r.y]?.[col - 1] ?? null;
+      for (let rr = 1; rr < r.height; rr += 1) {
+        const row = r.y + rr;
+        if (row < 0 || row >= students.length) continue;
+        edits.push(makeEditFromDisplayValue(row, col - 1, source));
+      }
+    }
+    await applyBulkEdits(edits);
+  }
+
+  async function fillRight() {
+    const r = gridSelection.current?.range;
+    if (!r || r.width <= 1) return;
+    const edits: BulkScoreEdit[] = [];
+    for (let rr = 0; rr < r.height; rr += 1) {
+      const row = r.y + rr;
+      if (row < 0 || row >= students.length) continue;
+      const sourceCol = r.x;
+      if (sourceCol <= 0 || sourceCol > assessments.length) continue;
+      const source = cells[row]?.[sourceCol - 1] ?? null;
+      for (let cc = 1; cc < r.width; cc += 1) {
+        const col = r.x + cc;
+        if (col <= 0 || col > assessments.length) continue;
+        edits.push(makeEditFromDisplayValue(row, col - 1, source));
+      }
+    }
+    await applyBulkEdits(edits);
+  }
+
+  function parsePastedValue(raw: string): { state: "scored" | "zero" | "no_mark"; value: number | null } | null {
+    const t = raw.trim();
+    if (t === "") return { state: "no_mark", value: null };
+    const n = Number(t);
+    if (!Number.isFinite(n) || n < 0) return null;
+    if (n === 0) return { state: "no_mark", value: null };
+    return { state: "scored", value: n };
+  }
+
+  function onGridPaste(target: Item, values: readonly (readonly string[])[]): boolean {
+    const [targetCol, targetRow] = target;
+    if (targetCol <= 0 || targetCol > assessments.length) return false;
+    const edits: BulkScoreEdit[] = [];
+    for (let rr = 0; rr < values.length; rr += 1) {
+      const row = targetRow + rr;
+      if (row < 0 || row >= students.length) continue;
+      const rowVals = values[rr] ?? [];
+      for (let cc = 0; cc < rowVals.length; cc += 1) {
+        const col = targetCol + cc;
+        if (col <= 0 || col > assessments.length) continue;
+        const parsed = parsePastedValue(String(rowVals[cc] ?? ""));
+        if (!parsed) continue;
+        edits.push({
+          row,
+          col: col - 1,
+          state: parsed.state,
+          value: parsed.value
+        });
+      }
+    }
+    void applyBulkEdits(edits);
+    return false;
   }
 
   // E2E harness: provide a stable way to compute cell bounds for canvas-based GDG.
@@ -430,6 +598,55 @@ export function MarksScreen(props: {
       style={{ position: "relative", width: "100%", height: "100%" }}
     >
       <div
+        data-testid="marks-bulk-toolbar"
+        style={{
+          position: "absolute",
+          left: 12,
+          top: 12,
+          zIndex: 6,
+          background: "rgba(255,255,255,0.95)",
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: "6px 8px",
+          display: "flex",
+          alignItems: "center",
+          gap: 6
+        }}
+      >
+        <button data-testid="marks-set-no-mark-btn" onClick={() => void setSelectedCellsState("no_mark", null)}>
+          Set No Mark
+        </button>
+        <button data-testid="marks-set-zero-btn" onClick={() => void setSelectedCellsState("zero", 0)}>
+          Set Zero
+        </button>
+        <input
+          data-testid="marks-set-scored-input"
+          value={scoredInput}
+          onChange={(e) => setScoredInput(e.currentTarget.value)}
+          style={{ width: 72 }}
+        />
+        <button
+          data-testid="marks-set-scored-btn"
+          onClick={() => {
+            const n = Number(scoredInput.trim());
+            if (!Number.isFinite(n) || n <= 0) {
+              props.onError("Scored value must be a positive number.");
+              return;
+            }
+            void setSelectedCellsState("scored", n);
+          }}
+        >
+          Set Scored
+        </button>
+        <button data-testid="marks-fill-down-btn" onClick={() => void fillDown()}>
+          Fill Down
+        </button>
+        <button data-testid="marks-fill-right-btn" onClick={() => void fillRight()}>
+          Fill Right
+        </button>
+      </div>
+
+      <div
         data-testid="marks-summary-strip"
         style={{
           position: "absolute",
@@ -466,15 +683,22 @@ export function MarksScreen(props: {
         columns={cols}
         rows={rows}
         getCellContent={getCellContent}
+        getCellsForSelection={true}
+        rangeSelect="multi-rect"
+        gridSelection={gridSelection}
+        onGridSelectionChange={setGridSelection}
+        onPaste={onGridPaste}
         cellActivationBehavior="double-click"
         editOnType={false}
         onCellClicked={(cell) => {
           props.onGridEvent?.(`clicked r${cell[1]} c${cell[0]}`);
+          setSelectedCell({ row: cell[1], col: cell[0] });
           editorRef.current?.focus();
         }}
         onCellActivated={(cell) => {
           const [col, row] = cell;
           props.onGridEvent?.(`activated r${row} c${col}`);
+          setSelectedCell({ row, col });
           if (col === 0 || col === assessments.length + 1) return;
           const cur = cells[row]?.[col - 1] ?? null;
           const text = cur == null ? "" : String(cur);

@@ -3,7 +3,10 @@
 // These are intentionally not part of the supported app API. Keep them under
 // window.__markbookTest so production users never rely on them.
 import {
+  renderAttendanceMonthlyReportHtml,
+  renderClassListReportHtml,
   renderCategoryAnalysisReportHtml,
+  renderLearningSkillsSummaryReportHtml,
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
   renderStudentSummaryReportHtml
@@ -81,6 +84,47 @@ t.exportStudentSummaryPdfToPath = async (
     studentId
   });
   const html = renderStudentSummaryReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportAttendanceMonthlyPdfToPath = async (
+  classId: string,
+  month: string,
+  outPath: string
+) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.attendanceMonthlyModel", {
+    classId,
+    month
+  });
+  const html = renderAttendanceMonthlyReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportClassListPdfToPath = async (classId: string, outPath: string) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.classListModel", { classId });
+  const html = renderClassListReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportLearningSkillsSummaryPdfToPath = async (
+  classId: string,
+  term: number,
+  outPath: string
+) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.learningSkillsSummaryModel", {
+    classId,
+    term
+  });
+  const html = renderLearningSkillsSummaryReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
   return { ok: true };
 };

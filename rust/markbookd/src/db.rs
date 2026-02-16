@@ -66,6 +66,29 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     )?;
 
     conn.execute(
+        "CREATE TABLE IF NOT EXISTS learning_skills_cells(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            term INTEGER NOT NULL,
+            skill_code TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_at TEXT,
+            PRIMARY KEY(class_id, student_id, term, skill_code),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_skills_class ON learning_skills_cells(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_skills_student ON learning_skills_cells(student_id)",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS attendance_settings(
             class_id TEXT PRIMARY KEY,
             school_year_start_month INTEGER NOT NULL DEFAULT 9,
@@ -135,6 +158,57 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_seating_assignments_student ON seating_assignments(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS loaned_items(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            mark_set_id TEXT,
+            item_name TEXT NOT NULL,
+            quantity REAL,
+            notes TEXT,
+            raw_line TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(mark_set_id) REFERENCES mark_sets(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_class ON loaned_items(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_student ON loaned_items(student_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_mark_set ON loaned_items(mark_set_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS student_device_map(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            device_code TEXT NOT NULL,
+            raw_line TEXT NOT NULL,
+            UNIQUE(class_id, student_id),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_student_device_map_class ON student_device_map(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_student_device_map_student ON student_device_map(student_id)",
         [],
     )?;
 

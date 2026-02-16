@@ -16,6 +16,9 @@ import { MarkSetSetupScreen } from "../screens/MarkSetSetupScreen";
 import { AttendanceScreen } from "../screens/AttendanceScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { SeatingPlanScreen } from "../screens/SeatingPlanScreen";
+import { LearningSkillsScreen } from "../screens/LearningSkillsScreen";
+import { BackupScreen } from "../screens/BackupScreen";
+import { ExchangeScreen } from "../screens/ExchangeScreen";
 
 type Screen =
   | "dashboard"
@@ -25,7 +28,10 @@ type Screen =
   | "markset_setup"
   | "attendance"
   | "notes"
-  | "seating_plan";
+  | "seating_plan"
+  | "learning_skills"
+  | "backup"
+  | "exchange";
 
 type ClassRow = {
   id: string;
@@ -394,6 +400,18 @@ export function AppShell() {
               <button data-testid="nav-seating" onClick={() => setScreen("seating_plan")}>
                 Seating Plan
               </button>
+              <button
+                data-testid="nav-learning-skills"
+                onClick={() => setScreen("learning_skills")}
+              >
+                Learning Skills
+              </button>
+              <button data-testid="nav-backup" onClick={() => setScreen("backup")}>
+                Backup
+              </button>
+              <button data-testid="nav-exchange" onClick={() => setScreen("exchange")}>
+                Exchange
+              </button>
               <button data-testid="nav-reports" onClick={() => setScreen("reports")}>
                 Reports
               </button>
@@ -464,6 +482,16 @@ export function AppShell() {
             <NotesScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "seating_plan" ? (
             <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "learning_skills" ? (
+            <LearningSkillsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "backup" ? (
+            <BackupScreen
+              workspacePath={health.workspacePath}
+              onError={setSidecarError}
+              onAfterImport={refresh}
+            />
+          ) : screen === "exchange" ? (
+            <ExchangeScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : (
             <div style={{ padding: 24, color: "#666" }}>(unknown screen)</div>
           )}

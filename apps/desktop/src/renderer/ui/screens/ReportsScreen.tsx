@@ -1,13 +1,19 @@
 import React, { useState } from "react";
 import {
+  renderAttendanceMonthlyReportHtml,
+  renderClassListReportHtml,
   renderCategoryAnalysisReportHtml,
+  renderLearningSkillsSummaryReportHtml,
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
   renderStudentSummaryReportHtml
 } from "@markbook/reports";
 import {
   MarkSetOpenResultSchema,
+  ReportsAttendanceMonthlyModelResultSchema,
+  ReportsClassListModelResultSchema,
   ReportsCategoryAnalysisModelResultSchema,
+  ReportsLearningSkillsSummaryModelResultSchema,
   ReportsMarkSetGridModelResultSchema,
   ReportsMarkSetSummaryModelResultSchema,
   ReportsStudentSummaryModelResultSchema
@@ -28,8 +34,15 @@ export function ReportsScreen(props: {
   const [exportingSummaryPdf, setExportingSummaryPdf] = useState(false);
   const [exportingCategoryPdf, setExportingCategoryPdf] = useState(false);
   const [exportingStudentPdf, setExportingStudentPdf] = useState(false);
+  const [exportingAttendancePdf, setExportingAttendancePdf] = useState(false);
+  const [exportingClassListPdf, setExportingClassListPdf] = useState(false);
+  const [exportingLearningSkillsPdf, setExportingLearningSkillsPdf] = useState(false);
   const [students, setStudents] = useState<Array<{ id: string; displayName: string }>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [attendanceMonth, setAttendanceMonth] = useState<string>(
+    new Date().toISOString().slice(0, 7)
+  );
+  const [learningSkillsTerm, setLearningSkillsTerm] = useState<number>(1);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -147,6 +160,67 @@ export function ReportsScreen(props: {
     }
   }
 
+  async function exportAttendanceMonthlyPdf() {
+    setExportingAttendancePdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.attendanceMonthlyModel",
+        { classId: props.selectedClassId, month: attendanceMonth },
+        ReportsAttendanceMonthlyModelResultSchema
+      );
+      const html = renderAttendanceMonthlyReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(
+        `${model.class.name} - Attendance ${attendanceMonth}.pdf`
+      );
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingAttendancePdf(false);
+    }
+  }
+
+  async function exportClassListPdf() {
+    setExportingClassListPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.classListModel",
+        { classId: props.selectedClassId },
+        ReportsClassListModelResultSchema
+      );
+      const html = renderClassListReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(`${model.class.name} - Class List.pdf`);
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingClassListPdf(false);
+    }
+  }
+
+  async function exportLearningSkillsSummaryPdf() {
+    setExportingLearningSkillsPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.learningSkillsSummaryModel",
+        { classId: props.selectedClassId, term: learningSkillsTerm },
+        ReportsLearningSkillsSummaryModelResultSchema
+      );
+      const html = renderLearningSkillsSummaryReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(
+        `${model.class.name} - Learning Skills Term ${learningSkillsTerm}.pdf`
+      );
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingLearningSkillsPdf(false);
+    }
+  }
+
   return (
     <div data-testid="reports-screen" style={{ padding: 24 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Reports</div>
@@ -206,6 +280,54 @@ export function ReportsScreen(props: {
       </div>
       <div style={{ marginTop: 12, fontSize: 12, color: "#666" }}>
         Uses Chromium print-to-PDF and preserves legacy mark semantics (blank = No Mark, 0 = Zero).
+      </div>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Attendance Monthly</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          data-testid="attendance-month-input"
+          type="month"
+          value={attendanceMonth}
+          onChange={(e) => setAttendanceMonth(e.currentTarget.value)}
+        />
+        <button
+          data-testid="export-attendance-monthly-pdf-btn"
+          onClick={() => void exportAttendanceMonthlyPdf()}
+          disabled={exportingAttendancePdf || exportingClassListPdf || exportingLearningSkillsPdf}
+        >
+          {exportingAttendancePdf ? "Exporting..." : "Export Attendance PDF"}
+        </button>
+      </div>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Class List</div>
+      <button
+        data-testid="export-class-list-pdf-btn"
+        onClick={() => void exportClassListPdf()}
+        disabled={exportingAttendancePdf || exportingClassListPdf || exportingLearningSkillsPdf}
+      >
+        {exportingClassListPdf ? "Exporting..." : "Export Class List PDF"}
+      </button>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>
+        Learning Skills Summary
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select
+          data-testid="learning-skills-term-select"
+          value={learningSkillsTerm}
+          onChange={(e) => setLearningSkillsTerm(Number(e.currentTarget.value || 1))}
+        >
+          <option value={1}>Term 1</option>
+          <option value={2}>Term 2</option>
+          <option value={3}>Term 3</option>
+        </select>
+        <button
+          data-testid="export-learning-skills-pdf-btn"
+          onClick={() => void exportLearningSkillsSummaryPdf()}
+          disabled={exportingAttendancePdf || exportingClassListPdf || exportingLearningSkillsPdf}
+        >
+          {exportingLearningSkillsPdf ? "Exporting..." : "Export Learning Skills PDF"}
+        </button>
       </div>
     </div>
   );

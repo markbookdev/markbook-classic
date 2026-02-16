@@ -55,7 +55,10 @@ export const ClassImportLegacyResultSchema = z.object({
   scoresImported: z.number().optional(),
   sourceClFile: z.string(),
   importedMarkFiles: z.array(z.string()).optional(),
-  missingMarkFiles: z.array(z.unknown()).optional()
+  missingMarkFiles: z.array(z.unknown()).optional(),
+  loanedItemsImported: z.number().optional(),
+  deviceMappingsImported: z.number().optional(),
+  combinedCommentSetsImported: z.number().optional()
 });
 
 export const MarkSetsListResultSchema = z.object({
@@ -108,6 +111,15 @@ export const GridGetResultSchema = z.object({
 
 export const GridUpdateCellResultSchema = z.object({
   ok: z.literal(true)
+});
+
+export const GridSetStateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const GridBulkUpdateResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number()
 });
 
 export const ReportsMarkSetGridModelResultSchema = z.object({
@@ -251,6 +263,67 @@ export const NotesGetResultSchema = z.object({
 });
 
 export const NotesUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const LoanedListResultSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string(),
+      studentId: z.string(),
+      displayName: z.string(),
+      markSetId: z.string().nullable(),
+      itemName: z.string(),
+      quantity: z.number().nullable(),
+      notes: z.string().nullable(),
+      rawLine: z.string()
+    })
+  )
+});
+
+export const LoanedGetResultSchema = z.object({
+  item: z.object({
+    id: z.string(),
+    studentId: z.string(),
+    displayName: z.string(),
+    markSetId: z.string().nullable(),
+    itemName: z.string(),
+    quantity: z.number().nullable(),
+    notes: z.string().nullable(),
+    rawLine: z.string()
+  })
+});
+
+export const LoanedUpdateResultSchema = z.object({
+  ok: z.literal(true),
+  itemId: z.string()
+});
+
+export const DevicesListResultSchema = z.object({
+  devices: z.array(
+    z.object({
+      studentId: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean(),
+      deviceCode: z.string(),
+      rawLine: z.string()
+    })
+  )
+});
+
+export const DevicesGetResultSchema = z.object({
+  device: z.object({
+    studentId: z.string(),
+    displayName: z.string(),
+    sortOrder: z.number(),
+    active: z.boolean(),
+    deviceCode: z.string(),
+    rawLine: z.string()
+  })
+});
+
+export const DevicesUpdateResultSchema = z.object({
   ok: z.literal(true)
 });
 
@@ -584,3 +657,102 @@ export const ReportsStudentSummaryModelResultSchema = z.object({
   ),
   perAssessment: z.array(CalcPerAssessmentSchema)
 });
+
+export const LearningSkillsOpenResultSchema = z.object({
+  classId: z.string(),
+  term: z.number(),
+  skillCodes: z.array(z.string()),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean()
+    })
+  ),
+  rows: z.array(
+    z.object({
+      studentId: z.string(),
+      values: z.record(z.string(), z.string())
+    })
+  )
+});
+
+export const LearningSkillsUpdateCellResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const LearningSkillsReportModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  classId: z.string(),
+  term: z.number(),
+  skillCodes: z.array(z.string()),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean()
+    })
+  ),
+  rows: z.array(
+    z.object({
+      studentId: z.string(),
+      values: z.record(z.string(), z.string())
+    })
+  )
+});
+
+export const BackupExportWorkspaceBundleResultSchema = z.object({
+  ok: z.literal(true),
+  path: z.string(),
+  manifestPath: z.string().optional()
+});
+
+export const BackupImportWorkspaceBundleResultSchema = z.object({
+  ok: z.literal(true),
+  workspacePath: z.string().optional()
+});
+
+export const ExchangeExportClassCsvResultSchema = z.object({
+  ok: z.literal(true),
+  rowsExported: z.number(),
+  path: z.string()
+});
+
+export const ExchangeImportClassCsvResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number()
+});
+
+export const ReportsAttendanceMonthlyModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  attendance: AttendanceMonthOpenResultSchema
+});
+
+export const ReportsClassListModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      studentNo: z.string().nullable(),
+      birthDate: z.string().nullable(),
+      active: z.boolean(),
+      sortOrder: z.number(),
+      note: z.string()
+    })
+  )
+});
+
+export const ReportsLearningSkillsSummaryModelResultSchema =
+  LearningSkillsReportModelResultSchema;

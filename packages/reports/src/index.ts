@@ -639,6 +639,195 @@ export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel)
 </html>`;
 }
 
+export type AttendanceMonthlyReportModel = {
+  class: { id: string; name: string };
+  attendance: {
+    month: string;
+    daysInMonth: number;
+    typeOfDayCodes: string;
+    students: Array<{ id: string; displayName: string; sortOrder: number; active: boolean }>;
+    rows: Array<{ studentId: string; dayCodes: string }>;
+  };
+};
+
+export function renderAttendanceMonthlyReportHtml(
+  model: AttendanceMonthlyReportModel
+): string {
+  const generatedAt = new Date().toLocaleString();
+  const days = Array.from({ length: model.attendance.daysInMonth }, (_, i) => i + 1);
+  const rowByStudent = new Map(model.attendance.rows.map((r) => [r.studentId, r.dayCodes]));
+  const rows = model.attendance.students
+    .map((s) => {
+      const dayCodes = rowByStudent.get(s.id) ?? "";
+      const cells = days
+        .map((d) => `<td class="c">${escapeHtml(dayCodes[d - 1] ?? "")}</td>`)
+        .join("");
+      return `<tr><td class="left">${escapeHtml(s.displayName)}</td>${cells}</tr>`;
+    })
+    .join("");
+  const typeRow = days
+    .map((d) => `<td class="c">${escapeHtml(model.attendance.typeOfDayCodes[d - 1] ?? "")}</td>`)
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4 landscape; margin: 10mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; font-size: 9px; padding: 2px 3px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      td.c, th.c { text-align: center; width: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Attendance Monthly Report</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div><strong>Month:</strong> ${escapeHtml(model.attendance.month)}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          ${days.map((d) => `<th class="c">${d}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="left"><strong>Type</strong></td>${typeRow}</tr>
+        ${rows}
+      </tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type ClassListReportModel = {
+  class: { id: string; name: string };
+  students: Array<{
+    id: string;
+    displayName: string;
+    studentNo: string | null;
+    birthDate: string | null;
+    active: boolean;
+    sortOrder: number;
+    note: string;
+  }>;
+};
+
+export function renderClassListReportHtml(model: ClassListReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const rows = model.students
+    .map(
+      (s) => `<tr>
+      <td class="left">${escapeHtml(s.displayName)}</td>
+      <td>${escapeHtml(s.studentNo ?? "")}</td>
+      <td>${escapeHtml(s.birthDate ?? "")}</td>
+      <td>${s.active ? "Y" : "N"}</td>
+      <td class="left">${escapeHtml(s.note ?? "")}</td>
+    </tr>`
+    )
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; vertical-align: top; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Class List</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          <th>No</th>
+          <th>Birth Date</th>
+          <th>Active</th>
+          <th class="left">Note</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type LearningSkillsSummaryReportModel = {
+  class: { id: string; name: string };
+  term: number;
+  skillCodes: string[];
+  students: Array<{ id: string; displayName: string; sortOrder: number; active: boolean }>;
+  rows: Array<{ studentId: string; values: Record<string, string> }>;
+};
+
+export function renderLearningSkillsSummaryReportHtml(
+  model: LearningSkillsSummaryReportModel
+): string {
+  const generatedAt = new Date().toLocaleString();
+  const rowByStudent = new Map(model.rows.map((r) => [r.studentId, r.values]));
+  const bodyRows = model.students
+    .map((s) => {
+      const values = rowByStudent.get(s.id) ?? {};
+      const cells = model.skillCodes
+        .map((code) => `<td class="c">${escapeHtml(values[code] ?? "")}</td>`)
+        .join("");
+      return `<tr><td class="left">${escapeHtml(s.displayName)}</td>${cells}</tr>`;
+    })
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.c, th.c { text-align: center; width: 20mm; }
+    </style>
+  </head>
+  <body>
+    <h1>Learning Skills Summary</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div><strong>Term:</strong> ${model.term}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          ${model.skillCodes.map((code) => `<th class="c">${escapeHtml(code)}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
 function escapeHtml(s: string) {
   return s
     .replaceAll("&", "&amp;")
