@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.DS_Store
+
+# Electron
+apps/desktop/dist/
+apps/desktop/.vite/
+apps/desktop/out/
+
+# Rust
+rust/markbookd/target/
+
+# Logs
+*.log
+
+# Playwright
+playwright-report/
+test-results/
+
+# Local workspaces / data
+.workspaces/
+*.sqlite
+*.sqlite3
+
+# Optional: exclude scratch notes
+.agent/scratch/*
+!.agent/scratch/.gitkeep
+# Optional: exclude conversations with sensitive project context
+# .agent/conversations/*
+# !.agent/conversations/.gitkeep

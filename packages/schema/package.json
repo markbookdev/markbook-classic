@@ -1,0 +1,13 @@
+{
+  "name": "@markbook/schema",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  }
+}
+

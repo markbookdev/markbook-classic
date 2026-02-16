@@ -1,0 +1,88 @@
+[MarkBook 2022 - Version 11.2.17 - © 2022 - Asylum Software Inc.]
+[Version 11.2.17]
+""
+[This file belongs in folder...    (updated: 2022 02 06)]
+MBDEMO25
+""
+[Mark Sets created for this class] 
+ 2 
+SCI&SCI,Science 10,70
+EXAM&EXAM,Exam,30
+"»LS«§Learning Skills¶"
+[Default MarkSet/Attendance Records 0=Separate 1=One]
+1,11
+[General Information]
+"905 555 0575 X942"
+"Assess For Success School"
+"DEMO (2025)"
+"V. Smart"
+6
+9
+[Class List]
+ 7 
+ 1 ,Abbott,Dave,M,991221,8A,Zoltan,123-555-1234,,20100208,11
+ 1 ,Bolton,Marilyn,F,991204,8A,Foxy,,,20100619,11
+ 1 ,Henry,Lisa,F,007457,8A,Ace,,,20100917,11
+ 1 ,Peterson,Bob,M,070235,8A,Buddy,,,20100313,11
+ 1 ,Rhymes,John,M,991212,8B,Slack,,,20100530,11
+ 1 ,Slack,Jimmy,M,007410,8A,Star,,,20100301,11
+ 1 ,Tesora,Sylvia,F,001703,8C,Skipper,,,20100623,11
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+"skipper@awol.com"
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+""
+[Import Conditions]
+"","","","",0
+""
+[SAS Comment Flag]
+ 0 
+""
+[AE Parameters]
+0,0,"[SAS Comment Flag]","0",""
+"[AE Parameters]","0","0"
+""
+[AE Type Setting]
+""
+""
+[MBT Type Setting]
+"11111"

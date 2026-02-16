@@ -1,0 +1,19 @@
+{
+  "name": "markbook-classic",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run sidecar:build:debug && bun --cwd apps/desktop dev",
+    "build": "bun --cwd apps/desktop build",
+    "sidecar:build:debug": "bun --cwd rust/markbookd sidecar:build:debug",
+    "sidecar:build:release": "bun --cwd rust/markbookd sidecar:build:release",
+    "test:e2e": "bun run sidecar:build:debug && bun --cwd apps/desktop build:renderer && bun x playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "playwright": "^1.50.1"
+  }
+}

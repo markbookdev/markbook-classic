@@ -1,0 +1,163 @@
+[MarkBook 2010 - Version 10 - © 2010 - Asylum Software Inc.]
+[Version 10]
+""
+[This Timetable/Locker File belongs to...    (updated: 2010 03 22)]
+Folder: MBDEMO25    Class File: CLDEMO.Y25
+""
+[LastStudent]
+ 7 
+"M-1198B","Room 111","Brian Sharpe"
+"1-1  FEF2DXA  419  GAGNIER.P
+->   Gr 69   A14   L0
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A17   L0
+1-4  TIK2O0B  205  COXWELL
+->   Gr 56   A11   L0
+1-5  SNC2A1E  203  SMART
+->   Gr 73   A21   L0
+2-1  CHC2DXA  301  DARISSEN
+->   Gr 62   A19   L1
+2-2  CHV2OHG  107  JORDAN
+->   Gr 61   A17   L0
+2-2  GLC2OHG  118  AAIJEVI
+->   Gr 47   A16   L0
+2-4  ENG2D0G  408  BARTON
+->   Gr 53   A21   L0
+2-5  BTT2O0D  403  KELLS.D
+->   Gr 67   A18   L0
+Home  123-555-1234
+FW  (901) 693-9050
+MW  (901) 697-6720
+Custody Both Parents"
+"N-1004B","Room 123","Monica Olsen"
+"1-1  BAF3M0A  114  PITT.C
+->   Gr 55   A6   L9
+1-2  CLU3M0B  331  NGYUEN
+->   Gr 69   A5   L3
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A5   L4
+1-5  SNC2A1E  203  SMART
+->   Gr 51   A6   L4
+2-1  GWL3O0B  118  PATTISON
+->   Gr 76   A4   L5
+2-2  BDI3C0A  104  ROTHBERG
+->   Gr 81   A6   L2
+2-4  HSP3M0C  331  OJIM.L
+->   Gr 56   A14   L3
+2-5  MCF3M0C  212  SIDHU.M
+->   Gr 71   A9   L3
+Home  (901) 423-1598
+FW  (901) 771-7020
+MW  (901) 588-2245
+Custody Both Parents"
+"H-1045B","Room 135","Juliana Hansen"
+"1-1  AWQ2O0A  314  BENSON
+->   Gr 84   A9   L0
+1-2  ENG2D0A  202  MCMANN
+->   Gr 85   A8   L0
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A10   L0
+1-5  SNC2A1E  203  SMART
+->   Gr 73   A6   L1
+2-1  PAF3OFB  EXR  HEDGES
+->   Gr 82   A7   L2
+2-2  TEE2O0C  124  BERRY.T
+->   Gr 89   A8   L3
+2-4  FSF2D0A  410  GARNER
+->   Gr 78   A6   L2
+2-5  GLC2OHN  219  MOFFAT
+->   Gr 90   A6   L0
+2-5  CHV2OHN  328  LARICHE
+->   Gr 92   A8   L0
+Home  (905) 451-9177
+FW  (905) 670-2500
+MW 0
+Custody Father Only"
+"C-1122B","Room 105","John Rhymes"
+"1-1  BAF3M0A  214  PITT.C
+->   Gr 74   A6   L17
+1-2  TPE3E0C  314  BENSON
+->   Gr 65   A6   L3
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A7   L4
+1-5  SNC2A1E  203  SMART
+->   Gr 60   A6   L9
+2-1  GWL3O0B  118  PASQUAL
+->   Gr 57   A4   L3
+2-2  HPC3O0B  311  HEDGES
+->   Gr 77   A4   L1
+2-3  HRF3O0B  302  LATIA
+->   Gr 74   A5   L2
+2-5  MCR3U0F  102  LANGSTON
+->   Gr 81   A6   L0
+Home  (901) 474 0716
+FW 0
+MW 0
+Custody Both Parents
+Diabetes IDDM"
+"C-1122A","Room 105","Bob Peterson"
+"1-1  GWL3O0A  218  HAIST
+->   Gr 73   A4   L11
+1-2  SBI3U0B  406  DEFONG
+->   Gr 59   A4   L5
+1-3  MPM2D0B  504  SMART.V
+->   Gr 67   A5   L5
+1-4  HRF3O0A  331  LARICHE
+->   Gr 56   A6   L3
+1-5  SNC2A1E  203  SMART
+->   Gr 67   A5   L5
+2-1  SCH3U0D  227  SANDERS
+->   Gr 74   A4   L10
+2-2  PPL3OMC  GYA  ABBY.D
+->   Gr 67   A3   L3
+2-3  ENG3U0G  208  WOOLEY
+->   Gr 77   A3   L1
+2-5  MCF3M0C  212  SIDHU
+->   Gr 66   A4   L2
+Home (901) 474 4373
+FW  (410) 430 8208
+GW  (410) 486 1992
+MW (901) 486 2303
+Custody Both Parents"
+"","",""
+"1-1  BAF3M0A  214  PITT.C
+->   Gr 74   A6   L17
+1-2  TPE3E0C  314  BENSON
+->   Gr 65   A6   L3
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A7   L4
+1-5  SNC2A1E  203  SMART
+->   Gr 60   A6   L9
+2-1  GWL3O0B  118  PASQUAL
+->   Gr 57   A4   L3
+2-2  HPC3O0B  311  HEDGES
+->   Gr 77   A4   L1
+2-3  HRF3O0B  302  LATIA
+->   Gr 74   A5   L2
+2-5  MCR3U0F  102  LANGSTON
+->   Gr 81   A6   L0
+Home  (901) 474 0716
+FW 0
+MW 0
+Custody Both Parents"
+"E-1019B","Art Room","Mary Lee"
+"1-1  BAF3M0A  114  PITT.C
+->   Gr 55   A6   L9
+1-2  CLU3M0B  331  NGYUEN
+->   Gr 69   A5   L3
+1-3  MPM2D0B  504  SMART.V
+->   Gr 71   A5   L4
+1-5  SNC2A1E  203  SMART
+->   Gr 51   A6   L4
+2-1  GWL3O0B  118  PATTISON
+->   Gr 76   A4   L5
+2-2  BDI3C0A  104  ROTHBERG
+->   Gr 81   A6   L2
+2-4  HSP3M0C  331  OJIM.L
+->   Gr 56   A14   L3
+2-5  MCF3M0C  212  SIDHU.M
+->   Gr 71   A9   L3
+Home  (901) 525-1234
+FW  (901) 555-7126
+MW  (901) 555-2299
+Custody Both Parents"

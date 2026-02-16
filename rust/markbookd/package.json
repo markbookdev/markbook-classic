@@ -1,0 +1,9 @@
+{
+  "name": "@markbook/markbookd",
+  "private": true,
+  "scripts": {
+    "sidecar:build:debug": "cargo build",
+    "sidecar:build:release": "cargo build --release"
+  }
+}
+

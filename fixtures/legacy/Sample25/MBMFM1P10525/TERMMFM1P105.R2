@@ -1,0 +1,37 @@
+[MarkBook 2006 - © 2005 - Asylum Software Inc.]
+[Version 9.6]
+""
+[This comment file belongs in folder...    (updated: 2006 08 13)]
+MBMFM1P10525
+""
+[Comments]
+ 29 
+"Melody worked well throughout the semester to understand math.  She was dedicated and consistent.  She is ready to take the MFM 2P course next.  Have a great summer."
+"Tam struggled with the course concepts.  He must improve consistency and level of effort to increase success.  At this time it is recommended that he take the Essentials math course (MAT 14).  Have a good summer."
+"Shelly worked well throughout the semester.  More preparations was required for final evaluations.  She is ready to take the MFM 2P course next.  Have a great summer."
+""
+"Gerald struggled with course concepts.  He needs to work harder and ask more questions regarding specific difficulties.  He can take the MFM 2P course next.  Summer school is recommended to improve his confidence with MFM 1P."
+"Ken worked well throughout the semester to understand math.  He was dedicated and consistent.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Cam struggled with the course concepts.  He must improve consistency and level of effort to increase success.  At this time it is recommended that he take the Essentials math course (MAT 14).  Have a good summer."
+"Daniella worked well throughout the semester.  More preparations was required for final evaluations.  She is ready to take the MFM 2P course next.  Have a great summer."
+""
+""
+"Bonnie worked well throughout the semester when present.  Her attendance must improve to increase success.  More preparations was required for final evaluations.  She is ready to take the MFM 2P course next.  Have a great summer."
+"Roger worked well throughout the semester.  More preparations was required for final evaluations.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Edward worked well throughout the semester to understand math.  He was dedicated and consistent.  He is ready to take the MFM 2P course next.  Have a great summer."
+""
+"Heidi worked well throughout the semester to understand math.  She was dedicated and consistent.  She is ready to take the MFM 2P course next.  Have a great summer."
+"Amber worked well throughout the semester to understand math.  She was dedicated and consistent.  She is ready to take the MFM 2P course next.  Have a great summer."
+"Stirling struggled with the course concepts.  He must improve consistency and level of effort to increase success.  At this time it is recommended that he take the Essentials math course (MAT 14).  Have a good summer."
+"Samantha struggled with course concepts.  She needs to work harder and ask more questions regarding specific difficulties.  She must work harder to complete work.  She can take the MFM 2P course next."
+"Peter worked well throughout the semester.  More preparations was required for final evaluations.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Rick must increase his level of effort to pass math.  He struggled and did not put forth the effort required to learn from his mistakes.  He should retake the course at summer school."
+""
+"Joseph worked well throughout the semester to understand math.  He was dedicated and consistent and gained confidence as the semester progressed.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Samantha worked well throughout the semester to understand math.  She was dedicated and consistent.  She is ready to take the MFM 2P course next.  Have a great summer."
+"James worked well throughout the semester.  More preparations was required for final evaluations.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Simon worked well throughout the semester to understand math.  He was dedicated and consistent.  He is ready to take the MFM 2P course next.  Have a great summer."
+"Clarissa worked well throughout the semester to understand math.  She was dedicated and consistent.  She is ready to take the MFM 2P course next.  Have a great summer."
+"Glenda struggled with the course concepts.  She must improve consistency and level of effort to increase success.  At this time it is recommended that she take the essentials math course (MAT 14).  Her attendance was poor."
+""
+"Astrid struggled with course concepts.  She needs to work harder and ask more questions regarding specific difficulties.  She can take the MFM 2P course next.  Summer school is recommended to improve her confidence with MFM 1P."

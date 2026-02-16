@@ -1,0 +1,232 @@
+[MarkBook 2024 - Version 11.2.18 - © 2022 - Asylum Software Inc.]
+[Version 11.2.18]
+""
+[This file belongs in folder...    (updated: 2022 12 07)]
+MB8D25
+""
+[Mark Sets created for this class] 
+ 6 
+MAT1&MAT1,Mathematics 1,50
+SNC1&SNC1,Science 1,50
+MAT2&MAT2,Mathematics 2,50
+SNC2&SNC2,Science 2,50
+MAT3&MAT3,Mathematics 3,50
+SNC3&SNC3,Science 3,50
+""
+[Default MarkSet/Attendance Records 0=Separate 1=One]
+3,11
+[General Information]
+"555-1234"
+"The Best School"
+"8D (2025)"
+"V. Smart"
+6
+9
+[Class List]
+ 27 
+ 1 ,O'Shanter,Tam,M,005659,8D,Baadshah,555 3911,,20120209,111111
+ 0 ,Lyons,Melody,F,005150,08D,Crackle,555 9673,555 8909,20120317,000000
+ 1 ,Boame,Gerald,M,005069,08D,Noo,555 6658,555 7300 x2013,20120206,111111
+ 1 ,Duguid,Kenneth,M,007033,08D,Ups!,555 0114,,20120529,111111
+ 1 ,Beach,Shelley,F,002837,08D,Starshine,555 3758,555 4243,20120618,111111
+ 1 ,Boyce,Daniella,F,001321,08D,Cyber6,555 8715,555 6647,20120505,111111
+ 1 ,Bridges,Cam,M,004447,08D,New Guy,555 8577,,20120509,111111
+ 1 ,Day,Bonny,F,005404,08D,Cora 86,555 1301,,20121211,111111
+ 1 ,Arkand,Samantha,F,000492,08D,Mr. Ebtek,555 8655,555 1175,20120910,111111
+ 1 ,Bell,Clarissa,F,001271,08D,Stale Turkey Breast,555 3518,,20121027,111111
+ 1 ,Dundee,James,M,001418,08D,The Filter,555 1039,555 4001 x2607,20120220,111111
+ 1 ,Ho,Heidi,F,007457,08D,Let's Eat,555 0462,555 5483,20121230,111111
+ 1 ,Houston,Roger,M,005715,08D,Snap,555 5260,555 7605,20120222,111111
+ 1 ,Ives,Simon,M,991198,08D,Squall,555 7769,555 3551,20120421,111111
+ 0 ,Stone,Edward,M,006553,08D,Ace,555 0626,555 3332,20120707,000000
+ 1 ,Hughes,Amber,F,002084,08D,Ms. Impossible,555 9353,,20120201,111111
+ 1 ,King,Joseph,M,991216,08D,Mad Dog,555 2988,555 6035,20120523,111111
+ 1 ,Silver,Stirling,M,004416,08D,Spiderman,555 9596,555 6406,20121202,111111
+ 1 ,Moss,Peter,M,002087,08D,Old Navy,555 3972,555 2401,20120514,111111
+ 0 ,Knott,Astrid,F,991245,08D,Tweety,0000000000,00000000000000,20120609,000000
+ 1 ,Hill,Samantha,F,005705,08D,Giget,555 1112,555 1112,20121109,111111
+ 0 ,White,Robert,M,070073,08D,Pop,555 8144,,20121015,000000
+ 1 ,Lowe,Glenda,F,002118,08D,Mr. Wong,555 2650,555 7337 x0226,20120429,111111
+ 1 ,O'Shea,Rick,M,004393,08D,Heat,555 6465,,20121016,111111
+ 1 ,Wilco,Roger,M,005710,08D,Spell Bound,555 9799,,20120921,111111
+ 1 ,Lee,Mary,F,007390,8D,Mr. Grouchy,,,20120216,111111
+ 1 ,D'Lionne,Daniel,M,002502,8D,One Hundred Percent,,,20120822,111111
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+
+""
+""
+""
+""
+""
+""
+[Import Conditions]
+"","","","",0
+""
+[SAS Comment Flag]
+ 0 
+""
+[AE Parameters]
+0,0,"","",""
+"","",""
+""
+[AE Type Setting]
+"11111"
+""
+[MBT Type Setting]
+"11111"

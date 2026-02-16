@@ -1,0 +1,362 @@
+import { z } from "zod";
+
+export const SidecarOkResponseSchema = z.object({
+  id: z.string(),
+  ok: z.literal(true),
+  result: z.unknown()
+});
+
+export const SidecarErrResponseSchema = z.object({
+  id: z.string(),
+  ok: z.literal(false),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.record(z.string(), z.unknown()).optional()
+  })
+});
+
+export const SidecarResponseSchema = z.union([
+  SidecarOkResponseSchema,
+  SidecarErrResponseSchema
+]);
+
+export type SidecarResponse = z.infer<typeof SidecarResponseSchema>;
+
+// Sidecar `result` payload schemas (renderer validates these).
+
+export const ClassesListResultSchema = z.object({
+  classes: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      // Optional to preserve compatibility as the schema evolves.
+      studentCount: z.number().optional(),
+      markSetCount: z.number().optional()
+    })
+  )
+});
+
+export const ClassesCreateResultSchema = z.object({
+  classId: z.string(),
+  name: z.string()
+});
+
+export const ClassesDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const ClassImportLegacyResultSchema = z.object({
+  classId: z.string(),
+  name: z.string(),
+  studentsImported: z.number(),
+  markSetsImported: z.number().optional(),
+  assessmentsImported: z.number().optional(),
+  scoresImported: z.number().optional(),
+  sourceClFile: z.string(),
+  importedMarkFiles: z.array(z.string()).optional(),
+  missingMarkFiles: z.array(z.unknown()).optional()
+});
+
+export const MarkSetsListResultSchema = z.object({
+  markSets: z.array(
+    z.object({
+      id: z.string(),
+      code: z.string(),
+      description: z.string(),
+      sortOrder: z.number()
+    })
+  )
+});
+
+export const MarkSetOpenResultSchema = z.object({
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean()
+    })
+  ),
+  assessments: z.array(
+    z.object({
+      id: z.string(),
+      idx: z.number(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      title: z.string(),
+      weight: z.number().nullable(),
+      outOf: z.number().nullable()
+    })
+  ),
+  rowCount: z.number(),
+  colCount: z.number()
+});
+
+export const GridGetResultSchema = z.object({
+  rowStart: z.number(),
+  rowCount: z.number(),
+  colStart: z.number(),
+  colCount: z.number(),
+  cells: z.array(z.array(z.number().nullable()))
+});
+
+export const GridUpdateCellResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const ReportsMarkSetGridModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean()
+    })
+  ),
+  assessments: z.array(
+    z.object({
+      id: z.string(),
+      idx: z.number(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      title: z.string(),
+      weight: z.number().nullable(),
+      outOf: z.number().nullable()
+    })
+  ),
+  rowCount: z.number(),
+  colCount: z.number(),
+  assessmentAverages: z.array(
+    z.object({
+      assessmentId: z.string(),
+      idx: z.number(),
+      avgRaw: z.number(),
+      avgPercent: z.number(),
+      scoredCount: z.number(),
+      zeroCount: z.number(),
+      noMarkCount: z.number()
+    })
+  ),
+  cells: z.array(z.array(z.number().nullable()))
+});
+
+export const StudentsListResultSchema = z.object({
+  students: z.array(
+    z.object({
+      id: z.string(),
+      lastName: z.string(),
+      firstName: z.string(),
+      displayName: z.string(),
+      studentNo: z.string().nullable(),
+      birthDate: z.string().nullable(),
+      active: z.boolean(),
+      sortOrder: z.number()
+    })
+  )
+});
+
+export const StudentsCreateResultSchema = z.object({
+  studentId: z.string()
+});
+
+export const StudentsUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const StudentsReorderResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const StudentsDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CategoriesListResultSchema = z.object({
+  categories: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      weight: z.number().nullable(),
+      sortOrder: z.number()
+    })
+  )
+});
+
+export const CategoriesCreateResultSchema = z.object({
+  categoryId: z.string()
+});
+
+export const CategoriesUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CategoriesDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const AssessmentsListResultSchema = z.object({
+  assessments: z.array(
+    z.object({
+      id: z.string(),
+      idx: z.number(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      title: z.string(),
+      term: z.number().nullable(),
+      legacyType: z.number().nullable(),
+      weight: z.number().nullable(),
+      outOf: z.number().nullable()
+    })
+  )
+});
+
+export const AssessmentsCreateResultSchema = z.object({
+  assessmentId: z.string()
+});
+
+export const AssessmentsUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const AssessmentsDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const AssessmentsReorderResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const NotesGetResultSchema = z.object({
+  notes: z.array(
+    z.object({
+      studentId: z.string(),
+      note: z.string()
+    })
+  )
+});
+
+export const NotesUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const MarkSetSettingsGetResultSchema = z.object({
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string(),
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  })
+});
+
+export const MarkSetSettingsUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+const CalcPerAssessmentSchema = z.object({
+  assessmentId: z.string(),
+  idx: z.number(),
+  date: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  title: z.string(),
+  outOf: z.number(),
+  avgRaw: z.number(),
+  avgPercent: z.number(),
+  medianPercent: z.number(),
+  scoredCount: z.number(),
+  zeroCount: z.number(),
+  noMarkCount: z.number()
+});
+
+const CalcPerCategorySchema = z.object({
+  name: z.string(),
+  weight: z.number(),
+  sortOrder: z.number().nullable(),
+  classAvg: z.number(),
+  studentCount: z.number(),
+  assessmentCount: z.number()
+});
+
+const CalcPerStudentSchema = z.object({
+  studentId: z.string(),
+  displayName: z.string(),
+  sortOrder: z.number(),
+  active: z.boolean(),
+  finalMark: z.number().nullable(),
+  noMarkCount: z.number(),
+  zeroCount: z.number(),
+  scoredCount: z.number()
+});
+
+export const CalcAssessmentStatsResultSchema = z.object({
+  assessments: z.array(CalcPerAssessmentSchema)
+});
+
+export const CalcMarkSetSummaryResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  settings: z.object({
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  categories: z.array(
+    z.object({
+      name: z.string(),
+      weight: z.number(),
+      sortOrder: z.number()
+    })
+  ),
+  assessments: z.array(
+    z.object({
+      assessmentId: z.string(),
+      idx: z.number(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      title: z.string(),
+      term: z.number().nullable(),
+      legacyType: z.number().nullable(),
+      weight: z.number(),
+      outOf: z.number()
+    })
+  ),
+  perAssessment: z.array(CalcPerAssessmentSchema),
+  perCategory: z.array(CalcPerCategorySchema),
+  perStudent: z.array(CalcPerStudentSchema)
+});
+
+export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;

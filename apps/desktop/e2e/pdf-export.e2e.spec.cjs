@@ -1,0 +1,41 @@
+const { test, expect } = require("@playwright/test");
+const { launchElectronApp, importLegacyFixture, mkdtemp } = require("./_helpers.cjs");
+const fs = require("node:fs");
+const path = require("node:path");
+
+test("export PDF (no Save dialog) writes a non-empty file", async () => {
+  const { app, page, repoRoot } = await launchElectronApp();
+
+  try {
+    const { classId, markSetId } = await importLegacyFixture(
+      page,
+      repoRoot,
+      path.join("fixtures", "legacy", "Sample25", "MB8D25")
+    );
+    expect(classId).toBeTruthy();
+    expect(markSetId).toBeTruthy();
+
+    const outDir = mkdtemp("markbook-pdf-");
+    const outPath = path.join(outDir, "markset-grid.pdf");
+
+    await page.evaluate(async ({ classId, markSetId, outPath }) => {
+      if (!window.__markbookTest?.exportMarkSetGridPdfToPath) {
+        throw new Error("missing window.__markbookTest.exportMarkSetGridPdfToPath");
+      }
+      await window.__markbookTest.exportMarkSetGridPdfToPath(classId, markSetId, outPath);
+    }, { classId, markSetId, outPath });
+
+    // Wait for the file to land.
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) break;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    expect(fs.existsSync(outPath)).toBeTruthy();
+    expect(fs.statSync(outPath).size).toBeGreaterThan(1000);
+  } finally {
+    await app.close();
+  }
+});
+

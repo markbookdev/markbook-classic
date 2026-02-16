@@ -1,0 +1,37 @@
+ 1 ,Pool,Gene,M,321654,7B,Rainbow,555-9687,,19860429,1
+ 1 ,Light,Starr,F,845620,7B,Snap!,555-8497,,19860321,1
+ 1 ,Too-Bright,Naught,F,541753,7B,Picasso,555-9615,,19860112,1
+ 1 ,Ho,Tally,F,521430,7B,Billy,555-2179,,19860619,1
+ 1 ,Eggs,Haman,M,521436,7B,Marty,555-0537,,19861028,1
+ 1 ,Jacket,Jean,F,578213,7B,Pop!,555-1010,,19851203,1
+ 1 ,Oneneedle,Knitswith,M,54983,7B,Spider Mastermind,555-7283,,19860917,1
+ 1 ,Asabrick,Thick,M,74569,7B,Blowfish,555-3927,,19860728,1
+ 1 ,Awol,Gone,F,745249,7B,Raisin,555-2863,,19860420,1
+ 1 ,Daily,Skip,M,234578,7B,Raptor,555-8203,,19860508,1
+ 1 ,Annoyance,Constance,F,85691,7B,Too Cool,555-1536,,19860905,1
+ 1 ,Metre,Milli,F,75621,7B,Red Eye,555-6545,,19861110,1
+ 1 ,Lee,Mary,F,457812,7B,Dookie,555-6807,,19861205,1
+ 1 ,Shea,Rico,M,67098,7B,Round Head,555-2650,,19860930,1
+ 1 ,Seek,Hyden,M,856632,7B,Golden,555-7104,555-4282,19860902,1
+ 1 ,Hazzard,Hap,M,82143,7B,Wax Job,555-1448,,19860920,1
+ 1 ,O'Watt,Meg,F,78221,7B,Mastermind,555-5882,,19861114,1
+ 0 ,Withalongname,A. Student,F,23409,7B,Crackle!,555-2568,,,0
+ 0 ,Lo,Lai,F,412558,7B,Cobra Commander,555-4419,,,0
+ 1 ,Blonde,Platinum,F,852213,7B,Spy,555-7399,,19860225,1
+ 1 ,Silver,Sterling,M,892134,7B,007,555-7843,,19860227,1
+ 1 ,O'Lantern,Jack,M,487236,7B,Shadow,555-7490,,19860129,1
+ 1 ,On,Babble,F,554321,7B,Curtis,555-0013,,19861101,1
+ 1 ,Wilco,Roger,M,523145,7B,Snerf,555-3214,,19861031,1
+ 1 ,Gogh,Gotta,M,392481,7B,Pyromaniac,555-3180,,19861128,1
+ 1 ,Down,Mark,M,456789,7B,In Trouble,555-5555,,19861106,1
+ 1 ,Cane,Candy,F,947284,7B,Cinderella,555-5555,,19861025,1
+ 0 ,Flake,Corn,F,945402,7B,Meow,555-8913,,,0
+ 0 ,Ahnandon,Prattle,M,908070,7B,8907890,555-2928,,19861231,0
+ 1 ,Whiz,Gee,F,987967,7B,Cute,555-5555,,19861006,1
+ 1 ,D'Oldblock,Chipoff,M,455567,7B,455567*,555-5555,,19860608,1
+ 1 ,Cloth,Terri,F,434630,7B,The Great,,,19860828,1
+ 0 ,Ho,Heidi,F,822540,7B,purple,555-0299,,,0
+ 1 ,Nilly,Willy,M,904556,7B,Mrs. America,,,19860329,1
+ 1 ,Mint,Pepper,F,345345,7B,Peanuts,,,19860806,1
+ 1 ,Houston,Roger,M,0000,7B,Green Face,,,19860910,1
+ 1 ,Mill,Pepper,F,0000,7B,0000*,,,19861022,1
