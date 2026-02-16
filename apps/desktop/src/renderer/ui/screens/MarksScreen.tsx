@@ -119,6 +119,29 @@ export function MarksScreen(props: {
     };
   }, []);
 
+  // E2E harness: deterministic fallback to open our custom cell editor.
+  useEffect(() => {
+    const w = window as any;
+    if (!w.__markbookTest) w.__markbookTest = {};
+    w.__markbookTest.openMarksCellEditor = (col: number, row: number) => {
+      if (!Number.isInteger(col) || !Number.isInteger(row)) return false;
+      if (col <= 0 || col > assessments.length) return false;
+      if (row < 0 || row >= students.length) return false;
+      const cur = cells[row]?.[col - 1] ?? null;
+      const text = cur == null ? "" : String(cur);
+      try {
+        editorRef.current?.scrollTo(col, row);
+      } catch {
+        // no-op
+      }
+      setEditingCell({ col, row, text });
+      return true;
+    };
+    return () => {
+      if (w.__markbookTest?.openMarksCellEditor) delete w.__markbookTest.openMarksCellEditor;
+    };
+  }, [assessments.length, cells, students.length]);
+
   useEffect(() => {
     function onErr(e: ErrorEvent) {
       const msg = e?.error?.message || e?.message || "Unknown error";

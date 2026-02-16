@@ -249,6 +249,63 @@ pub fn find_note_file(folder: &Path) -> anyhow::Result<Option<PathBuf>> {
     Ok(candidates.into_iter().next())
 }
 
+pub fn find_attendance_file(folder: &Path) -> anyhow::Result<Option<PathBuf>> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for ent in std::fs::read_dir(folder)? {
+        let ent = ent?;
+        let p = ent.path();
+        if !p.is_file() {
+            continue;
+        }
+        let Some(ext) = p.extension().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if ext.eq_ignore_ascii_case("ATN") {
+            candidates.push(p);
+        }
+    }
+    candidates.sort();
+    Ok(candidates.into_iter().next())
+}
+
+pub fn find_seating_file(folder: &Path) -> anyhow::Result<Option<PathBuf>> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for ent in std::fs::read_dir(folder)? {
+        let ent = ent?;
+        let p = ent.path();
+        if !p.is_file() {
+            continue;
+        }
+        let Some(ext) = p.extension().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if ext.eq_ignore_ascii_case("SPL") {
+            candidates.push(p);
+        }
+    }
+    candidates.sort();
+    Ok(candidates.into_iter().next())
+}
+
+pub fn find_bnk_files(folder: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for ent in std::fs::read_dir(folder)? {
+        let ent = ent?;
+        let p = ent.path();
+        if !p.is_file() {
+            continue;
+        }
+        let Some(ext) = p.extension().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if ext.eq_ignore_ascii_case("BNK") {
+            out.push(p);
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 pub struct ParsedCategory {
     pub name: String,
     pub weight: f64,
@@ -561,6 +618,368 @@ pub fn parse_legacy_note_file(path: &Path) -> anyhow::Result<Vec<String>> {
     Ok(out)
 }
 
+pub struct ParsedAttendanceMonth {
+    pub month: i32,
+    pub type_of_day_codes: String,
+    pub student_day_codes: Vec<String>,
+}
+
+pub struct ParsedAttendanceFile {
+    pub last_student: usize,
+    pub school_year_start_month: i32,
+    pub months: Vec<ParsedAttendanceMonth>,
+}
+
+pub fn parse_legacy_attendance_file(path: &Path) -> anyhow::Result<ParsedAttendanceFile> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.trim_end_matches('\r').to_string())
+        .collect();
+
+    let last_idx = find_section(&lines, "LastStudent")
+        .ok_or_else(|| anyhow::anyhow!("missing [LastStudent] section in attendance file"))?;
+    let mut i = last_idx + 1;
+    let last_student_line =
+        next_non_noise(&lines, &mut i).ok_or_else(|| anyhow::anyhow!("missing last student"))?;
+    let last_student = last_student_line
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("bad last student: {}", last_student_line))?;
+
+    let school_idx = find_section(&lines, "School Year Starts")
+        .ok_or_else(|| anyhow::anyhow!("missing [School Year Starts] section"))?;
+    let mut j = school_idx + 1;
+    let school_year_start_month = next_non_noise(&lines, &mut j)
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .unwrap_or(9);
+
+    let data_idx = find_section(&lines, "Attendance Data - DO NOT EDIT!!!")
+        .ok_or_else(|| anyhow::anyhow!("missing [Attendance Data - DO NOT EDIT!!!] section"))?;
+    let mut k = data_idx + 1;
+    let mut months: Vec<ParsedAttendanceMonth> = Vec::new();
+    for month in 1..=12_i32 {
+        let _label = next_non_noise(&lines, &mut k)
+            .ok_or_else(|| anyhow::anyhow!("unexpected EOF reading month label {}", month))?;
+        let type_of_day_codes = next_keep_empty(&lines, &mut k).unwrap_or_default();
+        let mut student_day_codes: Vec<String> = Vec::with_capacity(last_student);
+        for _ in 0..last_student {
+            student_day_codes.push(next_keep_empty(&lines, &mut k).unwrap_or_default());
+        }
+        months.push(ParsedAttendanceMonth {
+            month,
+            type_of_day_codes,
+            student_day_codes,
+        });
+    }
+
+    Ok(ParsedAttendanceFile {
+        last_student,
+        school_year_start_month,
+        months,
+    })
+}
+
+pub struct ParsedSeatingFile {
+    pub rows: i32,
+    pub seats_per_row: i32,
+    pub last_student: usize,
+    pub blocked_mask: String,
+    pub seat_codes: Vec<i32>,
+}
+
+pub fn parse_legacy_seating_file(path: &Path) -> anyhow::Result<ParsedSeatingFile> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.trim_end_matches('\r').to_string())
+        .collect();
+
+    let rows_idx = find_section(&lines, "Number of Rows / Seats per Row")
+        .ok_or_else(|| anyhow::anyhow!("missing [Number of Rows / Seats per Row] section"))?;
+    let mut i = rows_idx + 1;
+    let row_line =
+        next_non_noise(&lines, &mut i).ok_or_else(|| anyhow::anyhow!("missing rows/seats line"))?;
+    let row_parts = parse_csv_i32(&row_line, 2)
+        .ok_or_else(|| anyhow::anyhow!("bad rows/seats line: {}", row_line))?;
+    let rows = row_parts[0];
+    let seats_per_row = row_parts[1];
+
+    let last_idx = find_section(&lines, "LastStudent")
+        .ok_or_else(|| anyhow::anyhow!("missing [LastStudent] section in seating file"))?;
+    let mut j = last_idx + 1;
+    let last_student_line =
+        next_non_noise(&lines, &mut j).ok_or_else(|| anyhow::anyhow!("missing last student"))?;
+    let last_student = last_student_line
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("bad last student: {}", last_student_line))?;
+    let blocked_mask = next_keep_empty(&lines, &mut j).unwrap_or_default();
+    let blocked_mask = blocked_mask
+        .chars()
+        .map(|ch| if ch == '1' { '1' } else { '0' })
+        .collect::<String>();
+
+    let mut seat_codes: Vec<i32> = Vec::with_capacity(last_student);
+    for _ in 0..last_student {
+        let line = next_non_noise(&lines, &mut j)
+            .ok_or_else(|| anyhow::anyhow!("unexpected EOF reading seat assignment"))?;
+        seat_codes.push(line.trim().parse::<i32>().unwrap_or(0));
+    }
+
+    Ok(ParsedSeatingFile {
+        rows,
+        seats_per_row,
+        last_student,
+        blocked_mask,
+        seat_codes,
+    })
+}
+
+pub struct ParsedCommentSetDef {
+    pub set_number: usize,
+    pub title: String,
+    pub fit_mode: i32,
+    pub fit_font_size: i32,
+    pub fit_width: i32,
+    pub fit_lines: i32,
+    pub fit_subj: String,
+    pub max_chars: i32,
+    pub is_default: bool,
+    pub bank_short: Option<String>,
+}
+
+pub struct ParsedIdxFile {
+    pub fit_max_letters: i32,
+    pub default_set: usize,
+    pub sets: Vec<ParsedCommentSetDef>,
+    pub bank_short: Option<String>,
+}
+
+pub fn parse_legacy_idx_file(path: &Path) -> anyhow::Result<ParsedIdxFile> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.trim_end_matches('\r').to_string())
+        .collect();
+
+    if lines.is_empty() {
+        return Err(anyhow::anyhow!("empty IDX file"));
+    }
+
+    // Legacy "old format" starts directly with count/default/title list.
+    let mut probe = 0;
+    let first_token = next_non_noise(&lines, &mut probe).unwrap_or_default();
+    if let Ok(erc_count) = first_token.trim().parse::<usize>() {
+        let mut i = probe;
+        let default_set = next_non_noise(&lines, &mut i)
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(1);
+        let mut sets: Vec<ParsedCommentSetDef> = Vec::with_capacity(erc_count);
+        for set_number in 1..=erc_count {
+            let title =
+                next_non_noise(&lines, &mut i).unwrap_or_else(|| format!("Set {}", set_number));
+            sets.push(ParsedCommentSetDef {
+                set_number,
+                title,
+                fit_mode: 0,
+                fit_font_size: 8,
+                fit_width: 50,
+                fit_lines: 1,
+                fit_subj: String::new(),
+                max_chars: 100,
+                is_default: set_number == default_set,
+                bank_short: None,
+            });
+        }
+        return Ok(ParsedIdxFile {
+            fit_max_letters: 100,
+            default_set,
+            sets,
+            bank_short: None,
+        });
+    }
+
+    // Current format with header lines and fit metadata.
+    let owner_idx = lines
+        .iter()
+        .position(|l| {
+            l.to_ascii_lowercase()
+                .contains("this comment index file belongs")
+        })
+        .ok_or_else(|| anyhow::anyhow!("unable to locate IDX owner section"))?;
+
+    let mut i = owner_idx + 1;
+    let _folder_line = next_non_noise(&lines, &mut i)
+        .ok_or_else(|| anyhow::anyhow!("missing IDX folder/class line"))?;
+    let fit_max_letters = next_non_noise(&lines, &mut i)
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .unwrap_or(100)
+        .max(100);
+    let erc_count = next_non_noise(&lines, &mut i)
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .ok_or_else(|| anyhow::anyhow!("missing IDX set count"))?;
+    let default_set = next_non_noise(&lines, &mut i)
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(1)
+        .clamp(1, erc_count.max(1));
+
+    let mut bank_short: Option<String> = None;
+    let mut sets: Vec<ParsedCommentSetDef> = Vec::with_capacity(erc_count);
+    for set_number in 1..=erc_count {
+        let title = next_non_noise(&lines, &mut i).unwrap_or_else(|| format!("Set {}", set_number));
+        let fit_line = next_non_noise(&lines, &mut i).unwrap_or_else(|| "0,8,50,1".to_string());
+        let fit_vals = parse_csv_i32(&fit_line, 4).unwrap_or_else(|| vec![0, 8, 50, 1]);
+        let fit_subj = next_keep_empty(&lines, &mut i).unwrap_or_default();
+        let bank_line = next_keep_empty(&lines, &mut i).unwrap_or_default();
+        if set_number == 1 && !bank_line.trim().is_empty() {
+            bank_short = Some(bank_line.trim().to_string());
+        }
+
+        sets.push(ParsedCommentSetDef {
+            set_number,
+            title,
+            fit_mode: *fit_vals.first().unwrap_or(&0),
+            fit_font_size: *fit_vals.get(1).unwrap_or(&8),
+            fit_width: *fit_vals.get(2).unwrap_or(&50),
+            fit_lines: *fit_vals.get(3).unwrap_or(&1),
+            fit_subj,
+            max_chars: 100,
+            is_default: set_number == default_set,
+            bank_short: if set_number == 1 {
+                bank_short.clone()
+            } else {
+                None
+            },
+        });
+    }
+
+    if let Some(max_idx) = find_section(&lines, "Max Characters for each Comment Set") {
+        let mut m = max_idx + 1;
+        for set in &mut sets {
+            if let Some(v) = next_non_noise(&lines, &mut m).and_then(|s| s.parse::<i32>().ok()) {
+                set.max_chars = v.max(100);
+            }
+        }
+    }
+
+    Ok(ParsedIdxFile {
+        fit_max_letters,
+        default_set,
+        sets,
+        bank_short,
+    })
+}
+
+pub struct ParsedRCommentFile {
+    pub last_student: usize,
+    pub remarks: Vec<String>,
+}
+
+pub fn parse_legacy_r_comment_file(path: &Path) -> anyhow::Result<ParsedRCommentFile> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.trim_end_matches('\r').to_string())
+        .collect();
+
+    let idx = find_section(&lines, "Comments")
+        .ok_or_else(|| anyhow::anyhow!("missing [Comments] section"))?;
+    let mut i = idx + 1;
+    let count_line =
+        next_non_noise(&lines, &mut i).ok_or_else(|| anyhow::anyhow!("missing comment count"))?;
+    let count = count_line
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("bad comment count: {}", count_line))?;
+
+    let mut remarks: Vec<String> = Vec::with_capacity(count);
+    for _ in 0..count {
+        remarks.push(read_quoted_block(&lines, &mut i)?);
+    }
+
+    Ok(ParsedRCommentFile {
+        last_student: count,
+        remarks,
+    })
+}
+
+pub struct ParsedBnkEntry {
+    pub sort_order: usize,
+    pub type_code: String,
+    pub level_code: String,
+    pub text: String,
+}
+
+pub struct ParsedBnkFile {
+    pub fit_profile: Option<String>,
+    pub entries: Vec<ParsedBnkEntry>,
+}
+
+pub fn parse_bnk_file(path: &Path) -> anyhow::Result<ParsedBnkFile> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let mut entries: Vec<ParsedBnkEntry> = Vec::new();
+    let mut fit_profile: Option<String> = None;
+
+    for raw_line in text.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let fields = parse_csv_fields(line);
+        if fields.len() < 3 {
+            continue;
+        }
+
+        let type_code = fields[0].trim().to_string();
+        let level_code = fields[1].trim().to_string();
+        let body = fields[2].to_string();
+
+        if is_fit_sentinel(&type_code, &level_code) {
+            fit_profile = extract_fit_profile(&body);
+            continue;
+        }
+
+        entries.push(ParsedBnkEntry {
+            sort_order: entries.len(),
+            type_code,
+            level_code,
+            text: body,
+        });
+    }
+
+    Ok(ParsedBnkFile {
+        fit_profile,
+        entries,
+    })
+}
+
+pub fn serialize_bnk_file(parsed: &ParsedBnkFile) -> String {
+    let mut out = String::new();
+    for e in &parsed.entries {
+        out.push_str(&format!(
+            "{},{},{}\n",
+            csv_quote(&e.type_code),
+            csv_quote(&e.level_code),
+            csv_quote(&e.text)
+        ));
+    }
+    if let Some(fit) = parsed.fit_profile.as_deref() {
+        out.push_str(&format!(
+            "{},{},{}\n",
+            csv_quote("FIT"),
+            csv_quote("FIT"),
+            csv_quote(&format!("Please DO NOT EDIT or DELETE this line: {}", fit))
+        ));
+    }
+    out
+}
+
 fn find_section(lines: &[String], name: &str) -> Option<usize> {
     let needle = format!("[{}]", name);
     for (i, l) in lines.iter().enumerate() {
@@ -667,9 +1086,81 @@ fn parse_csv_numbers(s: &str, expected: usize) -> Option<Vec<f64>> {
     Some(out)
 }
 
+fn parse_csv_i32(s: &str, expected: usize) -> Option<Vec<i32>> {
+    let fields = parse_csv_fields(s);
+    if fields.len() < expected {
+        return None;
+    }
+    let mut out: Vec<i32> = Vec::with_capacity(expected);
+    for item in fields.into_iter().take(expected) {
+        out.push(item.trim().parse::<i32>().ok()?);
+    }
+    Some(out)
+}
+
+fn parse_csv_fields(line: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut buf = String::new();
+    let mut in_quotes = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '"' {
+            if in_quotes && i + 1 < chars.len() && chars[i + 1] == '"' {
+                buf.push('"');
+                i += 2;
+                continue;
+            }
+            in_quotes = !in_quotes;
+            i += 1;
+            continue;
+        }
+        if ch == ',' && !in_quotes {
+            out.push(buf.trim().to_string());
+            buf.clear();
+            i += 1;
+            continue;
+        }
+        buf.push(ch);
+        i += 1;
+    }
+    out.push(buf.trim().to_string());
+    out
+}
+
+fn csv_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+fn normalize_fit_token(s: &str) -> String {
+    s.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
+fn is_fit_sentinel(type_code: &str, level_code: &str) -> bool {
+    normalize_fit_token(type_code) == "FIT" && normalize_fit_token(level_code) == "FIT"
+}
+
+fn extract_fit_profile(s: &str) -> Option<String> {
+    let mut out = s.trim().to_string();
+    if let Some(pos) = out.find(':') {
+        out = out[(pos + 1)..].trim().to_string();
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture_path(rel: &str) -> PathBuf {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -727,5 +1218,89 @@ mod tests {
         let v = parse_legacy_note_file(&p).expect("parse notes");
         assert_eq!(v.len(), 27);
         assert!(v[0].contains("called re Math"));
+    }
+
+    #[test]
+    fn parse_legacy_spl_file() {
+        let p = fixture_path("fixtures/legacy/Sample25/MB8D25/8D.SPL");
+        let s = parse_legacy_seating_file(&p).expect("parse spl");
+        assert_eq!(s.rows, 6);
+        assert_eq!(s.seats_per_row, 5);
+        assert_eq!(s.last_student, 27);
+        assert_eq!(s.seat_codes.len(), 27);
+        assert_eq!(s.blocked_mask.len(), 100);
+        assert!(s.blocked_mask.chars().all(|ch| ch == '0' || ch == '1'));
+    }
+
+    #[test]
+    fn parse_legacy_idx_file_new_format() {
+        let p = fixture_path("fixtures/legacy/Sample25/MB8D25/MAT18D.IDX");
+        let idx = parse_legacy_idx_file(&p).expect("parse idx");
+        assert_eq!(idx.sets.len(), 1);
+        assert_eq!(idx.default_set, 1);
+        assert_eq!(idx.sets[0].title, "First MAT1 Set");
+        assert_eq!(idx.sets[0].fit_mode, 1);
+        assert_eq!(idx.sets[0].fit_font_size, 9);
+        assert_eq!(idx.sets[0].fit_width, 83);
+        assert_eq!(idx.sets[0].fit_lines, 12);
+        assert_eq!(idx.sets[0].max_chars, 100);
+        assert_eq!(idx.bank_short.as_deref(), Some("COMMENT.BNK"));
+    }
+
+    #[test]
+    fn parse_legacy_r_comment_file_fixture() {
+        let p = fixture_path("fixtures/legacy/Sample25/MB8D25/MAT18D.R1");
+        let parsed = parse_legacy_r_comment_file(&p).expect("parse r1");
+        assert_eq!(parsed.last_student, 27);
+        assert_eq!(parsed.remarks.len(), 27);
+        assert!(parsed.remarks.iter().any(|s| s.contains("Daniella")));
+    }
+
+    #[test]
+    fn parse_legacy_bnk_file() {
+        let p = fixture_path("fixtures/legacy/Sample25/COMMENT.BNK");
+        let parsed = parse_bnk_file(&p).expect("parse bnk");
+        assert!(!parsed.entries.is_empty());
+        assert!(
+            parsed
+                .fit_profile
+                .as_deref()
+                .unwrap_or_default()
+                .contains("DO NOT EDIT")
+                || parsed.fit_profile.is_some()
+        );
+        let serialized = serialize_bnk_file(&parsed);
+        assert!(serialized.contains("FIT"));
+    }
+
+    #[test]
+    fn parse_legacy_attendance_file_from_synthetic() {
+        let tmp = std::env::temp_dir().join(format!(
+            "markbook-attendance-{}.ATN",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let mut src = String::new();
+        src.push_str("[MarkBook]\n[Version]\n\"\"\n");
+        src.push_str("[This Attendance File belongs to...]\nFolder: TEST\n\"\"\n");
+        src.push_str("[LastStudent]\n2\n\"\"\n");
+        src.push_str("[School Year Starts]\n9\n\"\"\n");
+        src.push_str("[Attendance Data - DO NOT EDIT!!!]\n");
+        for m in 1..=12 {
+            src.push_str(&format!("\"[Month{}]\"\n", m));
+            src.push_str("\"PPPP\"\n");
+            src.push_str("\"PA\"\n");
+            src.push_str("\"LP\"\n");
+        }
+        fs::write(&tmp, src).expect("write tmp atn");
+        let parsed = parse_legacy_attendance_file(&tmp).expect("parse atn");
+        let _ = fs::remove_file(&tmp);
+        assert_eq!(parsed.last_student, 2);
+        assert_eq!(parsed.school_year_start_month, 9);
+        assert_eq!(parsed.months.len(), 12);
+        assert_eq!(parsed.months[0].student_day_codes.len(), 2);
+        assert_eq!(parsed.months[0].type_of_day_codes, "PPPP");
     }
 }

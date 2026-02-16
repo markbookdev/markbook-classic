@@ -13,6 +13,7 @@ import {
   MarkSetSettingsUpdateResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
+import { MarkSetCommentsPanel } from "./MarkSetCommentsPanel";
 
 type CategoryRow = {
   id: string;
@@ -55,6 +56,7 @@ export function MarkSetSetupScreen(props: {
   onError: (msg: string | null) => void;
   onChanged?: () => void | Promise<void>;
 }) {
+  const [tab, setTab] = useState<"setup" | "comments">("setup");
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
@@ -347,6 +349,25 @@ export function MarkSetSetupScreen(props: {
   return (
     <div data-testid="markset-setup-screen" style={{ padding: 24, maxWidth: 1200 }}>
       <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 12 }}>Mark Set Setup</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button
+          data-testid="markset-setup-tab-setup"
+          onClick={() => setTab("setup")}
+          style={{ fontWeight: tab === "setup" ? 700 : 400 }}
+        >
+          Setup
+        </button>
+        <button
+          data-testid="markset-setup-tab-comments"
+          onClick={() => setTab("comments")}
+          style={{ fontWeight: tab === "comments" ? 700 : 400 }}
+        >
+          Comments
+        </button>
+      </div>
+
+      {tab === "setup" ? (
+        <>
 
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 10 }}>
         <div style={{ color: "#555", fontSize: 13 }}>
@@ -729,6 +750,14 @@ export function MarkSetSetupScreen(props: {
           </div>
         </div>
       </div>
+        </>
+      ) : (
+        <MarkSetCommentsPanel
+          selectedClassId={props.selectedClassId}
+          selectedMarkSetId={props.selectedMarkSetId}
+          onError={props.onError}
+        />
+      )}
     </div>
   );
 }

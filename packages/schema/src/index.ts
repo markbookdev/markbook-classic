@@ -360,3 +360,227 @@ export const CalcMarkSetSummaryResultSchema = z.object({
 });
 
 export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;
+
+export const AttendanceMonthOpenResultSchema = z.object({
+  schoolYearStartMonth: z.number(),
+  month: z.string(),
+  daysInMonth: z.number(),
+  typeOfDayCodes: z.string(),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean()
+    })
+  ),
+  rows: z.array(
+    z.object({
+      studentId: z.string(),
+      dayCodes: z.string()
+    })
+  )
+});
+
+export const AttendanceSetTypeOfDayResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const AttendanceSetStudentDayResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const AttendanceBulkStampDayResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const SeatingGetResultSchema = z.object({
+  rows: z.number(),
+  seatsPerRow: z.number(),
+  blockedSeatCodes: z.array(z.number()),
+  assignments: z.array(z.number().nullable())
+});
+
+export const SeatingSaveResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CommentsSetsListResultSchema = z.object({
+  sets: z.array(
+    z.object({
+      setNumber: z.number(),
+      title: z.string(),
+      fitMode: z.number(),
+      fitFontSize: z.number(),
+      fitWidth: z.number(),
+      fitLines: z.number(),
+      fitSubj: z.string(),
+      maxChars: z.number(),
+      isDefault: z.boolean(),
+      bankShort: z.string().nullable()
+    })
+  )
+});
+
+export const CommentsSetsOpenResultSchema = z.object({
+  set: z.object({
+    id: z.string(),
+    setNumber: z.number(),
+    title: z.string(),
+    fitMode: z.number(),
+    fitFontSize: z.number(),
+    fitWidth: z.number(),
+    fitLines: z.number(),
+    fitSubj: z.string(),
+    maxChars: z.number(),
+    isDefault: z.boolean(),
+    bankShort: z.string().nullable()
+  }),
+  remarksByStudent: z.array(
+    z.object({
+      studentId: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean(),
+      remark: z.string()
+    })
+  )
+});
+
+export const CommentsSetsUpsertResultSchema = z.object({
+  setNumber: z.number()
+});
+
+export const CommentsSetsDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CommentsBanksListResultSchema = z.object({
+  banks: z.array(
+    z.object({
+      id: z.string(),
+      shortName: z.string(),
+      isDefault: z.boolean(),
+      fitProfile: z.string().nullable(),
+      sourcePath: z.string().nullable(),
+      entryCount: z.number()
+    })
+  )
+});
+
+export const CommentsBanksOpenResultSchema = z.object({
+  bank: z.object({
+    id: z.string(),
+    shortName: z.string(),
+    isDefault: z.boolean(),
+    fitProfile: z.string().nullable(),
+    sourcePath: z.string().nullable()
+  }),
+  entries: z.array(
+    z.object({
+      id: z.string(),
+      sortOrder: z.number(),
+      typeCode: z.string(),
+      levelCode: z.string(),
+      text: z.string()
+    })
+  )
+});
+
+export const CommentsBanksCreateResultSchema = z.object({
+  bankId: z.string()
+});
+
+export const CommentsBanksUpdateMetaResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CommentsBanksEntryUpsertResultSchema = z.object({
+  entryId: z.string()
+});
+
+export const CommentsBanksEntryDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CommentsBanksImportBnkResultSchema = z.object({
+  bankId: z.string()
+});
+
+export const CommentsBanksExportBnkResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const ReportsCategoryAnalysisModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  settings: z.object({
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  categories: z.array(
+    z.object({
+      name: z.string(),
+      weight: z.number(),
+      sortOrder: z.number()
+    })
+  ),
+  perCategory: z.array(CalcPerCategorySchema),
+  perAssessment: z.array(CalcPerAssessmentSchema)
+});
+
+export const ReportsStudentSummaryModelResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  settings: z.object({
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  student: CalcPerStudentSchema,
+  assessments: z.array(
+    z.object({
+      assessmentId: z.string(),
+      idx: z.number(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      title: z.string(),
+      term: z.number().nullable(),
+      legacyType: z.number().nullable(),
+      weight: z.number(),
+      outOf: z.number()
+    })
+  ),
+  perAssessment: z.array(CalcPerAssessmentSchema)
+});

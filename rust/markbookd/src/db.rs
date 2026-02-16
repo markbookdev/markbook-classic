@@ -66,6 +66,79 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     )?;
 
     conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_settings(
+            class_id TEXT PRIMARY KEY,
+            school_year_start_month INTEGER NOT NULL DEFAULT 9,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_months(
+            class_id TEXT NOT NULL,
+            month INTEGER NOT NULL,
+            type_of_day_codes TEXT NOT NULL,
+            PRIMARY KEY(class_id, month),
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_student_months(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            month INTEGER NOT NULL,
+            day_codes TEXT NOT NULL,
+            PRIMARY KEY(class_id, student_id, month),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_months_class ON attendance_months(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_student_months_class ON attendance_student_months(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_student_months_student ON attendance_student_months(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seating_plans(
+            class_id TEXT PRIMARY KEY,
+            rows INTEGER NOT NULL,
+            seats_per_row INTEGER NOT NULL,
+            blocked_mask TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seating_assignments(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            seat_code INTEGER NOT NULL,
+            PRIMARY KEY(class_id, student_id),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_seating_assignments_class ON seating_assignments(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_seating_assignments_student ON seating_assignments(student_id)",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS mark_sets(
             id TEXT PRIMARY KEY,
             class_id TEXT NOT NULL,
@@ -159,6 +232,83 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_scores_student ON scores(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_set_indexes(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            mark_set_id TEXT NOT NULL,
+            set_number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            fit_mode INTEGER NOT NULL DEFAULT 0,
+            fit_font_size INTEGER NOT NULL DEFAULT 8,
+            fit_width INTEGER NOT NULL DEFAULT 50,
+            fit_lines INTEGER NOT NULL DEFAULT 1,
+            fit_subj TEXT NOT NULL DEFAULT '',
+            max_chars INTEGER NOT NULL DEFAULT 100,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            bank_short TEXT,
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(mark_set_id) REFERENCES mark_sets(id),
+            UNIQUE(mark_set_id, set_number)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_set_remarks(
+            id TEXT PRIMARY KEY,
+            comment_set_index_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            remark TEXT NOT NULL,
+            FOREIGN KEY(comment_set_index_id) REFERENCES comment_set_indexes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            UNIQUE(comment_set_index_id, student_id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_banks(
+            id TEXT PRIMARY KEY,
+            short_name TEXT NOT NULL UNIQUE,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            fit_profile TEXT,
+            source_path TEXT
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_bank_entries(
+            id TEXT PRIMARY KEY,
+            bank_id TEXT NOT NULL,
+            sort_order INTEGER NOT NULL,
+            type_code TEXT NOT NULL,
+            level_code TEXT NOT NULL,
+            text TEXT NOT NULL,
+            FOREIGN KEY(bank_id) REFERENCES comment_banks(id),
+            UNIQUE(bank_id, sort_order)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_indexes_class ON comment_set_indexes(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_indexes_mark_set ON comment_set_indexes(mark_set_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_remarks_set ON comment_set_remarks(comment_set_index_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_remarks_student ON comment_set_remarks(student_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_bank_entries_bank ON comment_bank_entries(bank_id)",
         [],
     )?;
 

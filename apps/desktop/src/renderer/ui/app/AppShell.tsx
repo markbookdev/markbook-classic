@@ -459,11 +459,11 @@ export function AppShell() {
               onChanged={refresh}
             />
           ) : screen === "attendance" ? (
-            <AttendanceScreen />
+            <AttendanceScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "notes" ? (
             <NotesScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "seating_plan" ? (
-            <SeatingPlanScreen />
+            <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : (
             <div style={{ padding: 24, color: "#666" }}>(unknown screen)</div>
           )}

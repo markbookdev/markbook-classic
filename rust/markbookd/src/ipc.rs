@@ -322,6 +322,121 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
             }
 
             if let Err(e) = tx.execute(
+                "DELETE FROM comment_set_remarks
+                 WHERE comment_set_index_id IN (
+                   SELECT csi.id
+                   FROM comment_set_indexes csi
+                   WHERE csi.class_id = ?
+                 )",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "comment_set_remarks" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM comment_set_indexes WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "comment_set_indexes" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM attendance_student_months WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "attendance_student_months" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM attendance_months WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "attendance_months" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM attendance_settings WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "attendance_settings" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM seating_assignments WHERE class_id = ?",
+                [&class_id],
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "seating_assignments" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute("DELETE FROM seating_plans WHERE class_id = ?", [&class_id])
+            {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "seating_plans" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
                 "DELETE FROM assessments
                  WHERE mark_set_id IN (SELECT id FROM mark_sets WHERE class_id = ?)",
                 [&class_id],
@@ -1257,6 +1372,54 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 });
             }
 
+            if let Err(e) = tx.execute(
+                "DELETE FROM attendance_student_months WHERE class_id = ? AND student_id = ?",
+                (&class_id, &student_id),
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "attendance_student_months" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM seating_assignments WHERE class_id = ? AND student_id = ?",
+                (&class_id, &student_id),
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "seating_assignments" }))
+                    }
+                });
+            }
+
+            if let Err(e) = tx.execute(
+                "DELETE FROM comment_set_remarks WHERE student_id = ?",
+                (&student_id,),
+            ) {
+                let _ = tx.rollback();
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "db_delete_failed".into(),
+                        message: e.to_string(),
+                        details: Some(json!({ "table": "comment_set_remarks" }))
+                    }
+                });
+            }
+
             let changed = match tx.execute(
                 "DELETE FROM students WHERE id = ? AND class_id = ?",
                 (&student_id, &class_id),
@@ -1564,6 +1727,456 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 result: json!({ "ok": true })
             })
         }
+        "attendance.monthOpen" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match attendance_month_open(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "attendance.setTypeOfDay" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match attendance_set_type_of_day(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "attendance.setStudentDay" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match attendance_set_student_day(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "attendance.bulkStampDay" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match attendance_bulk_stamp_day(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "seating.get" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match seating_get(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "seating.save" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match seating_save(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.sets.list" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_sets_list(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.sets.open" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_sets_open(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.sets.upsert" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_sets_upsert(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.sets.delete" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_sets_delete(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.list" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_list(conn) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.open" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_open(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.create" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_create(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.updateMeta" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_update_meta(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.entryUpsert" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_entry_upsert(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.entryDelete" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_entry_delete(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.importBnk" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_import_bnk(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
+        "comments.banks.exportBnk" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            match comments_banks_export_bnk(conn, &req.params) {
+                Ok(result) => json!(OkResp {
+                    id: req.id,
+                    ok: true,
+                    result
+                }),
+                Err(error) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error
+                }),
+            }
+        }
         "class.importLegacy" => {
             let Some(conn) = state.db.as_ref() else {
                 return json!(ErrResp {
@@ -1758,6 +2371,368 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                             }
                         });
                     }
+                }
+            }
+
+            let mut attendance_imported = false;
+            let mut seating_imported = false;
+            let mut banks_imported = 0usize;
+            let mut comment_sets_imported = 0usize;
+            let mut comment_remarks_imported = 0usize;
+            let mut warnings: Vec<serde_json::Value> = Vec::new();
+
+            // Best-effort attendance import (.ATN).
+            match legacy::find_attendance_file(&legacy_folder) {
+                Ok(Some(att_file)) => {
+                    let att = match legacy::parse_legacy_attendance_file(&att_file) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "legacy_parse_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(
+                                        json!({ "attendanceFile": att_file.to_string_lossy() })
+                                    )
+                                }
+                            });
+                        }
+                    };
+
+                    if let Err(e) = tx.execute(
+                        "INSERT INTO attendance_settings(class_id, school_year_start_month)
+                         VALUES(?, ?)
+                         ON CONFLICT(class_id) DO UPDATE SET
+                           school_year_start_month = excluded.school_year_start_month",
+                        (&class_id, att.school_year_start_month as i64),
+                    ) {
+                        let _ = tx.rollback();
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "db_insert_failed".into(),
+                                message: e.to_string(),
+                                details: Some(json!({ "table": "attendance_settings" }))
+                            }
+                        });
+                    }
+
+                    for m in &att.months {
+                        if let Err(e) = tx.execute(
+                            "INSERT INTO attendance_months(class_id, month, type_of_day_codes)
+                             VALUES(?, ?, ?)
+                             ON CONFLICT(class_id, month) DO UPDATE SET
+                               type_of_day_codes = excluded.type_of_day_codes",
+                            (&class_id, m.month as i64, &m.type_of_day_codes),
+                        ) {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_insert_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "attendance_months" }))
+                                }
+                            });
+                        }
+
+                        let max_students =
+                            std::cmp::min(student_ids_by_sort.len(), m.student_day_codes.len());
+                        for s_idx in 0..max_students {
+                            let student_id = &student_ids_by_sort[s_idx];
+                            let day_codes = &m.student_day_codes[s_idx];
+                            if let Err(e) = tx.execute(
+                                "INSERT INTO attendance_student_months(class_id, student_id, month, day_codes)
+                                 VALUES(?, ?, ?, ?)
+                                 ON CONFLICT(class_id, student_id, month) DO UPDATE SET
+                                   day_codes = excluded.day_codes",
+                                (&class_id, student_id, m.month as i64, day_codes),
+                            ) {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "db_insert_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(json!({ "table": "attendance_student_months" }))
+                                    }
+                                });
+                            }
+                        }
+                    }
+
+                    attendance_imported = true;
+                }
+                Ok(None) => {
+                    warnings.push(json!({
+                        "code": "legacy_missing_attendance_file",
+                        "folder": legacy_folder.to_string_lossy()
+                    }));
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": legacy_folder.to_string_lossy() }))
+                        }
+                    });
+                }
+            }
+
+            // Best-effort seating import (.SPL).
+            match legacy::find_seating_file(&legacy_folder) {
+                Ok(Some(spl_file)) => {
+                    let spl = match legacy::parse_legacy_seating_file(&spl_file) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "legacy_parse_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(
+                                        json!({ "seatingFile": spl_file.to_string_lossy() })
+                                    )
+                                }
+                            });
+                        }
+                    };
+
+                    if let Err(e) = tx.execute(
+                        "INSERT INTO seating_plans(class_id, rows, seats_per_row, blocked_mask)
+                         VALUES(?, ?, ?, ?)
+                         ON CONFLICT(class_id) DO UPDATE SET
+                           rows = excluded.rows,
+                           seats_per_row = excluded.seats_per_row,
+                           blocked_mask = excluded.blocked_mask",
+                        (
+                            &class_id,
+                            spl.rows as i64,
+                            spl.seats_per_row as i64,
+                            &spl.blocked_mask,
+                        ),
+                    ) {
+                        let _ = tx.rollback();
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "db_insert_failed".into(),
+                                message: e.to_string(),
+                                details: Some(json!({ "table": "seating_plans" }))
+                            }
+                        });
+                    }
+                    if let Err(e) = tx.execute(
+                        "DELETE FROM seating_assignments WHERE class_id = ?",
+                        [&class_id],
+                    ) {
+                        let _ = tx.rollback();
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "db_delete_failed".into(),
+                                message: e.to_string(),
+                                details: Some(json!({ "table": "seating_assignments" }))
+                            }
+                        });
+                    }
+                    let max_students =
+                        std::cmp::min(student_ids_by_sort.len(), spl.seat_codes.len());
+                    for s_idx in 0..max_students {
+                        let seat_code = spl.seat_codes[s_idx];
+                        if seat_code <= 0 {
+                            continue;
+                        }
+                        let student_id = &student_ids_by_sort[s_idx];
+                        if let Err(e) = tx.execute(
+                            "INSERT INTO seating_assignments(class_id, student_id, seat_code)
+                             VALUES(?, ?, ?)",
+                            (&class_id, student_id, seat_code as i64),
+                        ) {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_insert_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "seating_assignments" }))
+                                }
+                            });
+                        }
+                    }
+                    seating_imported = true;
+                }
+                Ok(None) => {
+                    warnings.push(json!({
+                        "code": "legacy_missing_seating_file",
+                        "folder": legacy_folder.to_string_lossy()
+                    }));
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": legacy_folder.to_string_lossy() }))
+                        }
+                    });
+                }
+            }
+
+            // Best-effort bank import from parent fixture folder.
+            let bnk_folder = legacy_folder
+                .parent()
+                .unwrap_or(&legacy_folder)
+                .to_path_buf();
+            match legacy::find_bnk_files(&bnk_folder) {
+                Ok(files) => {
+                    for bnk_file in files {
+                        let parsed_bnk = match legacy::parse_bnk_file(&bnk_file) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "legacy_parse_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(
+                                            json!({ "bnkFile": bnk_file.to_string_lossy() })
+                                        )
+                                    }
+                                });
+                            }
+                        };
+                        let short_name = bnk_file
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string();
+                        if short_name.is_empty() {
+                            continue;
+                        }
+                        let bank_id = Uuid::new_v4().to_string();
+                        if let Err(e) = tx.execute(
+                            "INSERT INTO comment_banks(id, short_name, is_default, fit_profile, source_path)
+                             VALUES(?, ?, 0, ?, ?)
+                             ON CONFLICT(short_name) DO UPDATE SET
+                               fit_profile = excluded.fit_profile,
+                               source_path = excluded.source_path",
+                            (
+                                &bank_id,
+                                &short_name,
+                                parsed_bnk.fit_profile.as_deref(),
+                                bnk_file.to_string_lossy().as_ref(),
+                            ),
+                        ) {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_insert_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "comment_banks" }))
+                                }
+                            });
+                        }
+
+                        let resolved_bank_id: String = match tx.query_row(
+                            "SELECT id FROM comment_banks WHERE short_name = ?",
+                            [&short_name],
+                            |r| r.get(0),
+                        ) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "db_query_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(json!({ "table": "comment_banks" }))
+                                    }
+                                });
+                            }
+                        };
+
+                        if let Err(e) = tx.execute(
+                            "DELETE FROM comment_bank_entries WHERE bank_id = ?",
+                            [&resolved_bank_id],
+                        ) {
+                            let _ = tx.rollback();
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_delete_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "comment_bank_entries" }))
+                                }
+                            });
+                        }
+
+                        for (sort_order, entry) in parsed_bnk.entries.iter().enumerate() {
+                            let eid = Uuid::new_v4().to_string();
+                            if let Err(e) = tx.execute(
+                                "INSERT INTO comment_bank_entries(id, bank_id, sort_order, type_code, level_code, text)
+                                 VALUES(?, ?, ?, ?, ?, ?)",
+                                (
+                                    &eid,
+                                    &resolved_bank_id,
+                                    sort_order as i64,
+                                    &entry.type_code,
+                                    &entry.level_code,
+                                    &entry.text,
+                                ),
+                            ) {
+                                let _ = tx.rollback();
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "db_insert_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(json!({ "table": "comment_bank_entries" }))
+                                    }
+                                });
+                            }
+                        }
+
+                        banks_imported += 1;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.rollback();
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "legacy_read_failed".into(),
+                            message: e.to_string(),
+                            details: Some(json!({ "folder": bnk_folder.to_string_lossy() }))
+                        }
+                    });
                 }
             }
 
@@ -2069,6 +3044,162 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                     }
                 }
 
+                // Best-effort import IDX + per-set Rn files for comment sets.
+                let idx_file = mark_file.with_extension("IDX");
+                if idx_file.is_file() {
+                    let parsed_idx = match legacy::parse_legacy_idx_file(&idx_file) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "legacy_parse_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "idxFile": idx_file.to_string_lossy() }))
+                                }
+                            });
+                        }
+                    };
+
+                    // Clear existing imported sets for this mark set before writing.
+                    if let Err(e) = tx.execute(
+                        "DELETE FROM comment_set_remarks
+                         WHERE comment_set_index_id IN (
+                           SELECT id FROM comment_set_indexes WHERE mark_set_id = ?
+                         )",
+                        [&mark_set_id],
+                    ) {
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "db_delete_failed".into(),
+                                message: e.to_string(),
+                                details: Some(json!({ "table": "comment_set_remarks" }))
+                            }
+                        });
+                    }
+                    if let Err(e) = tx.execute(
+                        "DELETE FROM comment_set_indexes WHERE mark_set_id = ?",
+                        [&mark_set_id],
+                    ) {
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "db_delete_failed".into(),
+                                message: e.to_string(),
+                                details: Some(json!({ "table": "comment_set_indexes" }))
+                            }
+                        });
+                    }
+
+                    let idx_bank_short = parsed_idx.bank_short.clone();
+                    for set in parsed_idx.sets {
+                        let csi_id = Uuid::new_v4().to_string();
+                        let bank_short = set
+                            .bank_short
+                            .clone()
+                            .or_else(|| idx_bank_short.clone())
+                            .map(|s| s.trim().to_string())
+                            .and_then(|s| if s.is_empty() { None } else { Some(s) });
+                        if let Err(e) = tx.execute(
+                            "INSERT INTO comment_set_indexes(
+                               id,
+                               class_id,
+                               mark_set_id,
+                               set_number,
+                               title,
+                               fit_mode,
+                               fit_font_size,
+                               fit_width,
+                               fit_lines,
+                               fit_subj,
+                               max_chars,
+                               is_default,
+                               bank_short
+                             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                &csi_id,
+                                &class_id,
+                                &mark_set_id,
+                                set.set_number as i64,
+                                &set.title,
+                                set.fit_mode as i64,
+                                set.fit_font_size as i64,
+                                set.fit_width as i64,
+                                set.fit_lines as i64,
+                                &set.fit_subj,
+                                set.max_chars as i64,
+                                if set.is_default { 1 } else { 0 },
+                                bank_short.as_deref(),
+                            ),
+                        ) {
+                            return json!(ErrResp {
+                                id: req.id,
+                                ok: false,
+                                error: ErrObj {
+                                    code: "db_insert_failed".into(),
+                                    message: e.to_string(),
+                                    details: Some(json!({ "table": "comment_set_indexes" }))
+                                }
+                            });
+                        }
+
+                        comment_sets_imported += 1;
+
+                        let r_file = mark_file.with_extension(format!("R{}", set.set_number));
+                        if !r_file.is_file() {
+                            continue;
+                        }
+                        let parsed_r = match legacy::parse_legacy_r_comment_file(&r_file) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "legacy_parse_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(
+                                            json!({ "remarkFile": r_file.to_string_lossy() })
+                                        )
+                                    }
+                                });
+                            }
+                        };
+                        let max_students =
+                            std::cmp::min(student_ids_by_sort.len(), parsed_r.remarks.len());
+                        for s_idx in 0..max_students {
+                            let remark = parsed_r.remarks[s_idx].trim().to_string();
+                            if remark.is_empty() {
+                                continue;
+                            }
+                            let rid = Uuid::new_v4().to_string();
+                            let student_id = &student_ids_by_sort[s_idx];
+                            if let Err(e) = tx.execute(
+                                "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+                                 VALUES(?, ?, ?, ?)
+                                 ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+                                   remark = excluded.remark",
+                                (&rid, &csi_id, student_id, &remark),
+                            ) {
+                                return json!(ErrResp {
+                                    id: req.id,
+                                    ok: false,
+                                    error: ErrObj {
+                                        code: "db_insert_failed".into(),
+                                        message: e.to_string(),
+                                        details: Some(json!({ "table": "comment_set_remarks" }))
+                                    }
+                                });
+                            }
+                            comment_remarks_imported += 1;
+                        }
+                    }
+                }
+
                 mark_sets_imported += 1;
                 assessments_imported += parsed_mark.assessments.len();
                 imported_mark_files.push(mark_filename);
@@ -2096,9 +3227,15 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                     "markSetsImported": mark_sets_imported,
                     "assessmentsImported": assessments_imported,
                     "scoresImported": scores_imported,
+                    "attendanceImported": attendance_imported,
+                    "seatingImported": seating_imported,
+                    "banksImported": banks_imported,
+                    "commentSetsImported": comment_sets_imported,
+                    "commentRemarksImported": comment_remarks_imported,
                     "sourceClFile": cl_file.to_string_lossy(),
                     "importedMarkFiles": imported_mark_files,
                     "missingMarkFiles": missing_mark_files,
+                    "warnings": warnings,
                 })
             })
         }
@@ -5288,6 +6425,192 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
                 }),
             }
         }
+        "reports.categoryAnalysisModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing markSetId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let filters = match parse_summary_filters(req.params.get("filters")) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
+            };
+            match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
+                Ok(summary) => {
+                    let result = json!({
+                        "class": summary.get("class").cloned().unwrap_or_else(|| json!({})),
+                        "markSet": summary.get("markSet").cloned().unwrap_or_else(|| json!({})),
+                        "settings": summary.get("settings").cloned().unwrap_or_else(|| json!({})),
+                        "filters": summary.get("filters").cloned().unwrap_or_else(|| json!({})),
+                        "categories": summary.get("categories").cloned().unwrap_or_else(|| json!([])),
+                        "perCategory": summary.get("perCategory").cloned().unwrap_or_else(|| json!([])),
+                        "perAssessment": summary.get("perAssessment").cloned().unwrap_or_else(|| json!([])),
+                    });
+                    json!(OkResp {
+                        id: req.id,
+                        ok: true,
+                        result
+                    })
+                }
+                Err(err) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: err
+                }),
+            }
+        }
+        "reports.studentSummaryModel" => {
+            let Some(conn) = state.db.as_ref() else {
+                return json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: ErrObj {
+                        code: "no_workspace".into(),
+                        message: "select a workspace first".into(),
+                        details: None
+                    }
+                });
+            };
+            let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing classId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing markSetId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let student_id = match req.params.get("studentId").and_then(|v| v.as_str()) {
+                Some(v) => v.to_string(),
+                None => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: ErrObj {
+                            code: "bad_params".into(),
+                            message: "missing studentId".into(),
+                            details: None
+                        }
+                    })
+                }
+            };
+            let filters = match parse_summary_filters(req.params.get("filters")) {
+                Ok(v) => v,
+                Err(err) => {
+                    return json!(ErrResp {
+                        id: req.id,
+                        ok: false,
+                        error: err
+                    })
+                }
+            };
+            match compute_markset_summary(conn, &class_id, &mark_set_id, &filters) {
+                Ok(summary) => {
+                    let student = summary
+                        .get("perStudent")
+                        .and_then(|v| v.as_array())
+                        .and_then(|arr| {
+                            arr.iter().find(|s| {
+                                s.get("studentId")
+                                    .and_then(|v| v.as_str())
+                                    .map(|sid| sid == student_id)
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .cloned();
+                    let Some(student) = student else {
+                        return json!(ErrResp {
+                            id: req.id,
+                            ok: false,
+                            error: ErrObj {
+                                code: "not_found".into(),
+                                message: "student not found in mark set".into(),
+                                details: None
+                            }
+                        });
+                    };
+
+                    let result = json!({
+                        "class": summary.get("class").cloned().unwrap_or_else(|| json!({})),
+                        "markSet": summary.get("markSet").cloned().unwrap_or_else(|| json!({})),
+                        "settings": summary.get("settings").cloned().unwrap_or_else(|| json!({})),
+                        "filters": summary.get("filters").cloned().unwrap_or_else(|| json!({})),
+                        "student": student,
+                        "assessments": summary.get("assessments").cloned().unwrap_or_else(|| json!([])),
+                        "perAssessment": summary.get("perAssessment").cloned().unwrap_or_else(|| json!([])),
+                    });
+                    json!(OkResp {
+                        id: req.id,
+                        ok: true,
+                        result
+                    })
+                }
+                Err(err) => json!(ErrResp {
+                    id: req.id,
+                    ok: false,
+                    error: err
+                }),
+            }
+        }
         "reports.markSetGridModel" => {
             let Some(conn) = state.db.as_ref() else {
                 return json!(ErrResp {
@@ -6353,4 +7676,1874 @@ fn compute_markset_summary(
         "perCategory": per_category_json,
         "perStudent": per_student_json
     }))
+}
+
+#[derive(Debug, Clone)]
+struct BasicStudent {
+    id: String,
+    display_name: String,
+    sort_order: i64,
+    active: bool,
+}
+
+fn get_required_str(params: &serde_json::Value, key: &str) -> Result<String, ErrObj> {
+    params
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: format!("missing {}", key),
+            details: None,
+        })
+}
+
+fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<BasicStudent>, ErrObj> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, last_name, first_name, sort_order, active
+             FROM students
+             WHERE class_id = ?
+             ORDER BY sort_order",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    stmt.query_map([class_id], |r| {
+        let last: String = r.get(1)?;
+        let first: String = r.get(2)?;
+        Ok(BasicStudent {
+            id: r.get(0)?,
+            display_name: format!("{}, {}", last, first),
+            sort_order: r.get(3)?,
+            active: r.get::<_, i64>(4)? != 0,
+        })
+    })
+    .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    .map_err(|e| ErrObj {
+        code: "db_query_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })
+}
+
+fn class_exists(conn: &Connection, class_id: &str) -> Result<bool, ErrObj> {
+    conn.query_row("SELECT 1 FROM classes WHERE id = ?", [class_id], |r| {
+        r.get::<_, i64>(0)
+    })
+    .optional()
+    .map(|v| v.is_some())
+    .map_err(|e| ErrObj {
+        code: "db_query_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })
+}
+
+fn mark_set_exists(conn: &Connection, class_id: &str, mark_set_id: &str) -> Result<bool, ErrObj> {
+    conn.query_row(
+        "SELECT 1 FROM mark_sets WHERE id = ? AND class_id = ?",
+        (mark_set_id, class_id),
+        |r| r.get::<_, i64>(0),
+    )
+    .optional()
+    .map(|v| v.is_some())
+    .map_err(|e| ErrObj {
+        code: "db_query_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })
+}
+
+fn parse_month_key(month: &str) -> Result<(i32, u32), ErrObj> {
+    let t = month.trim();
+    if let Ok(m) = t.parse::<u32>() {
+        if (1..=12).contains(&m) {
+            return Ok((2001, m));
+        }
+    }
+    let Some((y, m)) = t.split_once('-') else {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "month must be MM or YYYY-MM".into(),
+            details: None,
+        });
+    };
+    let year = y.parse::<i32>().map_err(|_| ErrObj {
+        code: "bad_params".into(),
+        message: "month year must be numeric".into(),
+        details: None,
+    })?;
+    let month_num = m.parse::<u32>().map_err(|_| ErrObj {
+        code: "bad_params".into(),
+        message: "month must be YYYY-MM".into(),
+        details: None,
+    })?;
+    if !(1..=12).contains(&month_num) {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "month must be between 01 and 12".into(),
+            details: None,
+        });
+    }
+    Ok((year, month_num))
+}
+
+fn days_in_month(year: i32, month: u32) -> usize {
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 30,
+    }
+}
+
+fn normalize_day_codes(raw: &str, days: usize) -> String {
+    let mut chars: Vec<char> = raw.chars().collect();
+    if chars.len() < days {
+        chars.extend(std::iter::repeat(' ').take(days - chars.len()));
+    } else if chars.len() > days {
+        chars.truncate(days);
+    }
+    chars.into_iter().collect()
+}
+
+fn patch_day_code(existing: &str, days: usize, day: usize, code: Option<char>) -> String {
+    let mut chars: Vec<char> = normalize_day_codes(existing, days).chars().collect();
+    let idx = day.saturating_sub(1);
+    if idx < chars.len() {
+        chars[idx] = code.unwrap_or(' ');
+    }
+    chars.into_iter().collect()
+}
+
+fn parse_optional_code_char(v: Option<&serde_json::Value>) -> Result<Option<char>, ErrObj> {
+    let Some(v) = v else { return Ok(None) };
+    if v.is_null() {
+        return Ok(None);
+    }
+    let Some(s) = v.as_str() else {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "code must be string or null".into(),
+            details: None,
+        });
+    };
+    let t = s.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    Ok(t.chars().next())
+}
+
+fn attendance_month_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let month_key = get_required_str(params, "month")?;
+    let (year, month_num) = parse_month_key(&month_key)?;
+    let days = days_in_month(year, month_num);
+
+    if !class_exists(conn, &class_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    }
+    let students = list_students_for_class(conn, &class_id)?;
+    let school_year_start_month: i64 = conn
+        .query_row(
+            "SELECT school_year_start_month FROM attendance_settings WHERE class_id = ?",
+            [&class_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+        .unwrap_or(9);
+
+    let type_of_day_codes_raw: Option<String> = conn
+        .query_row(
+            "SELECT type_of_day_codes FROM attendance_months WHERE class_id = ? AND month = ?",
+            (&class_id, &month_key),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let type_of_day_codes =
+        normalize_day_codes(type_of_day_codes_raw.as_deref().unwrap_or(""), days);
+
+    let mut by_student: HashMap<String, String> = HashMap::new();
+    let mut stmt = conn
+        .prepare(
+            "SELECT student_id, day_codes
+             FROM attendance_student_months
+             WHERE class_id = ? AND month = ?",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map((&class_id, &month_key), |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    for (student_id, day_codes) in rows {
+        by_student.insert(student_id, normalize_day_codes(&day_codes, days));
+    }
+
+    let students_json: Vec<serde_json::Value> = students
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.id,
+                "displayName": s.display_name,
+                "sortOrder": s.sort_order,
+                "active": s.active
+            })
+        })
+        .collect();
+    let rows_json: Vec<serde_json::Value> = students
+        .iter()
+        .map(|s| {
+            let day_codes = by_student
+                .get(&s.id)
+                .cloned()
+                .unwrap_or_else(|| normalize_day_codes("", days));
+            json!({
+                "studentId": s.id,
+                "dayCodes": day_codes
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "schoolYearStartMonth": school_year_start_month,
+        "month": month_key,
+        "daysInMonth": days,
+        "typeOfDayCodes": type_of_day_codes,
+        "students": students_json,
+        "rows": rows_json
+    }))
+}
+
+fn attendance_set_type_of_day(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let month_key = get_required_str(params, "month")?;
+    let day = params
+        .get("day")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing day".into(),
+            details: None,
+        })? as usize;
+    let code = parse_optional_code_char(params.get("code"))?;
+    let (year, month_num) = parse_month_key(&month_key)?;
+    let days = days_in_month(year, month_num);
+    if day == 0 || day > days {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "day out of range for month".into(),
+            details: None,
+        });
+    }
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT type_of_day_codes FROM attendance_months WHERE class_id = ? AND month = ?",
+            (&class_id, &month_key),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let patched = patch_day_code(existing.as_deref().unwrap_or(""), days, day, code);
+    conn.execute(
+        "INSERT INTO attendance_months(class_id, month, type_of_day_codes)
+         VALUES(?, ?, ?)
+         ON CONFLICT(class_id, month) DO UPDATE SET
+           type_of_day_codes = excluded.type_of_day_codes",
+        (&class_id, &month_key, &patched),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "attendance_months" })),
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn attendance_set_student_day(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let month_key = get_required_str(params, "month")?;
+    let student_id = get_required_str(params, "studentId")?;
+    let day = params
+        .get("day")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing day".into(),
+            details: None,
+        })? as usize;
+    let code = parse_optional_code_char(params.get("code"))?;
+    let (year, month_num) = parse_month_key(&month_key)?;
+    let days = days_in_month(year, month_num);
+    if day == 0 || day > days {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "day out of range for month".into(),
+            details: None,
+        });
+    }
+    let student_exists = conn
+        .query_row(
+            "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+        .is_some();
+    if !student_exists {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "student not found".into(),
+            details: None,
+        });
+    }
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT day_codes FROM attendance_student_months WHERE class_id = ? AND student_id = ? AND month = ?",
+            (&class_id, &student_id, &month_key),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let patched = patch_day_code(existing.as_deref().unwrap_or(""), days, day, code);
+    conn.execute(
+        "INSERT INTO attendance_student_months(class_id, student_id, month, day_codes)
+         VALUES(?, ?, ?, ?)
+         ON CONFLICT(class_id, student_id, month) DO UPDATE SET
+           day_codes = excluded.day_codes",
+        (&class_id, &student_id, &month_key, &patched),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "attendance_student_months" })),
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn attendance_bulk_stamp_day(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let month_key = get_required_str(params, "month")?;
+    let day = params
+        .get("day")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing day".into(),
+            details: None,
+        })? as usize;
+    let code = parse_optional_code_char(params.get("code"))?;
+    let Some(student_ids_json) = params.get("studentIds").and_then(|v| v.as_array()) else {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "missing studentIds".into(),
+            details: None,
+        });
+    };
+    let student_ids: Vec<String> = student_ids_json
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+    let (year, month_num) = parse_month_key(&month_key)?;
+    let days = days_in_month(year, month_num);
+    if day == 0 || day > days {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "day out of range for month".into(),
+            details: None,
+        });
+    }
+
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    for student_id in student_ids {
+        let exists = tx
+            .query_row(
+                "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+                (&class_id, &student_id),
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(|e| ErrObj {
+                code: "db_query_failed".into(),
+                message: e.to_string(),
+                details: None,
+            })?
+            .is_some();
+        if !exists {
+            continue;
+        }
+        let existing: Option<String> = tx
+            .query_row(
+                "SELECT day_codes FROM attendance_student_months WHERE class_id = ? AND student_id = ? AND month = ?",
+                (&class_id, &student_id, &month_key),
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| ErrObj {
+                code: "db_query_failed".into(),
+                message: e.to_string(),
+                details: None,
+            })?;
+        let patched = patch_day_code(existing.as_deref().unwrap_or(""), days, day, code);
+        tx.execute(
+            "INSERT INTO attendance_student_months(class_id, student_id, month, day_codes)
+             VALUES(?, ?, ?, ?)
+             ON CONFLICT(class_id, student_id, month) DO UPDATE SET
+               day_codes = excluded.day_codes",
+            (&class_id, &student_id, &month_key, &patched),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_update_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "attendance_student_months" })),
+        })?;
+    }
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn seating_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    if !class_exists(conn, &class_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "class not found".into(),
+            details: None,
+        });
+    }
+    let default_rows = 6_i64;
+    let default_seats = 5_i64;
+    let plan_row: Option<(i64, i64, String)> = conn
+        .query_row(
+            "SELECT rows, seats_per_row, blocked_mask FROM seating_plans WHERE class_id = ?",
+            [&class_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let (rows, seats_per_row, blocked_mask) =
+        plan_row.unwrap_or((default_rows, default_seats, "0".repeat(100)));
+    let seat_count = ((rows.max(1) * seats_per_row.max(1)) as usize).max(1);
+    let blocked = normalize_day_codes(&blocked_mask, 100);
+    let blocked_codes: Vec<usize> = blocked
+        .chars()
+        .enumerate()
+        .filter_map(|(i, ch)| if ch == '1' { Some(i + 1) } else { None })
+        .collect();
+
+    let students = list_students_for_class(conn, &class_id)?;
+    let sort_by_student: HashMap<String, i64> = students
+        .iter()
+        .map(|s| (s.id.clone(), s.sort_order))
+        .collect();
+    let mut assignments: Vec<Option<i64>> = vec![None; seat_count];
+    let mut stmt = conn
+        .prepare(
+            "SELECT student_id, seat_code
+             FROM seating_assignments
+             WHERE class_id = ?",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows_iter = stmt
+        .query_map([&class_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    for (student_id, seat_code) in rows_iter {
+        let Some(idx) = seat_code_to_index(seat_code, rows, seats_per_row) else {
+            continue;
+        };
+        if idx >= assignments.len() {
+            continue;
+        }
+        let Some(sort_order) = sort_by_student.get(&student_id).copied() else {
+            continue;
+        };
+        assignments[idx] = Some(sort_order);
+    }
+
+    Ok(json!({
+        "rows": rows,
+        "seatsPerRow": seats_per_row,
+        "blockedSeatCodes": blocked_codes,
+        "assignments": assignments
+    }))
+}
+
+fn seating_save(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let rows = params
+        .get("rows")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing rows".into(),
+            details: None,
+        })?
+        .max(1);
+    let seats_per_row = params
+        .get("seatsPerRow")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing seatsPerRow".into(),
+            details: None,
+        })?
+        .max(1);
+    let seat_count = (rows * seats_per_row) as usize;
+    let assignments_json = params
+        .get("assignments")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing assignments".into(),
+            details: None,
+        })?;
+
+    let blocked_codes: Vec<usize> = match params.get("blockedSeatCodes") {
+        Some(v) if v.is_string() => {
+            let s = v.as_str().unwrap_or_default();
+            s.chars()
+                .enumerate()
+                .filter_map(|(i, ch)| if ch == '1' { Some(i + 1) } else { None })
+                .collect()
+        }
+        Some(v) => v
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_u64().map(|n| n as usize))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let mut blocked_mask_chars = vec!['0'; 100];
+    for code in blocked_codes {
+        if (1..=100).contains(&code) {
+            blocked_mask_chars[code - 1] = '1';
+        }
+    }
+    let blocked_mask: String = blocked_mask_chars.into_iter().collect();
+
+    let students = list_students_for_class(conn, &class_id)?;
+    let by_sort_order: HashMap<i64, String> = students
+        .iter()
+        .map(|s| (s.sort_order, s.id.clone()))
+        .collect();
+
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    tx.execute(
+        "INSERT INTO seating_plans(class_id, rows, seats_per_row, blocked_mask)
+         VALUES(?, ?, ?, ?)
+         ON CONFLICT(class_id) DO UPDATE SET
+           rows = excluded.rows,
+           seats_per_row = excluded.seats_per_row,
+           blocked_mask = excluded.blocked_mask",
+        (&class_id, rows, seats_per_row, &blocked_mask),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "seating_plans" })),
+    })?;
+    tx.execute(
+        "DELETE FROM seating_assignments WHERE class_id = ?",
+        [&class_id],
+    )
+    .map_err(|e| ErrObj {
+        code: "db_delete_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "seating_assignments" })),
+    })?;
+
+    let mut seen_students: HashSet<String> = HashSet::new();
+    for (idx, v) in assignments_json.iter().enumerate() {
+        if idx >= seat_count {
+            break;
+        }
+        let Some(sort_order) = v.as_i64() else {
+            continue;
+        };
+        let Some(student_id) = by_sort_order.get(&sort_order).cloned() else {
+            continue;
+        };
+        if seen_students.contains(&student_id) {
+            continue;
+        }
+        seen_students.insert(student_id.clone());
+        tx.execute(
+            "INSERT INTO seating_assignments(class_id, student_id, seat_code) VALUES(?, ?, ?)",
+            (
+                &class_id,
+                &student_id,
+                seat_index_to_code(idx, seats_per_row),
+            ),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_insert_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "seating_assignments" })),
+        })?;
+    }
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn seat_index_to_code(index: usize, seats_per_row: i64) -> i64 {
+    let row = (index as i64) / seats_per_row.max(1);
+    let col = (index as i64) % seats_per_row.max(1) + 1;
+    row * 10 + col
+}
+
+fn seat_code_to_index(seat_code: i64, rows: i64, seats_per_row: i64) -> Option<usize> {
+    if seat_code <= 0 {
+        return None;
+    }
+    let row = seat_code / 10;
+    let col = seat_code % 10;
+    if row < 0 || row >= rows || col < 1 || col > seats_per_row {
+        return None;
+    }
+    Some((row * seats_per_row + (col - 1)) as usize)
+}
+
+fn comments_sets_list(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    if !mark_set_exists(conn, &class_id, &mark_set_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "mark set not found".into(),
+            details: None,
+        });
+    }
+    let mut stmt = conn
+        .prepare(
+            "SELECT set_number, title, fit_mode, fit_font_size, fit_width, fit_lines, fit_subj, max_chars, is_default, bank_short
+             FROM comment_set_indexes
+             WHERE class_id = ? AND mark_set_id = ?
+             ORDER BY set_number",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let sets = stmt
+        .query_map((&class_id, &mark_set_id), |r| {
+            Ok(json!({
+                "setNumber": r.get::<_, i64>(0)?,
+                "title": r.get::<_, String>(1)?,
+                "fitMode": r.get::<_, i64>(2)?,
+                "fitFontSize": r.get::<_, i64>(3)?,
+                "fitWidth": r.get::<_, i64>(4)?,
+                "fitLines": r.get::<_, i64>(5)?,
+                "fitSubj": r.get::<_, String>(6)?,
+                "maxChars": r.get::<_, i64>(7)?,
+                "isDefault": r.get::<_, i64>(8)? != 0,
+                "bankShort": r.get::<_, Option<String>>(9)?
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    Ok(json!({ "sets": sets }))
+}
+
+fn comments_sets_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    let set_number = params
+        .get("setNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing setNumber".into(),
+            details: None,
+        })?;
+    let set_row: Option<(String, i64, String, i64, i64, i64, i64, String, i64, i64, Option<String>)> = conn
+        .query_row(
+            "SELECT id, set_number, title, fit_mode, fit_font_size, fit_width, fit_lines, fit_subj, max_chars, is_default, bank_short
+             FROM comment_set_indexes
+             WHERE class_id = ? AND mark_set_id = ? AND set_number = ?",
+            (&class_id, &mark_set_id, set_number),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                    r.get(9)?,
+                    r.get(10)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some((
+        set_id,
+        set_number,
+        title,
+        fit_mode,
+        fit_font_size,
+        fit_width,
+        fit_lines,
+        fit_subj,
+        max_chars,
+        is_default,
+        bank_short,
+    )) = set_row
+    else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "comment set not found".into(),
+            details: None,
+        });
+    };
+
+    let students = list_students_for_class(conn, &class_id)?;
+    let mut remark_by_student: HashMap<String, String> = HashMap::new();
+    let mut stmt = conn
+        .prepare(
+            "SELECT student_id, remark FROM comment_set_remarks WHERE comment_set_index_id = ?",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map([&set_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    for (sid, remark) in rows {
+        remark_by_student.insert(sid, remark);
+    }
+    let remarks_by_student: Vec<serde_json::Value> = students
+        .iter()
+        .map(|s| {
+            json!({
+                "studentId": s.id,
+                "displayName": s.display_name,
+                "sortOrder": s.sort_order,
+                "active": s.active,
+                "remark": remark_by_student.get(&s.id).cloned().unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "set": {
+            "id": set_id,
+            "setNumber": set_number,
+            "title": title,
+            "fitMode": fit_mode,
+            "fitFontSize": fit_font_size,
+            "fitWidth": fit_width,
+            "fitLines": fit_lines,
+            "fitSubj": fit_subj,
+            "maxChars": max_chars,
+            "isDefault": is_default != 0,
+            "bankShort": bank_short
+        },
+        "remarksByStudent": remarks_by_student
+    }))
+}
+
+fn parse_remarks_by_student(
+    raw: Option<&serde_json::Value>,
+) -> Result<Vec<(String, String)>, ErrObj> {
+    let Some(raw) = raw else {
+        return Ok(Vec::new());
+    };
+    if let Some(arr) = raw.as_array() {
+        let mut out = Vec::new();
+        for item in arr {
+            let Some(student_id) = item.get("studentId").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let remark = item
+                .get("remark")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            out.push((student_id.to_string(), remark));
+        }
+        return Ok(out);
+    }
+    if let Some(map) = raw.as_object() {
+        let mut out = Vec::new();
+        for (student_id, value) in map {
+            let remark = value.as_str().unwrap_or("").to_string();
+            out.push((student_id.clone(), remark));
+        }
+        return Ok(out);
+    }
+    Err(ErrObj {
+        code: "bad_params".into(),
+        message: "remarksByStudent must be array or object".into(),
+        details: None,
+    })
+}
+
+fn comments_sets_upsert(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    if !mark_set_exists(conn, &class_id, &mark_set_id)? {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "mark set not found".into(),
+            details: None,
+        });
+    }
+    let title = params
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Comment Set")
+        .trim()
+        .to_string();
+    let fit_mode = params.get("fitMode").and_then(|v| v.as_i64()).unwrap_or(0);
+    let fit_font_size = params
+        .get("fitFontSize")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(9);
+    let fit_width = params
+        .get("fitWidth")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(83);
+    let fit_lines = params
+        .get("fitLines")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(12);
+    let fit_subj = params
+        .get("fitSubj")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let max_chars = params
+        .get("maxChars")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(100)
+        .max(100);
+    let is_default = params
+        .get("isDefault")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let bank_short = params
+        .get("bankShort")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .and_then(|s| if s.is_empty() { None } else { Some(s) });
+    let requested_set_number = params.get("setNumber").and_then(|v| v.as_i64());
+    let remarks_by_student = parse_remarks_by_student(params.get("remarksByStudent"))?;
+
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    let set_number = if let Some(v) = requested_set_number {
+        v.max(1)
+    } else {
+        tx.query_row(
+            "SELECT COALESCE(MAX(set_number), 0) + 1 FROM comment_set_indexes WHERE mark_set_id = ?",
+            [&mark_set_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?
+    };
+
+    if is_default {
+        tx.execute(
+            "UPDATE comment_set_indexes SET is_default = 0 WHERE mark_set_id = ?",
+            [&mark_set_id],
+        )
+        .map_err(|e| ErrObj {
+            code: "db_update_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_set_indexes" })),
+        })?;
+    }
+
+    let existing_id: Option<String> = tx
+        .query_row(
+            "SELECT id FROM comment_set_indexes WHERE mark_set_id = ? AND set_number = ?",
+            (&mark_set_id, set_number),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let set_id = existing_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    tx.execute(
+        "INSERT INTO comment_set_indexes(
+           id, class_id, mark_set_id, set_number, title, fit_mode, fit_font_size, fit_width, fit_lines, fit_subj, max_chars, is_default, bank_short
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(mark_set_id, set_number) DO UPDATE SET
+           title = excluded.title,
+           fit_mode = excluded.fit_mode,
+           fit_font_size = excluded.fit_font_size,
+           fit_width = excluded.fit_width,
+           fit_lines = excluded.fit_lines,
+           fit_subj = excluded.fit_subj,
+           max_chars = excluded.max_chars,
+           is_default = excluded.is_default,
+           bank_short = excluded.bank_short",
+        (
+            &set_id,
+            &class_id,
+            &mark_set_id,
+            set_number,
+            &title,
+            fit_mode,
+            fit_font_size,
+            fit_width,
+            fit_lines,
+            &fit_subj,
+            max_chars,
+            if is_default { 1 } else { 0 },
+            bank_short.as_deref(),
+        ),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_insert_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_set_indexes" })),
+    })?;
+
+    for (student_id, remark) in remarks_by_student {
+        let trimmed = remark.trim().to_string();
+        if trimmed.is_empty() {
+            tx.execute(
+                "DELETE FROM comment_set_remarks WHERE comment_set_index_id = ? AND student_id = ?",
+                (&set_id, &student_id),
+            )
+            .map_err(|e| ErrObj {
+                code: "db_delete_failed".into(),
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_set_remarks" })),
+            })?;
+            continue;
+        }
+        let remark_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+             VALUES(?, ?, ?, ?)
+             ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+               remark = excluded.remark",
+            (&remark_id, &set_id, &student_id, &trimmed),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_insert_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_set_remarks" })),
+        })?;
+    }
+
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "setNumber": set_number }))
+}
+
+fn comments_sets_delete(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    let set_number = params
+        .get("setNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "missing setNumber".into(),
+            details: None,
+        })?;
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    let set_id: Option<String> = tx
+        .query_row(
+            "SELECT id FROM comment_set_indexes WHERE class_id = ? AND mark_set_id = ? AND set_number = ?",
+            (&class_id, &mark_set_id, set_number),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(set_id) = set_id else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "comment set not found".into(),
+            details: None,
+        });
+    };
+    tx.execute(
+        "DELETE FROM comment_set_remarks WHERE comment_set_index_id = ?",
+        [&set_id],
+    )
+    .map_err(|e| ErrObj {
+        code: "db_delete_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_set_remarks" })),
+    })?;
+    tx.execute("DELETE FROM comment_set_indexes WHERE id = ?", [&set_id])
+        .map_err(|e| ErrObj {
+            code: "db_delete_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_set_indexes" })),
+        })?;
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn comments_banks_list(conn: &Connection) -> Result<serde_json::Value, ErrObj> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+               b.id,
+               b.short_name,
+               b.is_default,
+               b.fit_profile,
+               b.source_path,
+               (SELECT COUNT(*) FROM comment_bank_entries e WHERE e.bank_id = b.id) AS entry_count
+             FROM comment_banks b
+             ORDER BY b.short_name",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let banks = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, String>(0)?,
+                "shortName": r.get::<_, String>(1)?,
+                "isDefault": r.get::<_, i64>(2)? != 0,
+                "fitProfile": r.get::<_, Option<String>>(3)?,
+                "sourcePath": r.get::<_, Option<String>>(4)?,
+                "entryCount": r.get::<_, i64>(5)?
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    Ok(json!({ "banks": banks }))
+}
+
+fn comments_banks_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let bank_id = get_required_str(params, "bankId")?;
+    let bank: Option<serde_json::Value> = conn
+        .query_row(
+            "SELECT id, short_name, is_default, fit_profile, source_path FROM comment_banks WHERE id = ?",
+            [&bank_id],
+            |r| {
+                Ok(json!({
+                    "id": r.get::<_, String>(0)?,
+                    "shortName": r.get::<_, String>(1)?,
+                    "isDefault": r.get::<_, i64>(2)? != 0,
+                    "fitProfile": r.get::<_, Option<String>>(3)?,
+                    "sourcePath": r.get::<_, Option<String>>(4)?
+                }))
+            },
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(bank) = bank else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "bank not found".into(),
+            details: None,
+        });
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, sort_order, type_code, level_code, text
+             FROM comment_bank_entries
+             WHERE bank_id = ?
+             ORDER BY sort_order",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let entries = stmt
+        .query_map([&bank_id], |r| {
+            Ok(json!({
+                "id": r.get::<_, String>(0)?,
+                "sortOrder": r.get::<_, i64>(1)?,
+                "typeCode": r.get::<_, String>(2)?,
+                "levelCode": r.get::<_, String>(3)?,
+                "text": r.get::<_, String>(4)?,
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    Ok(json!({ "bank": bank, "entries": entries }))
+}
+
+fn comments_banks_create(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let short_name = get_required_str(params, "shortName")?.trim().to_string();
+    if short_name.is_empty() {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "shortName must not be empty".into(),
+            details: None,
+        });
+    }
+    let bank_id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO comment_banks(id, short_name, is_default, fit_profile, source_path)
+         VALUES(?, ?, 0, NULL, NULL)",
+        (&bank_id, &short_name),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_insert_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_banks" })),
+    })?;
+    Ok(json!({ "bankId": bank_id }))
+}
+
+fn comments_banks_update_meta(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let bank_id = get_required_str(params, "bankId")?;
+    let Some(patch) = params.get("patch").and_then(|v| v.as_object()) else {
+        return Err(ErrObj {
+            code: "bad_params".into(),
+            message: "missing patch".into(),
+            details: None,
+        });
+    };
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    if patch
+        .get("isDefault")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        tx.execute("UPDATE comment_banks SET is_default = 0", [])
+            .map_err(|e| ErrObj {
+                code: "db_update_failed".into(),
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_banks" })),
+            })?;
+    }
+
+    let mut set_parts: Vec<String> = Vec::new();
+    let mut binds: Vec<Value> = Vec::new();
+    if let Some(v) = patch.get("shortName") {
+        let Some(s) = v.as_str() else {
+            return Err(ErrObj {
+                code: "bad_params".into(),
+                message: "patch.shortName must be string".into(),
+                details: None,
+            });
+        };
+        set_parts.push("short_name = ?".into());
+        binds.push(Value::Text(s.trim().to_string()));
+    }
+    if let Some(v) = patch.get("isDefault") {
+        let Some(b) = v.as_bool() else {
+            return Err(ErrObj {
+                code: "bad_params".into(),
+                message: "patch.isDefault must be boolean".into(),
+                details: None,
+            });
+        };
+        set_parts.push("is_default = ?".into());
+        binds.push(Value::Integer(if b { 1 } else { 0 }));
+    }
+    if let Some(v) = patch.get("fitProfile") {
+        set_parts.push("fit_profile = ?".into());
+        if v.is_null() {
+            binds.push(Value::Null);
+        } else if let Some(s) = v.as_str() {
+            binds.push(Value::Text(s.to_string()));
+        } else {
+            return Err(ErrObj {
+                code: "bad_params".into(),
+                message: "patch.fitProfile must be string|null".into(),
+                details: None,
+            });
+        }
+    }
+    if let Some(v) = patch.get("sourcePath") {
+        set_parts.push("source_path = ?".into());
+        if v.is_null() {
+            binds.push(Value::Null);
+        } else if let Some(s) = v.as_str() {
+            binds.push(Value::Text(s.to_string()));
+        } else {
+            return Err(ErrObj {
+                code: "bad_params".into(),
+                message: "patch.sourcePath must be string|null".into(),
+                details: None,
+            });
+        }
+    }
+
+    if !set_parts.is_empty() {
+        let sql = format!(
+            "UPDATE comment_banks SET {} WHERE id = ?",
+            set_parts.join(", ")
+        );
+        binds.push(Value::Text(bank_id.clone()));
+        tx.execute(&sql, params_from_iter(binds))
+            .map_err(|e| ErrObj {
+                code: "db_update_failed".into(),
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_banks" })),
+            })?;
+    }
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn comments_banks_entry_upsert(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let bank_id = get_required_str(params, "bankId")?;
+    let type_code = get_required_str(params, "typeCode")?;
+    let level_code = get_required_str(params, "levelCode")?;
+    let text = get_required_str(params, "text")?;
+    let requested_sort = params.get("sortOrder").and_then(|v| v.as_i64());
+    let entry_id = params
+        .get("entryId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    let resolved_entry_id = entry_id
+        .clone()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let existing_sort: Option<i64> = tx
+        .query_row(
+            "SELECT sort_order FROM comment_bank_entries WHERE id = ? AND bank_id = ?",
+            (&resolved_entry_id, &bank_id),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+
+    let mut target_sort = requested_sort.unwrap_or_else(|| {
+        tx.query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM comment_bank_entries WHERE bank_id = ?",
+            [&bank_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+    });
+    if target_sort < 0 {
+        target_sort = 0;
+    }
+
+    if let Some(cur_sort) = existing_sort {
+        if target_sort != cur_sort {
+            if target_sort > cur_sort {
+                tx.execute(
+                    "UPDATE comment_bank_entries
+                     SET sort_order = sort_order - 1
+                     WHERE bank_id = ? AND sort_order > ? AND sort_order <= ?",
+                    (&bank_id, cur_sort, target_sort),
+                )
+                .map_err(|e| ErrObj {
+                    code: "db_update_failed".into(),
+                    message: e.to_string(),
+                    details: Some(json!({ "table": "comment_bank_entries" })),
+                })?;
+            } else {
+                tx.execute(
+                    "UPDATE comment_bank_entries
+                     SET sort_order = sort_order + 1
+                     WHERE bank_id = ? AND sort_order >= ? AND sort_order < ?",
+                    (&bank_id, target_sort, cur_sort),
+                )
+                .map_err(|e| ErrObj {
+                    code: "db_update_failed".into(),
+                    message: e.to_string(),
+                    details: Some(json!({ "table": "comment_bank_entries" })),
+                })?;
+            }
+        }
+    } else {
+        tx.execute(
+            "UPDATE comment_bank_entries
+             SET sort_order = sort_order + 1
+             WHERE bank_id = ? AND sort_order >= ?",
+            (&bank_id, target_sort),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_update_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_bank_entries" })),
+        })?;
+    }
+
+    tx.execute(
+        "INSERT INTO comment_bank_entries(id, bank_id, sort_order, type_code, level_code, text)
+         VALUES(?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           sort_order = excluded.sort_order,
+           type_code = excluded.type_code,
+           level_code = excluded.level_code,
+           text = excluded.text",
+        (
+            &resolved_entry_id,
+            &bank_id,
+            target_sort,
+            &type_code,
+            &level_code,
+            &text,
+        ),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_insert_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_bank_entries" })),
+    })?;
+
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "entryId": resolved_entry_id }))
+}
+
+fn comments_banks_entry_delete(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let bank_id = get_required_str(params, "bankId")?;
+    let entry_id = get_required_str(params, "entryId")?;
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    let sort_order: Option<i64> = tx
+        .query_row(
+            "SELECT sort_order FROM comment_bank_entries WHERE id = ? AND bank_id = ?",
+            (&entry_id, &bank_id),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(sort_order) = sort_order else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "entry not found".into(),
+            details: None,
+        });
+    };
+    tx.execute(
+        "DELETE FROM comment_bank_entries WHERE id = ? AND bank_id = ?",
+        (&entry_id, &bank_id),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_delete_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_bank_entries" })),
+    })?;
+    tx.execute(
+        "UPDATE comment_bank_entries
+         SET sort_order = sort_order - 1
+         WHERE bank_id = ? AND sort_order > ?",
+        (&bank_id, sort_order),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_update_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_bank_entries" })),
+    })?;
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+fn comments_banks_import_bnk(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let path = get_required_str(params, "path")?;
+    let file_path = PathBuf::from(&path);
+    let short_name = file_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| ErrObj {
+            code: "bad_params".into(),
+            message: "invalid path".into(),
+            details: None,
+        })?
+        .to_string();
+    let parsed = legacy::parse_bnk_file(&file_path).map_err(|e| ErrObj {
+        code: "legacy_parse_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "path": path })),
+    })?;
+
+    let tx = conn.unchecked_transaction().map_err(|e| ErrObj {
+        code: "db_tx_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    let new_id = Uuid::new_v4().to_string();
+    tx.execute(
+        "INSERT INTO comment_banks(id, short_name, is_default, fit_profile, source_path)
+         VALUES(?, ?, 0, ?, ?)
+         ON CONFLICT(short_name) DO UPDATE SET
+           fit_profile = excluded.fit_profile,
+           source_path = excluded.source_path",
+        (&new_id, &short_name, parsed.fit_profile.as_deref(), &path),
+    )
+    .map_err(|e| ErrObj {
+        code: "db_insert_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_banks" })),
+    })?;
+    let bank_id: String = tx
+        .query_row(
+            "SELECT id FROM comment_banks WHERE short_name = ?",
+            [&short_name],
+            |r| r.get(0),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    tx.execute(
+        "DELETE FROM comment_bank_entries WHERE bank_id = ?",
+        [&bank_id],
+    )
+    .map_err(|e| ErrObj {
+        code: "db_delete_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_bank_entries" })),
+    })?;
+    for (sort_order, entry) in parsed.entries.iter().enumerate() {
+        let eid = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO comment_bank_entries(id, bank_id, sort_order, type_code, level_code, text)
+             VALUES(?, ?, ?, ?, ?, ?)",
+            (
+                &eid,
+                &bank_id,
+                sort_order as i64,
+                &entry.type_code,
+                &entry.level_code,
+                &entry.text,
+            ),
+        )
+        .map_err(|e| ErrObj {
+            code: "db_insert_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_bank_entries" })),
+        })?;
+    }
+    tx.commit().map_err(|e| ErrObj {
+        code: "db_commit_failed".into(),
+        message: e.to_string(),
+        details: None,
+    })?;
+    Ok(json!({ "bankId": bank_id }))
+}
+
+fn comments_banks_export_bnk(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, ErrObj> {
+    let bank_id = get_required_str(params, "bankId")?;
+    let out_path = get_required_str(params, "path")?;
+    let bank_meta: Option<(String, Option<String>)> = conn
+        .query_row(
+            "SELECT short_name, fit_profile FROM comment_banks WHERE id = ?",
+            [&bank_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some((_short_name, fit_profile)) = bank_meta else {
+        return Err(ErrObj {
+            code: "not_found".into(),
+            message: "bank not found".into(),
+            details: None,
+        });
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT sort_order, type_code, level_code, text
+             FROM comment_bank_entries
+             WHERE bank_id = ?
+             ORDER BY sort_order",
+        )
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let entries = stmt
+        .query_map([&bank_id], |r| {
+            Ok(legacy::ParsedBnkEntry {
+                sort_order: r.get::<_, i64>(0)? as usize,
+                type_code: r.get(1)?,
+                level_code: r.get(2)?,
+                text: r.get(3)?,
+            })
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| ErrObj {
+            code: "db_query_failed".into(),
+            message: e.to_string(),
+            details: None,
+        })?;
+    let text = legacy::serialize_bnk_file(&legacy::ParsedBnkFile {
+        fit_profile,
+        entries,
+    });
+    let out = PathBuf::from(&out_path);
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ErrObj {
+            code: "io_failed".into(),
+            message: e.to_string(),
+            details: Some(json!({ "path": out_path })),
+        })?;
+    }
+    std::fs::write(&out, text).map_err(|e| ErrObj {
+        code: "io_failed".into(),
+        message: e.to_string(),
+        details: Some(json!({ "path": out_path })),
+    })?;
+    Ok(json!({ "ok": true }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn fixture_path(rel: &str) -> PathBuf {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        base.join("../../").join(rel)
+    }
+
+    fn temp_workspace() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "markbook-ipc-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ))
+    }
+
+    fn request_ok(
+        state: &mut AppState,
+        method: &str,
+        params: serde_json::Value,
+    ) -> serde_json::Value {
+        let res = handle_request(
+            state,
+            Request {
+                id: "test-1".to_string(),
+                method: method.to_string(),
+                params,
+            },
+        );
+        let ok = res.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        assert!(
+            ok,
+            "{} failed: {}",
+            method,
+            res.get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown error")
+        );
+        res.get("result").cloned().unwrap_or_else(|| json!({}))
+    }
+
+    #[test]
+    fn final_marks_match_sample25_expected_named_students() {
+        let workspace = temp_workspace();
+        let mut state = AppState {
+            workspace: None,
+            db: None,
+        };
+
+        let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
+        request_ok(
+            &mut state,
+            "workspace.select",
+            json!({ "path": workspace.to_string_lossy() }),
+        );
+        let import_res = request_ok(
+            &mut state,
+            "class.importLegacy",
+            json!({ "legacyClassFolderPath": fixture_folder.to_string_lossy() }),
+        );
+        let class_id = import_res
+            .get("classId")
+            .and_then(|v| v.as_str())
+            .expect("classId")
+            .to_string();
+
+        let marksets = request_ok(&mut state, "marksets.list", json!({ "classId": class_id }));
+        let mut markset_ids_by_code: HashMap<String, String> = HashMap::new();
+        for ms in marksets
+            .get("markSets")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
+            if let (Some(code), Some(id)) = (
+                ms.get("code").and_then(|v| v.as_str()),
+                ms.get("id").and_then(|v| v.as_str()),
+            ) {
+                markset_ids_by_code.insert(code.to_string(), id.to_string());
+            }
+        }
+
+        let expected_text = std::fs::read_to_string(fixture_path(
+            "fixtures/legacy/Sample25/expected/final-marks.json",
+        ))
+        .expect("read expected final marks");
+        let expected: serde_json::Value =
+            serde_json::from_str(&expected_text).expect("parse expected final marks");
+
+        for mark_set_code in ["MAT1", "SNC1"] {
+            let mark_set_id = markset_ids_by_code
+                .get(mark_set_code)
+                .expect("mark set id")
+                .to_string();
+            let summary = request_ok(
+                &mut state,
+                "calc.markSetSummary",
+                json!({ "classId": class_id, "markSetId": mark_set_id }),
+            );
+            let mut actual_map: HashMap<String, Option<f64>> = HashMap::new();
+            for student in summary
+                .get("perStudent")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+            {
+                let Some(name) = student.get("displayName").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let mark = student.get("finalMark").and_then(|v| v.as_f64());
+                actual_map.insert(name.to_string(), mark);
+            }
+
+            let expected_set = expected
+                .get(mark_set_code)
+                .and_then(|v| v.as_object())
+                .expect("expected set object");
+            for (name, expected_mark) in expected_set {
+                let expected_mark = expected_mark.as_f64().expect("expected mark as number");
+                let actual_mark = actual_map
+                    .get(name)
+                    .copied()
+                    .flatten()
+                    .unwrap_or_else(|| panic!("missing actual final mark for {}", name));
+                let diff = (actual_mark - expected_mark).abs();
+                assert!(
+                    diff <= 0.05,
+                    "final mark mismatch {} {}: expected {}, got {}",
+                    mark_set_code,
+                    name,
+                    expected_mark,
+                    actual_mark
+                );
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(workspace);
+    }
 }

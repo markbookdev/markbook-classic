@@ -367,6 +367,278 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
 </html>`;
 }
 
+export type CategoryAnalysisReportModel = {
+  class: { id: string; name: string };
+  markSet: { id: string; code: string; description: string };
+  settings: {
+    fullCode: string | null;
+    room: string | null;
+    day: string | null;
+    period: string | null;
+    weightMethod: number;
+    calcMethod: number;
+  };
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  categories: Array<{ name: string; weight: number; sortOrder: number }>;
+  perCategory: Array<{
+    name: string;
+    weight: number;
+    sortOrder: number | null;
+    classAvg: number;
+    studentCount: number;
+    assessmentCount: number;
+  }>;
+  perAssessment: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    outOf: number;
+    avgRaw: number;
+    avgPercent: number;
+    medianPercent: number;
+    scoredCount: number;
+    zeroCount: number;
+    noMarkCount: number;
+  }>;
+};
+
+export function renderCategoryAnalysisReportHtml(model: CategoryAnalysisReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const perCategoryRows = model.perCategory
+    .map(
+      (c) => `<tr>
+      <td class="left">${escapeHtml(c.name)}</td>
+      <td class="num">${c.weight.toFixed(1)}</td>
+      <td class="num">${c.classAvg.toFixed(1)}</td>
+      <td class="num">${c.studentCount}</td>
+      <td class="num">${c.assessmentCount}</td>
+    </tr>`
+    )
+    .join("");
+  const perAssessmentRows = model.perAssessment
+    .map(
+      (a) => `<tr>
+      <td class="left">${escapeHtml(a.title)}</td>
+      <td class="left">${escapeHtml(a.categoryName ?? "")}</td>
+      <td class="num">${a.outOf.toFixed(1)}</td>
+      <td class="num">${a.avgRaw.toFixed(1)}</td>
+      <td class="num">${a.avgPercent.toFixed(1)}</td>
+      <td class="num">${a.medianPercent.toFixed(1)}</td>
+      <td class="num">${a.scoredCount}</td>
+      <td class="num">${a.zeroCount}</td>
+      <td class="num">${a.noMarkCount}</td>
+    </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+      .break { page-break-before: always; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Category Analysis</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
+    model.markSet.description
+  )}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <h2>Category Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Category</th>
+          <th class="num">Weight</th>
+          <th class="num">Class Avg %</th>
+          <th class="num">Students</th>
+          <th class="num">Assessments</th>
+        </tr>
+      </thead>
+      <tbody>${perCategoryRows}</tbody>
+    </table>
+
+    <div class="break"></div>
+    <h2>Assessment Stats</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Assessment</th>
+          <th class="left">Category</th>
+          <th class="num">Out Of</th>
+          <th class="num">Avg Raw</th>
+          <th class="num">Avg %</th>
+          <th class="num">Median %</th>
+          <th class="num">Scored</th>
+          <th class="num">Zero</th>
+          <th class="num">No Mark</th>
+        </tr>
+      </thead>
+      <tbody>${perAssessmentRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type StudentSummaryReportModel = {
+  class: { id: string; name: string };
+  markSet: { id: string; code: string; description: string };
+  settings: {
+    fullCode: string | null;
+    room: string | null;
+    day: string | null;
+    period: string | null;
+    weightMethod: number;
+    calcMethod: number;
+  };
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  student: {
+    studentId: string;
+    displayName: string;
+    sortOrder: number;
+    active: boolean;
+    finalMark: number | null;
+    noMarkCount: number;
+    zeroCount: number;
+    scoredCount: number;
+  };
+  assessments: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    term: number | null;
+    legacyType: number | null;
+    weight: number;
+    outOf: number;
+  }>;
+  perAssessment: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    outOf: number;
+    avgRaw: number;
+    avgPercent: number;
+    medianPercent: number;
+    scoredCount: number;
+    zeroCount: number;
+    noMarkCount: number;
+  }>;
+};
+
+export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const statRows = model.perAssessment
+    .map(
+      (a) => `<tr>
+      <td class="left">${escapeHtml(a.title)}</td>
+      <td class="left">${escapeHtml(a.categoryName ?? "")}</td>
+      <td class="num">${a.outOf.toFixed(1)}</td>
+      <td class="num">${a.avgRaw.toFixed(1)}</td>
+      <td class="num">${a.avgPercent.toFixed(1)}</td>
+      <td class="num">${a.medianPercent.toFixed(1)}</td>
+    </tr>`
+    )
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Student Summary</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
+    model.markSet.description
+  )}</div>
+          <div><strong>Student:</strong> ${escapeHtml(model.student.displayName)}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div><strong>Final Mark:</strong> ${
+          model.student.finalMark == null ? "" : model.student.finalMark.toFixed(1)
+        }</div>
+        <div><strong>Scored:</strong> ${model.student.scoredCount}</div>
+      </div>
+      <div class="card">
+        <div><strong>Zero:</strong> ${model.student.zeroCount}</div>
+        <div><strong>No Mark:</strong> ${model.student.noMarkCount}</div>
+      </div>
+    </div>
+
+    <h2>Assessment Context</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Assessment</th>
+          <th class="left">Category</th>
+          <th class="num">Out Of</th>
+          <th class="num">Class Avg Raw</th>
+          <th class="num">Class Avg %</th>
+          <th class="num">Class Median %</th>
+        </tr>
+      </thead>
+      <tbody>${statRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
 function escapeHtml(s: string) {
   return s
     .replaceAll("&", "&amp;")

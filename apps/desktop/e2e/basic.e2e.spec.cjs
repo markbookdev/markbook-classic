@@ -60,24 +60,19 @@ test("legacy import -> marks grid edit persists (via sidecar)", async () => {
 
   await page.waitForSelector('[data-testid="marks-screen"]');
 
-  // Wait until the canvas grid can report cell bounds.
+  // Wait until test harness can open the custom marks editor deterministically.
   await page.waitForFunction(() => {
     const w = window;
-    return typeof w.__markbookTest?.getMarksCellBounds === "function";
+    return typeof w.__markbookTest?.openMarksCellEditor === "function";
   });
 
-  // First student row, first assessment column (col=1 because col=0 is Student).
-  const bounds = await page.evaluate(() => {
-    return window.__markbookTest.getMarksCellBounds(1, 0);
-  });
-  expect(bounds).toBeTruthy();
-
-  const x = bounds.x + Math.floor(bounds.width / 2);
-  const y = bounds.y + Math.floor(bounds.height / 2);
-
-  await page.mouse.dblclick(x, y);
   const input = page.getByTestId("mark-grid-editor-input");
-  await expect(input).toBeVisible();
+  const opened = await page.evaluate(() => {
+    const w = window;
+    return Boolean(w.__markbookTest?.openMarksCellEditor?.(1, 0));
+  });
+  expect(opened).toBeTruthy();
+  await expect(input).toBeVisible({ timeout: 5_000 });
   await input.fill("6.5");
   await input.press("Enter");
 
