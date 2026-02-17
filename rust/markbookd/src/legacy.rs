@@ -39,6 +39,7 @@ pub struct ParsedStudent {
     pub first_name: String,
     pub student_no: Option<String>,
     pub birth_date: Option<String>,
+    pub mark_set_mask: Option<String>,
     pub raw_line: String,
 }
 
@@ -154,6 +155,7 @@ fn parse_student_line(line: &str) -> Option<ParsedStudent> {
     let first_name = parts.get(2).cloned().unwrap_or_default();
     let student_no = parts.get(4).cloned().filter(|s| !s.is_empty());
     let birth_date = parts.get(9).cloned().filter(|s| !s.is_empty());
+    let mark_set_mask = parts.last().and_then(|s| parse_mark_set_mask_token(s));
 
     Some(ParsedStudent {
         active,
@@ -161,8 +163,24 @@ fn parse_student_line(line: &str) -> Option<ParsedStudent> {
         first_name,
         student_no,
         birth_date,
+        mark_set_mask,
         raw_line: raw,
     })
+}
+
+fn parse_mark_set_mask_token(token: &str) -> Option<String> {
+    let t = token.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let up = t.to_ascii_uppercase();
+    if up == "TBA" {
+        return Some("TBA".into());
+    }
+    if up.chars().all(|ch| ch == '0' || ch == '1') {
+        return Some(up);
+    }
+    None
 }
 
 fn parse_mark_set_def(line: &str, sort_order: usize) -> Option<ParsedMarkSetDef> {
@@ -1527,6 +1545,21 @@ mod tests {
         let cl = parse_legacy_cl(&p).expect("parse cl");
         assert_eq!(cl.mark_sets.len(), 6);
         assert!(cl.mark_sets.iter().any(|m| m.code == "MAT1"));
+
+        // Membership mask is the trailing field in the legacy class list line.
+        let tam = cl
+            .students
+            .iter()
+            .find(|s| s.last_name == "O'Shanter" && s.first_name == "Tam")
+            .expect("Tam present");
+        assert_eq!(tam.mark_set_mask.as_deref(), Some("111111"));
+
+        let melody = cl
+            .students
+            .iter()
+            .find(|s| s.last_name == "Lyons" && s.first_name == "Melody")
+            .expect("Melody present");
+        assert_eq!(melody.mark_set_mask.as_deref(), Some("000000"));
     }
 
     #[test]

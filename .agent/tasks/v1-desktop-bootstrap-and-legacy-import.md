@@ -72,7 +72,15 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 
 ### Calc Parity Notes
 - Added assessment-stats recompute lock: `rust/markbookd/tests/assessment_stats_parity.rs`.
-- `*.Yxx` mark files include stored per-assessment average fields in summary lines, but those can drift if the class list validity flags change after a calculation pass. The lock test recomputes expected stats from raw scores + current active mask to match VB6 `Calculate` semantics.
+- Calc now models legacy `valid_kid(kid, MkSet)` semantics:
+  - `students.active` corresponds to `valid_kid(kid, 0)`
+  - `students.mark_set_mask` corresponds to the per-markset membership bits (`dummy$` trailing field in `CL*.Yxx`)
+  - A student is considered valid for a mark set if `active && mask_bit(mark_set.sort_order)` (with `TBA` meaning include all mark sets).
+- Added membership effect lock: `rust/markbookd/tests/valid_kid_membership_affects_averages.rs`.
+- `*.Yxx` mark files include stored per-assessment average fields in summary lines, but those can drift if the class list validity flags change after a calculation pass. The lock test recomputes expected stats from raw scores + current valid-kid mask to match VB6 `Calculate` semantics.
+- Added an optional strict lock against freshly-saved legacy mark files:
+  - `rust/markbookd/tests/assessment_stats_vs_fresh_legacy_summaries.rs`
+  - fixture instructions: `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/README.md`
 
 ### Parsing Gotchas / Sentinel Mapping
 - Mark files `*.Yxx` store per-student values as `percent, raw`.

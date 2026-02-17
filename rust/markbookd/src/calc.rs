@@ -230,6 +230,7 @@ struct SummaryStudent {
     display_name: String,
     sort_order: i64,
     active: bool,
+    mark_set_mask: String,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +335,31 @@ fn matches_types_mask(mask: Option<i64>, legacy_type: Option<i64>) -> bool {
         return false;
     }
     (mask & (1_i64 << shift)) != 0
+}
+
+pub(crate) fn is_valid_kid(active: bool, mark_set_mask: &str, mark_set_sort_order: i64) -> bool {
+    if !active {
+        return false;
+    }
+    let t = mark_set_mask.trim();
+    if t.is_empty() {
+        return true;
+    }
+    if t.eq_ignore_ascii_case("TBA") {
+        return true;
+    }
+    let Ok(idx) = usize::try_from(mark_set_sort_order) else {
+        return true;
+    };
+    let up = t.to_ascii_uppercase();
+    if !up.chars().all(|ch| ch == '0' || ch == '1') {
+        return true;
+    }
+    let bytes = up.as_bytes();
+    if idx >= bytes.len() {
+        return true;
+    }
+    bytes[idx] == b'1'
 }
 
 fn compute_median(values: &[f64]) -> f64 {
@@ -456,9 +482,10 @@ pub fn compute_mark_set_summary(
         Option<String>,
         i64,
         i64,
+        i64,
     )> = conn
         .query_row(
-            "SELECT code, description, full_code, room, day, period, weight_method, calc_method
+            "SELECT code, description, full_code, room, day, period, weight_method, calc_method, sort_order
              FROM mark_sets
              WHERE id = ? AND class_id = ?",
             (mark_set_id, class_id),
@@ -472,20 +499,30 @@ pub fn compute_mark_set_summary(
                     r.get(5)?,
                     r.get(6)?,
                     r.get(7)?,
+                    r.get(8)?,
                 ))
             },
         )
         .optional()
         .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
-    let Some((ms_code, ms_desc, full_code, room, day, period, weight_method, calc_method)) =
-        mark_set_row
+    let Some((
+        ms_code,
+        ms_desc,
+        full_code,
+        room,
+        day,
+        period,
+        weight_method,
+        calc_method,
+        mark_set_sort_order,
+    )) = mark_set_row
     else {
         return Err(CalcError::new("not_found", "mark set not found"));
     };
 
     let mut students_stmt = conn
         .prepare(
-            "SELECT id, last_name, first_name, sort_order, active
+            "SELECT id, last_name, first_name, sort_order, active, COALESCE(mark_set_mask, 'TBA')
              FROM students
              WHERE class_id = ?
              ORDER BY sort_order",
@@ -495,11 +532,13 @@ pub fn compute_mark_set_summary(
         .query_map([class_id], |r| {
             let last: String = r.get(1)?;
             let first: String = r.get(2)?;
+            let mask: String = r.get(5)?;
             Ok(SummaryStudent {
                 id: r.get(0)?,
                 display_name: format!("{}, {}", last, first),
                 sort_order: r.get(3)?,
                 active: r.get::<_, i64>(4)? != 0,
+                mark_set_mask: mask,
             })
         })
         .and_then(|it| it.collect::<Result<Vec<_>, _>>())
@@ -629,7 +668,7 @@ pub fn compute_mark_set_summary(
         let mut score_states: Vec<ScoreState> = Vec::new();
         let mut median_values: Vec<f64> = Vec::new();
         for s in &students {
-            if !s.active {
+            if !is_valid_kid(s.active, &s.mark_set_mask, mark_set_sort_order) {
                 continue;
             }
             let state = score_by_pair
@@ -692,6 +731,21 @@ pub fn compute_mark_set_summary(
     };
 
     for s in &students {
+        let valid_kid = is_valid_kid(s.active, &s.mark_set_mask, mark_set_sort_order);
+        if !valid_kid {
+            per_student.push(StudentFinal {
+                student_id: s.id.clone(),
+                display_name: s.display_name.clone(),
+                sort_order: s.sort_order,
+                active: s.active,
+                final_mark: None,
+                no_mark_count: 0,
+                zero_count: 0,
+                scored_count: 0,
+            });
+            continue;
+        }
+
         let mut no_mark_count = 0_i64;
         let mut zero_count = 0_i64;
         let mut scored_count = 0_i64;
@@ -932,8 +986,8 @@ pub fn compute_mark_set_summary(
             scored_count,
         });
 
-        // Build class-level per-category averages across active students.
-        if s.active {
+        // Build class-level per-category averages across valid kids for this mark set.
+        if valid_kid {
             for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
                 if *cat_denom <= 0.0 {
                     continue;

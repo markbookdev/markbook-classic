@@ -131,9 +131,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
         let active_i = if s.active { 1 } else { 0 };
         let student_no = s.student_no.unwrap_or_default();
         let birth_date = s.birth_date.unwrap_or_default();
+        let mark_set_mask = s.mark_set_mask.unwrap_or_else(|| "TBA".into());
         let res = tx.execute(
-            "INSERT INTO students(id, class_id, last_name, first_name, student_no, birth_date, active, sort_order, raw_line)
-             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO students(id, class_id, last_name, first_name, student_no, birth_date, active, sort_order, raw_line, mark_set_mask)
+             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 &sid,
                 &class_id,
@@ -144,6 +145,7 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                 active_i,
                 sort_order as i64,
                 &s.raw_line,
+                &mark_set_mask,
             ),
         );
         if res.is_ok() {

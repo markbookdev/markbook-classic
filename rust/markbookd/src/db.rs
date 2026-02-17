@@ -26,6 +26,7 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
             active INTEGER NOT NULL,
             sort_order INTEGER NOT NULL,
             raw_line TEXT NOT NULL,
+            mark_set_mask TEXT,
             updated_at TEXT,
             FOREIGN KEY(class_id) REFERENCES classes(id)
         )",
@@ -39,6 +40,7 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     // Existing workspaces may have a students table without sort_order. Add and backfill if needed.
     ensure_students_sort_order(&conn)?;
     ensure_students_updated_at(&conn)?;
+    ensure_students_mark_set_mask(&conn)?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_students_class_sort ON students(class_id, sort_order)",
         [],
@@ -435,6 +437,70 @@ fn ensure_students_updated_at(conn: &Connection) -> anyhow::Result<()> {
     }
     conn.execute("ALTER TABLE students ADD COLUMN updated_at TEXT", [])?;
     Ok(())
+}
+
+fn ensure_students_mark_set_mask(conn: &Connection) -> anyhow::Result<()> {
+    if !table_has_column(conn, "students", "mark_set_mask")? {
+        conn.execute("ALTER TABLE students ADD COLUMN mark_set_mask TEXT", [])?;
+    }
+
+    // Backfill from legacy `raw_line` where possible, otherwise default to TBA (include active
+    // students in all mark sets). Also normalize any existing invalid/empty values.
+    let mut stmt =
+        conn.prepare("SELECT id, mark_set_mask, raw_line FROM students ORDER BY rowid")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, existing, raw_line) = row?;
+
+        let existing_norm = existing
+            .as_deref()
+            .map(|s| s.trim().to_ascii_uppercase())
+            .filter(|s| is_mark_set_mask_valid(s));
+
+        let raw_norm = extract_mark_set_mask_from_raw_line(&raw_line);
+
+        let desired = existing_norm
+            .or(raw_norm)
+            .unwrap_or_else(|| "TBA".into());
+
+        if existing.map(|s| s.trim().to_ascii_uppercase()) != Some(desired.clone()) {
+            conn.execute(
+                "UPDATE students SET mark_set_mask = ? WHERE id = ?",
+                (&desired, &id),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_mark_set_mask_from_raw_line(raw_line: &str) -> Option<String> {
+    let t = raw_line.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let last = t.split(',').last()?.trim();
+    if last.is_empty() {
+        return None;
+    }
+    let up = last.to_ascii_uppercase();
+    if up == "TBA" {
+        return Some("TBA".into());
+    }
+    if is_mark_set_mask_valid(&up) {
+        return Some(up);
+    }
+    None
+}
+
+fn is_mark_set_mask_valid(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|ch| ch == '0' || ch == '1')
 }
 
 fn ensure_mark_sets_settings_columns(conn: &Connection) -> anyhow::Result<()> {

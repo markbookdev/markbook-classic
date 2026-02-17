@@ -153,8 +153,9 @@ fn handle_students_create(state: &mut AppState, req: &Request) -> serde_json::Va
            active,
            sort_order,
            raw_line,
+           mark_set_mask,
            updated_at
-         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
         (
             &student_id,
             &class_id,
@@ -165,6 +166,7 @@ fn handle_students_create(state: &mut AppState, req: &Request) -> serde_json::Va
             active_i,
             sort_order,
             "",
+            "TBA",
         ),
     ) {
         return err(

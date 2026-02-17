@@ -103,8 +103,42 @@ fn is_valid_kid(active: bool, mark_set_mask: &str, mark_set_sort_order: i64) -> 
 }
 
 #[test]
-fn assessment_stats_match_legacy_mark_file_summaries_sample25() {
-    let workspace = temp_dir("markbook-assessment-stats-parity");
+fn assessment_stats_match_fresh_legacy_mark_file_summary_lines_when_available() {
+    let fresh_dir =
+        fixture_path("fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25");
+    let required_files = vec![
+        "MAT18D.Y25",
+        "MAT28D.Y25",
+        "MAT38D.Y25",
+        "SNC18D.Y25",
+        "SNC28D.Y25",
+        "SNC38D.Y25",
+    ];
+
+    let strict = std::env::var("MBC_STRICT_FRESH_SUMMARIES")
+        .ok()
+        .as_deref()
+        == Some("1");
+
+    if !fresh_dir.exists()
+        || required_files
+            .iter()
+            .any(|f| !fresh_dir.join(f).is_file())
+    {
+        if strict {
+            panic!(
+                "missing fresh legacy mark files under {} (see README for generation steps)",
+                fresh_dir.to_string_lossy()
+            );
+        }
+        eprintln!(
+            "skipping strict summary-line parity: missing fresh mark files under {}",
+            fresh_dir.to_string_lossy()
+        );
+        return;
+    }
+
+    let workspace = temp_dir("markbook-fresh-summary-parity");
     let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
 
     let (mut child, mut stdin, mut reader) = spawn_sidecar();
@@ -213,9 +247,9 @@ fn assessment_stats_match_legacy_mark_file_summaries_sample25() {
             actual_by_idx.insert(idx, a);
         }
 
-        let mark_file_path = fixture_folder.join(file_name);
+        let mark_file_path = fresh_dir.join(file_name);
         let legacy_file = legacy::parse_legacy_mark_file(&mark_file_path)
-            .unwrap_or_else(|e| panic!("parse {}: {:?}", file_name, e));
+            .unwrap_or_else(|e| panic!("parse fresh {}: {:?}", file_name, e));
         assert_eq!(
             legacy_file.last_student,
             valid_by_order.len(),
@@ -229,47 +263,17 @@ fn assessment_stats_match_legacy_mark_file_summaries_sample25() {
                 .get(&idx)
                 .unwrap_or_else(|| panic!("{} missing assessment idx {}", set_code, idx));
 
-            // Legacy mark files store per-assessment averages in the summary line, but those values
-            // can become stale if the class list validity flags change after a calculation pass.
-            // For parity with VB6 `Calculate`, recompute expected averages from raw marks plus the
-            // current active mask (valid_kid) used by the sidecar.
-            let mut denom = 0usize;
-            let mut sum_raw = 0.0_f64;
-            for (i, score) in legacy_a.raw_scores.iter().enumerate() {
-                if !*valid_by_order.get(i).unwrap_or(&true) {
-                    continue;
-                }
-                match score {
-                    legacy::LegacyScore::NoMark => {}
-                    legacy::LegacyScore::Zero => denom += 1,
-                    legacy::LegacyScore::Scored(v) => {
-                        denom += 1;
-                        sum_raw += *v;
-                    }
-                }
-            }
-            let expected_avg_raw_unrounded = if denom > 0 {
-                sum_raw / (denom as f64)
-            } else {
-                0.0
-            };
-            let expected_avg_percent_unrounded = if legacy_a.out_of > 0.0 {
-                100.0 * expected_avg_raw_unrounded / legacy_a.out_of
-            } else {
-                0.0
-            };
-            let expected_avg_raw = round_off_1_decimal(expected_avg_raw_unrounded);
-            let expected_avg_percent = round_off_1_decimal(expected_avg_percent_unrounded);
+            let expected_avg_raw = round_off_1_decimal(legacy_a.avg_raw);
+            let expected_avg_percent = round_off_1_decimal(legacy_a.avg_percent);
+
             let actual_avg_raw = actual.get("avgRaw").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let actual_avg_percent = actual
                 .get("avgPercent")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
 
-            let raw_diff = (actual_avg_raw - expected_avg_raw).abs();
-            let pct_diff = (actual_avg_percent - expected_avg_percent).abs();
             assert!(
-                raw_diff <= 0.05,
+                (actual_avg_raw - expected_avg_raw).abs() <= 0.05,
                 "{} idx {} avgRaw mismatch: expected {}, got {}",
                 set_code,
                 idx,
@@ -277,7 +281,7 @@ fn assessment_stats_match_legacy_mark_file_summaries_sample25() {
                 actual_avg_raw
             );
             assert!(
-                pct_diff <= 0.05,
+                (actual_avg_percent - expected_avg_percent).abs() <= 0.05,
                 "{} idx {} avgPercent mismatch: expected {}, got {}",
                 set_code,
                 idx,
@@ -334,3 +338,4 @@ fn assessment_stats_match_legacy_mark_file_summaries_sample25() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(workspace);
 }
+

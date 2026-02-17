@@ -395,28 +395,31 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
         return err(&req.id, "not_found", "class not found", None);
     };
 
-    let ms_row: Option<(String, String, String)> = match conn
+    let ms_row: Option<(String, String, String, i64)> = match conn
         .query_row(
-            "SELECT id, code, description FROM mark_sets WHERE id = ? AND class_id = ?",
+            "SELECT id, code, description, sort_order FROM mark_sets WHERE id = ? AND class_id = ?",
             (&mark_set_id, &class_id),
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()
     {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
-    let Some((ms_id, ms_code, ms_desc)) = ms_row else {
+    let Some((ms_id, ms_code, ms_desc, mark_set_sort_order)) = ms_row else {
         return err(&req.id, "not_found", "mark set not found", None);
     };
 
     let mut stud_stmt = match conn.prepare(
-        "SELECT id, last_name, first_name, sort_order, active FROM students WHERE class_id = ? ORDER BY sort_order",
+        "SELECT id, last_name, first_name, sort_order, active, COALESCE(mark_set_mask, 'TBA')
+         FROM students
+         WHERE class_id = ?
+         ORDER BY sort_order",
     ) {
         Ok(s) => s,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
-    let student_rows: Vec<(String, serde_json::Value)> = match stud_stmt
+    let student_rows: Vec<(String, serde_json::Value, bool, String)> = match stud_stmt
         .query_map([&class_id], |row| {
             let id: String = row.get(0)?;
             let id2 = id.clone();
@@ -424,14 +427,16 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
             let first: String = row.get(2)?;
             let sort_order: i64 = row.get(3)?;
             let active: i64 = row.get(4)?;
+            let mask: String = row.get(5)?;
+            let active_b = active != 0;
             let display_name = format!("{}, {}", last, first);
             let j = json!({
                 "id": id,
                 "displayName": display_name,
                 "sortOrder": sort_order,
-                "active": active != 0
+                "active": active_b
             });
-            Ok((id2, j))
+            Ok((id2, j, active_b, mask))
         })
         .and_then(|it| it.collect::<Result<Vec<_>, _>>())
     {
@@ -441,9 +446,15 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
 
     let mut student_ids: Vec<String> = Vec::with_capacity(student_rows.len());
     let mut students_json: Vec<serde_json::Value> = Vec::with_capacity(student_rows.len());
-    for (id, j) in student_rows {
+    let mut student_valid: Vec<bool> = Vec::with_capacity(student_rows.len());
+    for (id, j, active_b, mask) in student_rows {
         student_ids.push(id);
         students_json.push(j);
+        student_valid.push(calc::is_valid_kid(
+            active_b,
+            &mask,
+            mark_set_sort_order,
+        ));
     }
 
     let mut assess_stmt = match conn.prepare(
@@ -561,10 +572,6 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
         }
     }
 
-    let student_active: Vec<bool> = students_json
-        .iter()
-        .map(|j| j.get("active").and_then(|v| v.as_bool()).unwrap_or(true))
-        .collect();
     let out_of_by_col: Vec<f64> = assessments_json
         .iter()
         .map(|j| j.get("outOf").and_then(|v| v.as_f64()).unwrap_or(0.0))
@@ -586,7 +593,7 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
             .unwrap_or(c_i as i64);
         let avg = calc::assessment_average(
             (0..row_count).filter_map(|r_i| {
-                if !*student_active.get(r_i).unwrap_or(&true) {
+                if !*student_valid.get(r_i).unwrap_or(&true) {
                     return None;
                 }
                 match cells[r_i][c_i] {
