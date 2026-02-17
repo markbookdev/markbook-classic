@@ -429,7 +429,15 @@ export const CalcMarkSetSummaryResultSchema = z.object({
   ),
   perAssessment: z.array(CalcPerAssessmentSchema),
   perCategory: z.array(CalcPerCategorySchema),
-  perStudent: z.array(CalcPerStudentSchema)
+  perStudent: z.array(CalcPerStudentSchema),
+  parityDiagnostics: z
+    .object({
+      calcMethodApplied: z.number(),
+      weightMethodApplied: z.number(),
+      selectedAssessmentCount: z.number(),
+      selectedCategoryCount: z.number()
+    })
+    .optional()
 });
 
 export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;

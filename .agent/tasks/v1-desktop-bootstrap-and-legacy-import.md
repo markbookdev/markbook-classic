@@ -23,7 +23,7 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Students screen: DONE (CRUD + active toggle + reorder)
 - Mark Set Setup: DONE (categories + assessments CRUD/reorder + mark set settings)
 - Companion import fidelity: IN PROGRESS (`.RMK/.TYP/.IDX/.R*` + `ALL!*.IDX` + `.TBK` + `.ICC` shipped)
-- Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; parity locks expanding)
+- Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; calc-method routing now in `calc.rs`, golden set expanded to MAT2/SNC2)
 - Playwright harness: DONE (17 specs green incl. attendance, seating, comments, bulk edit, backup/exchange, report exports)
 
 ## Deliverables (Implemented)
@@ -57,6 +57,14 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Fixture data is currently copied into:
   - `fixtures/legacy/Sample25`
 
+### Baseline / Regression Snapshot (2026-02-16)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Desktop renderer build: `bun run --cwd apps/desktop build:renderer` => PASS
+- Playwright regression: `bun run test:e2e` => PASS (19/19)
+- Purpose of snapshot:
+  - lock known-good baseline before further parity extraction
+  - ensure no IPC contract drift while moving calc/report handling into typed handlers
+
 ### Parsing Gotchas / Sentinel Mapping
 - Mark files `*.Yxx` store per-student values as `percent, raw`.
 - Legacy mark states:
@@ -67,3 +75,4 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - TBK (`*.TBK`) is structured as: item count, per-item metadata, then per-student item-id/note rows.
 - ICC (`*.ICC`) is a `(students+1) x (subjects+1)` matrix (row 0 defaults + per-student rows).
 - Combined comment sets from `ALL!<class>.IDX` can overlap set numbers with mark-set IDX files; importer remaps to the next free set number per mark set to preserve both.
+- Legacy export helper files (`*.13`, `*.15`, `*.32`, `*.40`, `*.5`, `*.6`, `*.7`) may contain either 27 or 28 value rows per block for a 27-student class; parser must tolerate both.

@@ -68,7 +68,8 @@ fn legacy_sqlite_import_is_supported() {
     let bytes = b"legacy-sqlite-copy";
     std::fs::write(&legacy_file, bytes).expect("write legacy sqlite file");
 
-    let import = backup::import_workspace_bundle(&legacy_file, &workspace).expect("import legacy sqlite");
+    let import =
+        backup::import_workspace_bundle(&legacy_file, &workspace).expect("import legacy sqlite");
     assert_eq!(import.bundle_format_detected, "legacy-sqlite3");
 
     let restored = std::fs::read(workspace.join("markbook.sqlite3")).expect("read restored sqlite");

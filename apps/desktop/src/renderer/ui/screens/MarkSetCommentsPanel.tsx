@@ -78,6 +78,7 @@ export function MarkSetCommentsPanel(props: {
 
   const [banks, setBanks] = useState<BankRow[]>([]);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [selectedBankEntryId, setSelectedBankEntryId] = useState<string | null>(null);
   const [bankMeta, setBankMeta] = useState<{
     id: string;
     shortName: string;
@@ -90,11 +91,13 @@ export function MarkSetCommentsPanel(props: {
   const [newBankShortName, setNewBankShortName] = useState("");
   const [importPath, setImportPath] = useState("");
   const [exportPath, setExportPath] = useState("");
+  const [applyMode, setApplyMode] = useState<"append" | "replace">("append");
 
-  const selectedStudentRemark = useMemo(
-    () => remarks.find((r) => r.studentId === selectedStudentId)?.remark ?? "",
-    [remarks, selectedStudentId]
-  );
+  const selectedBankEntry = useMemo(() => {
+    if (!bankEntries.length) return null;
+    if (!selectedBankEntryId) return bankEntries[0];
+    return bankEntries.find((e) => e.id === selectedBankEntryId) ?? bankEntries[0];
+  }, [bankEntries, selectedBankEntryId]);
 
   async function loadSets() {
     const res = await requestParsed(
@@ -152,7 +155,12 @@ export function MarkSetCommentsPanel(props: {
   async function loadBank(bankId: string) {
     const res = await requestParsed("comments.banks.open", { bankId }, CommentsBanksOpenResultSchema);
     setBankMeta(res.bank);
-    setBankEntries(res.entries as BankEntry[]);
+    const entries = res.entries as BankEntry[];
+    setBankEntries(entries);
+    setSelectedBankEntryId((cur) => {
+      if (cur && entries.some((e) => e.id === cur)) return cur;
+      return entries[0]?.id ?? null;
+    });
   }
 
   async function refreshAll() {
@@ -405,6 +413,54 @@ export function MarkSetCommentsPanel(props: {
     }
   }
 
+  function selectAdjacentStudent(direction: -1 | 1) {
+    if (remarks.length === 0) return;
+    if (!selectedStudentId) {
+      setSelectedStudentId(remarks[0].studentId);
+      return;
+    }
+    const idx = remarks.findIndex((r) => r.studentId === selectedStudentId);
+    if (idx < 0) {
+      setSelectedStudentId(remarks[0].studentId);
+      return;
+    }
+    const next = Math.min(remarks.length - 1, Math.max(0, idx + direction));
+    setSelectedStudentId(remarks[next].studentId);
+  }
+
+  function applySelectedBankEntryToStudent() {
+    if (!selectedStudentId || !selectedBankEntry) return;
+    const nextText = selectedBankEntry.text.trim();
+    setRemarks((prev) =>
+      prev.map((r) => {
+        if (r.studentId !== selectedStudentId) return r;
+        if (applyMode === "replace") {
+          return { ...r, remark: nextText };
+        }
+        const merged = `${r.remark} ${nextText}`.trim();
+        return { ...r, remark: merged };
+      })
+    );
+  }
+
+  async function browseImportBnkPath() {
+    const chosen = await window.markbook.files.pickOpen({
+      title: "Import Comment Bank (.BNK)",
+      filters: [{ name: "BNK Files", extensions: ["bnk", "BNK"] }]
+    });
+    if (chosen) setImportPath(chosen);
+  }
+
+  async function browseExportBnkPath() {
+    const defaultPath = bankMeta ? `${bankMeta.shortName || "comments"}.BNK` : "comments.BNK";
+    const chosen = await window.markbook.files.pickSave({
+      title: "Export Comment Bank (.BNK)",
+      defaultPath,
+      filters: [{ name: "BNK Files", extensions: ["bnk", "BNK"] }]
+    });
+    if (chosen) setExportPath(chosen);
+  }
+
   return (
     <div data-testid="comments-panel" style={{ display: "flex", gap: 16, minHeight: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -521,6 +577,22 @@ export function MarkSetCommentsPanel(props: {
             </label>
           </div>
         ) : null}
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <button
+            data-testid="comments-prev-student-btn"
+            onClick={() => selectAdjacentStudent(-1)}
+            disabled={remarks.length === 0}
+          >
+            Previous Student
+          </button>
+          <button
+            data-testid="comments-next-student-btn"
+            onClick={() => selectAdjacentStudent(1)}
+            disabled={remarks.length === 0}
+          >
+            Next Student
+          </button>
+        </div>
         <div style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto", border: "1px solid #eee" }}>
           {remarks.map((r) => (
             <div
@@ -613,27 +685,35 @@ export function MarkSetCommentsPanel(props: {
           <button data-testid="comments-bank-entry-add-btn" onClick={() => void addEntry()}>
             Add Entry
           </button>
+          <select
+            data-testid="comments-bank-apply-mode-select"
+            value={applyMode}
+            onChange={(e) => setApplyMode(e.currentTarget.value as "append" | "replace")}
+          >
+            <option value="append">Append</option>
+            <option value="replace">Replace</option>
+          </select>
           <button
             data-testid="comments-bank-apply-btn"
-            disabled={!selectedStudentId}
-            onClick={() => {
-              const first = bankEntries[0];
-              if (!first || !selectedStudentId) return;
-              setRemarks((prev) =>
-                prev.map((r) =>
-                  r.studentId === selectedStudentId
-                    ? { ...r, remark: (selectedStudentRemark + " " + first.text).trim() }
-                    : r
-                )
-              );
-            }}
+            disabled={!selectedStudentId || !selectedBankEntry}
+            onClick={() => applySelectedBankEntryToStudent()}
           >
-            Apply First Entry
+            Apply Selected Entry
           </button>
         </div>
         <div style={{ maxHeight: 260, overflow: "auto", border: "1px solid #eee", marginBottom: 10 }}>
           {bankEntries.map((e) => (
-            <div key={e.id} style={{ borderBottom: "1px solid #f3f3f3", padding: 8 }}>
+            <div
+              key={e.id}
+              data-testid={`comments-bank-entry-row-${e.id}`}
+              style={{
+                borderBottom: "1px solid #f3f3f3",
+                padding: 8,
+                background: selectedBankEntry?.id === e.id ? "#f9fcff" : "white",
+                cursor: "pointer"
+              }}
+              onClick={() => setSelectedBankEntryId(e.id)}
+            >
               <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
                 <input
                   value={e.typeCode}
@@ -693,23 +773,33 @@ export function MarkSetCommentsPanel(props: {
 
         <div style={{ border: "1px solid #eee", padding: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Import/Export .BNK</div>
-          <input
-            data-testid="comments-bank-import-path"
-            value={importPath}
-            onChange={(e) => setImportPath(e.currentTarget.value)}
-            placeholder="Path to .BNK"
-            style={{ width: "100%", marginBottom: 6 }}
-          />
+          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+            <input
+              data-testid="comments-bank-import-path"
+              value={importPath}
+              onChange={(e) => setImportPath(e.currentTarget.value)}
+              placeholder="Path to .BNK"
+              style={{ flex: 1 }}
+            />
+            <button data-testid="comments-bank-import-browse-btn" onClick={() => void browseImportBnkPath()}>
+              Browse
+            </button>
+          </div>
           <button data-testid="comments-bank-import-btn" onClick={() => void importBnk()}>
             Import BNK
           </button>
-          <input
-            data-testid="comments-bank-export-path"
-            value={exportPath}
-            onChange={(e) => setExportPath(e.currentTarget.value)}
-            placeholder="Export path"
-            style={{ width: "100%", margin: "8px 0 6px" }}
-          />
+          <div style={{ display: "flex", gap: 6, margin: "8px 0 6px" }}>
+            <input
+              data-testid="comments-bank-export-path"
+              value={exportPath}
+              onChange={(e) => setExportPath(e.currentTarget.value)}
+              placeholder="Export path"
+              style={{ flex: 1 }}
+            />
+            <button data-testid="comments-bank-export-browse-btn" onClick={() => void browseExportBnkPath()}>
+              Browse
+            </button>
+          </div>
           <button data-testid="comments-bank-export-btn" onClick={() => void exportBnk()}>
             Export BNK
           </button>

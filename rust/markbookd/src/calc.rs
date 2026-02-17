@@ -197,6 +197,15 @@ pub struct CategoryAggregate {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ParityDiagnostics {
+    pub calc_method_applied: i64,
+    pub weight_method_applied: i64,
+    pub selected_assessment_count: usize,
+    pub selected_category_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SummaryModel {
     pub class: ClassSummary,
     #[serde(rename = "markSet")]
@@ -211,6 +220,8 @@ pub struct SummaryModel {
     pub per_category: Vec<CategoryAggregate>,
     #[serde(rename = "perStudent")]
     pub per_student: Vec<StudentFinal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parity_diagnostics: Option<ParityDiagnostics>,
 }
 
 #[derive(Debug, Clone)]
@@ -337,6 +348,78 @@ fn compute_median(values: &[f64]) -> f64 {
     } else {
         (sorted[(n / 2) - 1] + sorted[n / 2]) / 2.0
     }
+}
+
+fn weighted_average(values: &[(f64, f64)]) -> Option<f64> {
+    let mut sum = 0.0_f64;
+    let mut denom = 0.0_f64;
+    for (v, w) in values {
+        if *w <= 0.0 {
+            continue;
+        }
+        sum += *v * *w;
+        denom += *w;
+    }
+    if denom > 0.0 {
+        Some(sum / denom)
+    } else {
+        None
+    }
+}
+
+fn weighted_median(values: &[(f64, f64)]) -> Option<f64> {
+    let mut pts: Vec<(f64, f64)> = values.iter().copied().filter(|(_, w)| *w > 0.0).collect();
+    if pts.is_empty() {
+        return None;
+    }
+    pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
+    let total_weight: f64 = pts.iter().map(|(_, w)| *w).sum();
+    if total_weight <= 0.0 {
+        return None;
+    }
+
+    let mut cum = 0.0_f64;
+    for (idx, (v, w)) in pts.iter().enumerate() {
+        cum += *w;
+        if (cum - (total_weight / 2.0)).abs() < 1e-9 {
+            if let Some((next_v, _)) = pts.get(idx + 1) {
+                return Some((v + next_v) / 2.0);
+            }
+            return Some(*v);
+        }
+        if cum > (total_weight / 2.0) {
+            return Some(*v);
+        }
+    }
+    pts.last().map(|(v, _)| *v)
+}
+
+fn mode_bucket_key(v: f64) -> i64 {
+    (round_off_1_decimal(v) * 10.0).round() as i64
+}
+
+fn weighted_mode(values: &[(f64, f64)]) -> Option<f64> {
+    let mut by_bucket: HashMap<i64, f64> = HashMap::new();
+    for (v, w) in values {
+        if *w <= 0.0 {
+            continue;
+        }
+        let key = mode_bucket_key(*v);
+        *by_bucket.entry(key).or_insert(0.0) += *w;
+    }
+    if by_bucket.is_empty() {
+        return None;
+    }
+    let mut best_key = 0_i64;
+    let mut best_weight = -1.0_f64;
+    for (k, w) in by_bucket {
+        // Match VB6 tie-break style (`>=`) by choosing the higher bucket on ties.
+        if w > best_weight || ((w - best_weight).abs() < 1e-9 && k > best_key) {
+            best_key = k;
+            best_weight = w;
+        }
+    }
+    Some((best_key as f64) / 10.0)
 }
 
 pub fn compute_assessment_stats(
@@ -601,6 +684,13 @@ pub fn compute_mark_set_summary(
         *per_category_assessment_counts.entry(key).or_insert(0) += 1;
     }
 
+    let weight_method_applied = weight_method.clamp(0, 2);
+    let calc_method_applied = if (0..=4).contains(&calc_method) {
+        calc_method
+    } else {
+        0
+    };
+
     for s in &students {
         let mut no_mark_count = 0_i64;
         let mut zero_count = 0_i64;
@@ -612,6 +702,7 @@ pub fn compute_mark_set_summary(
 
         // Category method.
         let mut cat_inner: HashMap<String, (f64, f64)> = HashMap::new(); // sum, denom
+        let mut entries_by_cat: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // percent, entry weight
 
         for a in &selected_assessments {
             let state = score_by_pair
@@ -642,8 +733,11 @@ pub fn compute_mark_set_summary(
                 continue;
             };
 
-            let method = weight_method.clamp(0, 2);
-            let use_weight = if method == 0 { assessment_weight } else { 1.0 };
+            let use_weight = if weight_method_applied == 0 {
+                assessment_weight
+            } else {
+                1.0
+            };
             weighted_sum += percent * use_weight;
             weighted_denom += use_weight;
 
@@ -654,11 +748,18 @@ pub fn compute_mark_set_summary(
             let entry = cat_inner.entry(category).or_insert((0.0, 0.0));
             entry.0 += percent * assessment_weight;
             entry.1 += assessment_weight;
+            entries_by_cat
+                .entry(
+                    a.category_name
+                        .clone()
+                        .unwrap_or_else(|| "Uncategorized".to_string()),
+                )
+                .or_default()
+                .push((percent, assessment_weight));
         }
 
-        let final_mark_raw = {
-            let method = weight_method.clamp(0, 2);
-            if method == 1 {
+        let average_mark = {
+            if weight_method_applied == 1 {
                 let mut sum = 0.0_f64;
                 let mut denom = 0.0_f64;
                 let mut sum_equal = 0.0_f64;
@@ -693,6 +794,130 @@ pub fn compute_mark_set_summary(
             } else {
                 None
             }
+        };
+
+        let build_weighted_values = || -> Vec<(f64, f64)> {
+            if weight_method_applied != 1 {
+                return entries_by_cat
+                    .values()
+                    .flat_map(|vals| {
+                        vals.iter().map(|(pct, entry_wt)| {
+                            let w = if weight_method_applied == 0 {
+                                *entry_wt
+                            } else {
+                                1.0
+                            };
+                            (*pct, w)
+                        })
+                    })
+                    .collect();
+            }
+
+            let mut has_positive_cat_weight = false;
+            for cat_name in entries_by_cat.keys() {
+                let cat_weight = category_weight_map
+                    .get(&cat_name.to_ascii_lowercase())
+                    .copied()
+                    .unwrap_or(0.0);
+                if cat_weight > 0.0 {
+                    has_positive_cat_weight = true;
+                    break;
+                }
+            }
+
+            let mut out: Vec<(f64, f64)> = Vec::new();
+            for (cat_name, vals) in &entries_by_cat {
+                let cat_weight = category_weight_map
+                    .get(&cat_name.to_ascii_lowercase())
+                    .copied()
+                    .unwrap_or(0.0);
+                let cat_factor = if has_positive_cat_weight {
+                    if cat_weight > 0.0 {
+                        cat_weight
+                    } else {
+                        0.0
+                    }
+                } else {
+                    1.0
+                };
+                if cat_factor <= 0.0 {
+                    continue;
+                }
+                let denom: f64 = vals
+                    .iter()
+                    .map(|(_, ew)| if weight_method_applied == 0 { *ew } else { 1.0 })
+                    .sum();
+                if denom <= 0.0 {
+                    continue;
+                }
+                for (pct, ew) in vals {
+                    let entry_base = if weight_method_applied == 0 { *ew } else { 1.0 };
+                    out.push((*pct, cat_factor * entry_base / denom));
+                }
+            }
+            out
+        };
+
+        let blended_mark = |mode: bool| -> Option<f64> {
+            let mut by_category: Vec<(f64, f64)> = Vec::new();
+            let mut has_positive_cat_weight = false;
+            for (cat_name, vals) in &entries_by_cat {
+                if vals.is_empty() {
+                    continue;
+                }
+                let cat_vals: Vec<(f64, f64)> = vals
+                    .iter()
+                    .map(|(pct, ew)| {
+                        let w = if weight_method_applied == 0 { *ew } else { 1.0 };
+                        (*pct, w)
+                    })
+                    .collect();
+                let cat_value = if mode {
+                    weighted_mode(&cat_vals)
+                } else {
+                    weighted_median(&cat_vals)
+                };
+                let Some(cat_value) = cat_value else {
+                    continue;
+                };
+
+                let cat_weight = category_weight_map
+                    .get(&cat_name.to_ascii_lowercase())
+                    .copied()
+                    .unwrap_or(0.0);
+                if cat_weight > 0.0 {
+                    has_positive_cat_weight = true;
+                }
+                by_category.push((cat_value, cat_weight));
+            }
+
+            if by_category.is_empty() {
+                return None;
+            }
+            if has_positive_cat_weight {
+                weighted_average(
+                    &by_category
+                        .iter()
+                        .copied()
+                        .filter(|(_, w)| *w > 0.0)
+                        .collect::<Vec<_>>(),
+                )
+            } else {
+                weighted_average(
+                    &by_category
+                        .iter()
+                        .map(|(v, _)| (*v, 1.0))
+                        .collect::<Vec<_>>(),
+                )
+            }
+        };
+
+        let final_mark_raw = match calc_method_applied {
+            1 => weighted_median(&build_weighted_values()),
+            2 => weighted_mode(&build_weighted_values()),
+            3 => blended_mark(true),
+            4 => blended_mark(false),
+            _ => average_mark,
         };
 
         let final_mark = final_mark_raw.map(round_off_1_decimal);
@@ -792,6 +1017,8 @@ pub fn compute_mark_set_summary(
         })
         .collect();
 
+    let selected_category_count = categories_out.len();
+
     Ok(SummaryModel {
         class: ClassSummary {
             id: class_id.to_string(),
@@ -816,6 +1043,16 @@ pub fn compute_mark_set_summary(
         per_assessment,
         per_category,
         per_student,
+        parity_diagnostics: if cfg!(debug_assertions) {
+            Some(ParityDiagnostics {
+                calc_method_applied,
+                weight_method_applied,
+                selected_assessment_count: selected_assessments.len(),
+                selected_category_count,
+            })
+        } else {
+            None
+        },
     })
 }
 
@@ -874,5 +1111,26 @@ mod tests {
         assert_eq!(parsed.term, None);
         assert_eq!(parsed.category_name, None);
         assert_eq!(parsed.types_mask, None);
+    }
+
+    #[test]
+    fn weighted_median_respects_weights() {
+        let values = vec![(10.0, 1.0), (20.0, 1.0), (90.0, 8.0)];
+        let m = weighted_median(&values).expect("weighted median");
+        assert!((m - 90.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn weighted_median_averages_when_exactly_half() {
+        let values = vec![(50.0, 1.0), (60.0, 1.0)];
+        let m = weighted_median(&values).expect("weighted median");
+        assert!((m - 55.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn weighted_mode_tie_prefers_higher_bucket() {
+        let values = vec![(70.0, 1.0), (80.0, 1.0)];
+        let m = weighted_mode(&values).expect("weighted mode");
+        assert!((m - 80.0).abs() < 1e-9);
     }
 }

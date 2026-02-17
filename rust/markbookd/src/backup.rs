@@ -23,10 +23,16 @@ pub struct ImportSummary {
     pub bundle_format_detected: String,
 }
 
-pub fn export_workspace_bundle(workspace_path: &Path, out_path: &Path) -> anyhow::Result<ExportSummary> {
+pub fn export_workspace_bundle(
+    workspace_path: &Path,
+    out_path: &Path,
+) -> anyhow::Result<ExportSummary> {
     let db_path = workspace_path.join("markbook.sqlite3");
     if !db_path.is_file() {
-        return Err(anyhow!("workspace database not found: {}", db_path.to_string_lossy()));
+        return Err(anyhow!(
+            "workspace database not found: {}",
+            db_path.to_string_lossy()
+        ));
     }
 
     if let Some(parent) = out_path.parent() {
@@ -34,8 +40,12 @@ pub fn export_workspace_bundle(workspace_path: &Path, out_path: &Path) -> anyhow
             .with_context(|| format!("failed to create directory {}", parent.to_string_lossy()))?;
     }
 
-    let out_file = File::create(out_path)
-        .with_context(|| format!("failed to create output file {}", out_path.to_string_lossy()))?;
+    let out_file = File::create(out_path).with_context(|| {
+        format!(
+            "failed to create output file {}",
+            out_path.to_string_lossy()
+        )
+    })?;
     let mut zip = ZipWriter::new(out_file);
     let opts = FileOptions::default().compression_method(CompressionMethod::Deflated);
 
@@ -84,9 +94,16 @@ pub fn export_workspace_bundle(workspace_path: &Path, out_path: &Path) -> anyhow
     })
 }
 
-pub fn import_workspace_bundle(in_path: &Path, workspace_path: &Path) -> anyhow::Result<ImportSummary> {
-    std::fs::create_dir_all(workspace_path)
-        .with_context(|| format!("failed to create workspace {}", workspace_path.to_string_lossy()))?;
+pub fn import_workspace_bundle(
+    in_path: &Path,
+    workspace_path: &Path,
+) -> anyhow::Result<ImportSummary> {
+    std::fs::create_dir_all(workspace_path).with_context(|| {
+        format!(
+            "failed to create workspace {}",
+            workspace_path.to_string_lossy()
+        )
+    })?;
     let dst = workspace_path.join("markbook.sqlite3");
 
     if !is_zip_file(in_path)? {
@@ -127,22 +144,36 @@ pub fn import_workspace_bundle(in_path: &Path, workspace_path: &Path) -> anyhow:
         let _ = std::fs::remove_file(&tmp_dst);
     }
 
-    let mut db_out = File::create(&tmp_dst)
-        .with_context(|| format!("failed to create temp database {}", tmp_dst.to_string_lossy()))?;
+    let mut db_out = File::create(&tmp_dst).with_context(|| {
+        format!(
+            "failed to create temp database {}",
+            tmp_dst.to_string_lossy()
+        )
+    })?;
     {
         let mut db_entry = archive
             .by_name(DB_ENTRY)
             .context("bundle missing db/markbook.sqlite3")?;
         std::io::copy(&mut db_entry, &mut db_out).context("failed to extract database entry")?;
     }
-    db_out.flush().context("failed to flush extracted database")?;
+    db_out
+        .flush()
+        .context("failed to flush extracted database")?;
 
     if dst.exists() {
-        std::fs::remove_file(&dst)
-            .with_context(|| format!("failed to remove existing database {}", dst.to_string_lossy()))?;
+        std::fs::remove_file(&dst).with_context(|| {
+            format!(
+                "failed to remove existing database {}",
+                dst.to_string_lossy()
+            )
+        })?;
     }
-    std::fs::rename(&tmp_dst, &dst)
-        .with_context(|| format!("failed to move extracted database to {}", dst.to_string_lossy()))?;
+    std::fs::rename(&tmp_dst, &dst).with_context(|| {
+        format!(
+            "failed to move extracted database to {}",
+            dst.to_string_lossy()
+        )
+    })?;
 
     Ok(ImportSummary {
         bundle_format_detected: BUNDLE_FORMAT_V2.to_string(),

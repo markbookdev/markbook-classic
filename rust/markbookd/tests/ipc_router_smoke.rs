@@ -56,7 +56,11 @@ fn request(
             .and_then(|e| e.get("code"))
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        assert_ne!(code, "not_implemented", "unexpected unknown method for {}", method);
+        assert_ne!(
+            code, "not_implemented",
+            "unexpected unknown method for {}",
+            method
+        );
     }
     value
 }
@@ -113,12 +117,75 @@ fn router_dispatch_smoke_covers_handler_families() {
         "students.list",
         json!({ "classId": class_id }),
     );
+    let created_student = request(
+        &mut stdin,
+        &mut reader,
+        "7a",
+        "students.create",
+        json!({
+            "classId": class_id,
+            "lastName": "Smoke",
+            "firstName": "Student",
+            "active": true
+        }),
+    );
+    let student_id = created_student
+        .get("result")
+        .and_then(|v| v.get("studentId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !student_id.is_empty() {
+        let _ = request(
+            &mut stdin,
+            &mut reader,
+            "7b",
+            "students.update",
+            json!({
+                "classId": class_id,
+                "studentId": student_id,
+                "patch": { "firstName": "Updated" }
+            }),
+        );
+        let _ = request(
+            &mut stdin,
+            &mut reader,
+            "7c",
+            "notes.update",
+            json!({
+                "classId": class_id,
+                "studentId": student_id,
+                "note": "router smoke note"
+            }),
+        );
+    }
     let _ = request(
         &mut stdin,
         &mut reader,
         "8",
         "notes.get",
         json!({ "classId": class_id }),
+    );
+    let _ = request(
+        &mut stdin,
+        &mut reader,
+        "8b",
+        "grid.get",
+        json!({
+            "classId": class_id,
+            "markSetId": "missing",
+            "rowStart": 0,
+            "rowCount": 1,
+            "colStart": 0,
+            "colCount": 1
+        }),
+    );
+    let _ = request(
+        &mut stdin,
+        &mut reader,
+        "8c",
+        "categories.list",
+        json!({ "classId": class_id, "markSetId": "missing" }),
     );
     let _ = request(
         &mut stdin,
