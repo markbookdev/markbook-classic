@@ -40,7 +40,10 @@ fn get_required_str(params: &serde_json::Value, key: &str) -> Result<String, Han
         })
 }
 
-fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<BasicStudent>, HandlerErr> {
+fn list_students_for_class(
+    conn: &Connection,
+    class_id: &str,
+) -> Result<Vec<BasicStudent>, HandlerErr> {
     let mut stmt = conn
         .prepare(
             "SELECT id, last_name, first_name, sort_order, active
@@ -71,7 +74,11 @@ fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<Basi
     })
 }
 
-fn mark_set_exists(conn: &Connection, class_id: &str, mark_set_id: &str) -> Result<bool, HandlerErr> {
+fn mark_set_exists(
+    conn: &Connection,
+    class_id: &str,
+    mark_set_id: &str,
+) -> Result<bool, HandlerErr> {
     conn.query_row(
         "SELECT 1 FROM mark_sets WHERE id = ? AND class_id = ?",
         (mark_set_id, class_id),
@@ -86,7 +93,10 @@ fn mark_set_exists(conn: &Connection, class_id: &str, mark_set_id: &str) -> Resu
     })
 }
 
-fn comments_sets_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_sets_list(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let mark_set_id = get_required_str(params, "markSetId")?;
     if !mark_set_exists(conn, &class_id, &mark_set_id)? {
@@ -132,7 +142,10 @@ fn comments_sets_list(conn: &Connection, params: &serde_json::Value) -> Result<s
     Ok(json!({ "sets": sets }))
 }
 
-fn comments_sets_open(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_sets_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let mark_set_id = get_required_str(params, "markSetId")?;
     let set_number = params
@@ -195,7 +208,9 @@ fn comments_sets_open(conn: &Connection, params: &serde_json::Value) -> Result<s
     let students = list_students_for_class(conn, &class_id)?;
     let mut remark_by_student: HashMap<String, String> = HashMap::new();
     let mut stmt = conn
-        .prepare("SELECT student_id, remark FROM comment_set_remarks WHERE comment_set_index_id = ?")
+        .prepare(
+            "SELECT student_id, remark FROM comment_set_remarks WHERE comment_set_index_id = ?",
+        )
         .map_err(|e| HandlerErr {
             code: "db_query_failed",
             message: e.to_string(),
@@ -245,7 +260,9 @@ fn comments_sets_open(conn: &Connection, params: &serde_json::Value) -> Result<s
     }))
 }
 
-fn parse_remarks_by_student(raw: Option<&serde_json::Value>) -> Result<Vec<(String, String)>, HandlerErr> {
+fn parse_remarks_by_student(
+    raw: Option<&serde_json::Value>,
+) -> Result<Vec<(String, String)>, HandlerErr> {
     let Some(raw) = raw else {
         return Ok(Vec::new());
     };
@@ -279,7 +296,10 @@ fn parse_remarks_by_student(raw: Option<&serde_json::Value>) -> Result<Vec<(Stri
     })
 }
 
-fn comments_sets_upsert(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_sets_upsert(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let mark_set_id = get_required_str(params, "markSetId")?;
     if !mark_set_exists(conn, &class_id, &mark_set_id)? {
@@ -296,9 +316,18 @@ fn comments_sets_upsert(conn: &Connection, params: &serde_json::Value) -> Result
         .trim()
         .to_string();
     let fit_mode = params.get("fitMode").and_then(|v| v.as_i64()).unwrap_or(0);
-    let fit_font_size = params.get("fitFontSize").and_then(|v| v.as_i64()).unwrap_or(9);
-    let fit_width = params.get("fitWidth").and_then(|v| v.as_i64()).unwrap_or(83);
-    let fit_lines = params.get("fitLines").and_then(|v| v.as_i64()).unwrap_or(12);
+    let fit_font_size = params
+        .get("fitFontSize")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(9);
+    let fit_width = params
+        .get("fitWidth")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(83);
+    let fit_lines = params
+        .get("fitLines")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(12);
     let fit_subj = params
         .get("fitSubj")
         .and_then(|v| v.as_str())
@@ -309,7 +338,10 @@ fn comments_sets_upsert(conn: &Connection, params: &serde_json::Value) -> Result
         .and_then(|v| v.as_i64())
         .unwrap_or(100)
         .max(100);
-    let is_default = params.get("isDefault").and_then(|v| v.as_bool()).unwrap_or(false);
+    let is_default = params
+        .get("isDefault")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let bank_short = params
         .get("bankShort")
         .and_then(|v| v.as_str())
@@ -437,7 +469,10 @@ fn comments_sets_upsert(conn: &Connection, params: &serde_json::Value) -> Result
     Ok(json!({ "setNumber": set_number }))
 }
 
-fn comments_sets_delete(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_sets_delete(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let mark_set_id = get_required_str(params, "markSetId")?;
     let set_number = params
@@ -533,7 +568,10 @@ fn comments_banks_list(conn: &Connection) -> Result<serde_json::Value, HandlerEr
     Ok(json!({ "banks": banks }))
 }
 
-fn comments_banks_open(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_banks_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let bank_id = get_required_str(params, "bankId")?;
     let bank: Option<serde_json::Value> = conn
         .query_row(
@@ -593,7 +631,10 @@ fn comments_banks_open(conn: &Connection, params: &serde_json::Value) -> Result<
     Ok(json!({ "bank": bank, "entries": entries }))
 }
 
-fn comments_banks_create(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn comments_banks_create(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let short_name = get_required_str(params, "shortName")?.trim().to_string();
     if short_name.is_empty() {
         return Err(HandlerErr {
@@ -700,7 +741,10 @@ fn comments_banks_update_meta(
     }
 
     if !set_parts.is_empty() {
-        let sql = format!("UPDATE comment_banks SET {} WHERE id = ?", set_parts.join(", "));
+        let sql = format!(
+            "UPDATE comment_banks SET {} WHERE id = ?",
+            set_parts.join(", ")
+        );
         binds.push(Value::Text(bank_id.clone()));
         tx.execute(&sql, params_from_iter(binds))
             .map_err(|e| HandlerErr {
@@ -947,12 +991,15 @@ fn comments_banks_import_bnk(
             message: e.to_string(),
             details: None,
         })?;
-    tx.execute("DELETE FROM comment_bank_entries WHERE bank_id = ?", [&bank_id])
-        .map_err(|e| HandlerErr {
-            code: "db_delete_failed",
-            message: e.to_string(),
-            details: Some(json!({ "table": "comment_bank_entries" })),
-        })?;
+    tx.execute(
+        "DELETE FROM comment_bank_entries WHERE bank_id = ?",
+        [&bank_id],
+    )
+    .map_err(|e| HandlerErr {
+        code: "db_delete_failed",
+        message: e.to_string(),
+        details: Some(json!({ "table": "comment_bank_entries" })),
+    })?;
     for (sort_order, entry) in parsed.entries.iter().enumerate() {
         let eid = Uuid::new_v4().to_string();
         tx.execute(
@@ -1033,7 +1080,10 @@ fn comments_banks_export_bnk(
             message: e.to_string(),
             details: None,
         })?;
-    let text = legacy::serialize_bnk_file(&legacy::ParsedBnkFile { fit_profile, entries });
+    let text = legacy::serialize_bnk_file(&legacy::ParsedBnkFile {
+        fit_profile,
+        entries,
+    });
     let out = PathBuf::from(&out_path);
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent).map_err(|e| HandlerErr {
@@ -1187,4 +1237,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-

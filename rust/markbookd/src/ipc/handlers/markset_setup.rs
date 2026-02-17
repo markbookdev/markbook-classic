@@ -18,7 +18,11 @@ impl HandlerErr {
     }
 }
 
-fn mark_set_exists(conn: &Connection, class_id: &str, mark_set_id: &str) -> Result<bool, HandlerErr> {
+fn mark_set_exists(
+    conn: &Connection,
+    class_id: &str,
+    mark_set_id: &str,
+) -> Result<bool, HandlerErr> {
     conn.query_row(
         "SELECT 1 FROM mark_sets WHERE id = ? AND class_id = ?",
         (mark_set_id, class_id),
@@ -182,7 +186,12 @@ fn handle_categories_update(state: &mut AppState, req: &Request) -> serde_json::
             set_parts.push("weight = ?".into());
             bind_values.push(Value::Real(n));
         } else {
-            return err(&req.id, "bad_params", "patch.weight must be a number or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.weight must be a number or null",
+                None,
+            );
         }
     }
 
@@ -563,7 +572,12 @@ fn handle_assessments_update(state: &mut AppState, req: &Request) -> serde_json:
                 bind_values.push(Value::Text(t));
             }
         } else {
-            return err(&req.id, "bad_params", "patch.date must be a string or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.date must be a string or null",
+                None,
+            );
         }
     }
     if let Some(v) = patch.get("categoryName") {
@@ -741,7 +755,10 @@ fn handle_assessments_delete(state: &mut AppState, req: &Request) -> serde_json:
         Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
     };
 
-    if let Err(e) = tx.execute("DELETE FROM scores WHERE assessment_id = ?", [&assessment_id]) {
+    if let Err(e) = tx.execute(
+        "DELETE FROM scores WHERE assessment_id = ?",
+        [&assessment_id],
+    ) {
         return err(
             &req.id,
             "db_delete_failed",
@@ -859,11 +876,11 @@ fn handle_assessments_reorder(state: &mut AppState, req: &Request) -> serde_json
         Err(e) => return e.response(&req.id),
     }
 
-    let mut stmt = match conn.prepare("SELECT id FROM assessments WHERE mark_set_id = ? ORDER BY idx")
-    {
-        Ok(s) => s,
-        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
-    };
+    let mut stmt =
+        match conn.prepare("SELECT id FROM assessments WHERE mark_set_id = ? ORDER BY idx") {
+            Ok(s) => s,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
     let current_ids: Vec<String> = match stmt
         .query_map([&mark_set_id], |row| row.get::<_, String>(0))
         .and_then(|it| it.collect::<Result<Vec<_>, _>>())
@@ -999,17 +1016,8 @@ fn handle_markset_settings_get(state: &mut AppState, req: &Request) -> serde_jso
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
 
-    let Some((
-        id,
-        code,
-        description,
-        full_code,
-        room,
-        day,
-        period,
-        weight_method,
-        calc_method,
-    )) = row
+    let Some((id, code, description, full_code, room, day, period, weight_method, calc_method)) =
+        row
     else {
         return err(&req.id, "not_found", "mark set not found", None);
     };
@@ -1065,7 +1073,12 @@ fn handle_markset_settings_update(state: &mut AppState, req: &Request) -> serde_
                 bind_values.push(Value::Text(t));
             }
         } else {
-            return err(&req.id, "bad_params", "patch.fullCode must be string or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.fullCode must be string or null",
+                None,
+            );
         }
     }
     if let Some(v) = patch.get("room") {
@@ -1081,7 +1094,12 @@ fn handle_markset_settings_update(state: &mut AppState, req: &Request) -> serde_
                 bind_values.push(Value::Text(t));
             }
         } else {
-            return err(&req.id, "bad_params", "patch.room must be string or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.room must be string or null",
+                None,
+            );
         }
     }
     if let Some(v) = patch.get("day") {
@@ -1097,7 +1115,12 @@ fn handle_markset_settings_update(state: &mut AppState, req: &Request) -> serde_
                 bind_values.push(Value::Text(t));
             }
         } else {
-            return err(&req.id, "bad_params", "patch.day must be string or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.day must be string or null",
+                None,
+            );
         }
     }
     if let Some(v) = patch.get("period") {
@@ -1113,22 +1136,42 @@ fn handle_markset_settings_update(state: &mut AppState, req: &Request) -> serde_
                 bind_values.push(Value::Text(t));
             }
         } else {
-            return err(&req.id, "bad_params", "patch.period must be string or null", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.period must be string or null",
+                None,
+            );
         }
     }
     if let Some(v) = patch.get("weightMethod") {
         let Some(n) = v.as_i64() else {
-            return err(&req.id, "bad_params", "patch.weightMethod must be integer", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.weightMethod must be integer",
+                None,
+            );
         };
         if !(0..=2).contains(&n) {
-            return err(&req.id, "bad_params", "patch.weightMethod must be 0, 1, or 2", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.weightMethod must be 0, 1, or 2",
+                None,
+            );
         }
         set_parts.push("weight_method = ?".into());
         bind_values.push(Value::Integer(n));
     }
     if let Some(v) = patch.get("calcMethod") {
         let Some(n) = v.as_i64() else {
-            return err(&req.id, "bad_params", "patch.calcMethod must be integer", None);
+            return err(
+                &req.id,
+                "bad_params",
+                "patch.calcMethod must be integer",
+                None,
+            );
         };
         if !(0..=4).contains(&n) {
             return err(&req.id, "bad_params", "patch.calcMethod must be 0..4", None);
@@ -1187,4 +1230,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-

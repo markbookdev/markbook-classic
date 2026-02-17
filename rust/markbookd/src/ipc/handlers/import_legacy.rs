@@ -1,5 +1,5 @@
-use crate::legacy;
 use crate::ipc::types::{AppState, Request};
+use crate::legacy;
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 use serde_json::json;
@@ -108,8 +108,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
         }
     };
 
-    if let Err(e) = tx.execute("INSERT INTO classes(id, name) VALUES(?, ?)", [&class_id, &class_name])
-    {
+    if let Err(e) = tx.execute(
+        "INSERT INTO classes(id, name) VALUES(?, ?)",
+        [&class_id, &class_name],
+    ) {
         let _ = tx.rollback();
         return json!(ErrResp {
             id: req.id,
@@ -292,7 +294,8 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                     });
                 }
 
-                let max_students = std::cmp::min(student_ids_by_sort.len(), m.student_day_codes.len());
+                let max_students =
+                    std::cmp::min(student_ids_by_sort.len(), m.student_day_codes.len());
                 for s_idx in 0..max_students {
                     let student_id = &student_ids_by_sort[s_idx];
                     let day_codes = &m.student_day_codes[s_idx];
@@ -383,7 +386,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                     }
                 });
             }
-            if let Err(e) = tx.execute("DELETE FROM seating_assignments WHERE class_id = ?", [&class_id]) {
+            if let Err(e) = tx.execute(
+                "DELETE FROM seating_assignments WHERE class_id = ?",
+                [&class_id],
+            ) {
                 let _ = tx.rollback();
                 return json!(ErrResp {
                     id: req.id,
@@ -524,7 +530,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
     }
 
     // Best-effort bank import from parent fixture folder.
-    let bnk_folder = legacy_folder.parent().unwrap_or(&legacy_folder).to_path_buf();
+    let bnk_folder = legacy_folder
+        .parent()
+        .unwrap_or(&legacy_folder)
+        .to_path_buf();
     match legacy::find_bnk_files(&bnk_folder) {
         Ok(files) => {
             for bnk_file in files {
@@ -543,7 +552,11 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                         });
                     }
                 };
-                let short_name = bnk_file.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                let short_name = bnk_file
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 if short_name.is_empty() {
                     continue;
                 }
@@ -593,7 +606,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                     }
                 };
 
-                if let Err(e) = tx.execute("DELETE FROM comment_bank_entries WHERE bank_id = ?", [&resolved_bank_id]) {
+                if let Err(e) = tx.execute(
+                    "DELETE FROM comment_bank_entries WHERE bank_id = ?",
+                    [&resolved_bank_id],
+                ) {
                     let _ = tx.rollback();
                     return json!(ErrResp {
                         id: req.id,
@@ -697,7 +713,11 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
             }
         };
 
-        let mark_filename = mark_file.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let mark_filename = mark_file
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
 
         let mark_set_id = Uuid::new_v4().to_string();
         let misc = parsed_mark.misc.as_ref();
@@ -909,12 +929,13 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                 }
             };
 
-            let max_entries = std::cmp::min(rmk.remarks_by_entry.len(), assessment_ids_by_idx.len());
+            let max_entries =
+                std::cmp::min(rmk.remarks_by_entry.len(), assessment_ids_by_idx.len());
             let max_students = std::cmp::min(student_ids_by_sort.len(), rmk.last_student);
 
-            let mut up = match tx.prepare(
-                "UPDATE scores SET remark = ? WHERE assessment_id = ? AND student_id = ?",
-            ) {
+            let mut up = match tx
+                .prepare("UPDATE scores SET remark = ? WHERE assessment_id = ? AND student_id = ?")
+            {
                 Ok(s) => s,
                 Err(e) => {
                     return json!(ErrResp {
@@ -990,7 +1011,10 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                     }
                 });
             }
-            if let Err(e) = tx.execute("DELETE FROM comment_set_indexes WHERE mark_set_id = ?", [&mark_set_id]) {
+            if let Err(e) = tx.execute(
+                "DELETE FROM comment_set_indexes WHERE mark_set_id = ?",
+                [&mark_set_id],
+            ) {
                 return json!(ErrResp {
                     id: req.id,
                     ok: false,
@@ -1140,7 +1164,8 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                     .unwrap_or("")
                     .to_ascii_uppercase();
                 let mark_set_id = mark_set_id_by_source_stem.get(&source_stem).cloned();
-                let max_students = std::cmp::min(student_ids_by_sort.len(), parsed_tbk.last_student);
+                let max_students =
+                    std::cmp::min(student_ids_by_sort.len(), parsed_tbk.last_student);
                 for item in parsed_tbk.items {
                     for s_idx in 0..max_students {
                         let item_id = item
@@ -1229,7 +1254,8 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                 }
             };
 
-            let mut mark_set_ids: Vec<String> = mark_set_id_by_source_stem.values().cloned().collect();
+            let mut mark_set_ids: Vec<String> =
+                mark_set_id_by_source_stem.values().cloned().collect();
             mark_set_ids.sort();
             mark_set_ids.dedup();
 
@@ -1349,12 +1375,15 @@ fn handle_class_import_legacy(state: &mut AppState, req: Request) -> serde_json:
                                 error: ErrObj {
                                     code: "legacy_parse_failed".into(),
                                     message: e.to_string(),
-                                    details: Some(json!({ "remarkFile": r_file.to_string_lossy() }))
+                                    details: Some(
+                                        json!({ "remarkFile": r_file.to_string_lossy() })
+                                    )
                                 }
                             });
                         }
                     };
-                    let max_students = std::cmp::min(student_ids_by_sort.len(), parsed_r.remarks.len());
+                    let max_students =
+                        std::cmp::min(student_ids_by_sort.len(), parsed_r.remarks.len());
                     for s_idx in 0..max_students {
                         let remark = parsed_r.remarks[s_idx].trim().to_string();
                         if remark.is_empty() {
@@ -1708,4 +1737,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-

@@ -49,7 +49,10 @@ fn class_exists(conn: &Connection, class_id: &str) -> Result<bool, HandlerErr> {
     })
 }
 
-fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<BasicStudent>, HandlerErr> {
+fn list_students_for_class(
+    conn: &Connection,
+    class_id: &str,
+) -> Result<Vec<BasicStudent>, HandlerErr> {
     let mut stmt = conn
         .prepare(
             "SELECT id, last_name, first_name, sort_order, active
@@ -108,7 +111,10 @@ fn seat_code_to_index(seat_code: i64, rows: i64, seats_per_row: i64) -> Option<u
     Some((row * seats_per_row + (col - 1)) as usize)
 }
 
-fn seating_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn seating_get(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     if !class_exists(conn, &class_id)? {
         return Err(HandlerErr {
@@ -189,7 +195,10 @@ fn seating_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_js
     }))
 }
 
-fn seating_save(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn seating_save(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let rows = params
         .get("rows")
@@ -271,12 +280,15 @@ fn seating_save(conn: &Connection, params: &serde_json::Value) -> Result<serde_j
         message: e.to_string(),
         details: Some(json!({ "table": "seating_plans" })),
     })?;
-    tx.execute("DELETE FROM seating_assignments WHERE class_id = ?", [&class_id])
-        .map_err(|e| HandlerErr {
-            code: "db_delete_failed",
-            message: e.to_string(),
-            details: Some(json!({ "table": "seating_assignments" })),
-        })?;
+    tx.execute(
+        "DELETE FROM seating_assignments WHERE class_id = ?",
+        [&class_id],
+    )
+    .map_err(|e| HandlerErr {
+        code: "db_delete_failed",
+        message: e.to_string(),
+        details: Some(json!({ "table": "seating_assignments" })),
+    })?;
 
     let mut seen_students: HashSet<String> = HashSet::new();
     for (idx, v) in assignments_json.iter().enumerate() {
@@ -342,4 +354,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-

@@ -25,6 +25,7 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Companion import fidelity: IN PROGRESS (`.RMK/.TYP/.IDX/.R*` + `ALL!*.IDX` + `.TBK` + `.ICC` shipped)
 - Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; calc-method routing now in `calc.rs`, golden set expanded to MAT2/SNC2)
 - Playwright harness: DONE (17 specs green incl. attendance, seating, comments, bulk edit, backup/exchange, report exports)
+- IPC router de-monolith: DONE (`rust/markbookd/src/ipc/router.rs` is dispatch-only; no legacy fallback)
 
 ## Deliverables (Implemented)
 - Desktop app launches in dev (`bun run dev`)
@@ -41,8 +42,8 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
    - finish strict VB6 parity extraction from `ipc` internals into `calc.rs` types/functions
    - expand locked fixtures to additional mark sets and category-level parity checks
 2. IPC architecture hardening:
-   - split `rust/markbookd/src/ipc/router.rs` into smaller handler modules (`ipc/handlers/*`)
    - keep transport/router thin and improve method-level unit tests
+   - continue deduping shared validation/SQL helpers across handlers
 3. Marks/comments UX parity:
    - finish keyboard-first in-grid flows (copy/paste/fill/state controls already started)
    - tighten remarks/bank editing ergonomics and multi-student workflows
@@ -57,13 +58,21 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Fixture data is currently copied into:
   - `fixtures/legacy/Sample25`
 
-### Baseline / Regression Snapshot (2026-02-16)
+### Baseline / Regression Snapshot (2026-02-17)
 - Rust sidecar tests: `cargo test --all-targets` => PASS
 - Desktop renderer build: `bun run --cwd apps/desktop build:renderer` => PASS
 - Playwright regression: `bun run test:e2e` => PASS (19/19)
 - Purpose of snapshot:
   - lock known-good baseline before further parity extraction
   - ensure no IPC contract drift while moving calc/report handling into typed handlers
+
+### Router/Report Extraction Notes
+- All `reports.*Model` methods are now handled directly in `rust/markbookd/src/ipc/handlers/reports.rs` (no legacy router fallback).
+- Added Rust integration smoke test: `rust/markbookd/tests/reports_models_smoke.rs`.
+
+### Calc Parity Notes
+- Added assessment-stats recompute lock: `rust/markbookd/tests/assessment_stats_parity.rs`.
+- `*.Yxx` mark files include stored per-assessment average fields in summary lines, but those can drift if the class list validity flags change after a calculation pass. The lock test recomputes expected stats from raw scores + current active mask to match VB6 `Calculate` semantics.
 
 ### Parsing Gotchas / Sentinel Mapping
 - Mark files `*.Yxx` store per-student values as `percent, raw`.

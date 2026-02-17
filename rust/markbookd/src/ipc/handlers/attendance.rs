@@ -49,7 +49,10 @@ fn class_exists(conn: &Connection, class_id: &str) -> Result<bool, HandlerErr> {
     })
 }
 
-fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<BasicStudent>, HandlerErr> {
+fn list_students_for_class(
+    conn: &Connection,
+    class_id: &str,
+) -> Result<Vec<BasicStudent>, HandlerErr> {
     let mut stmt = conn
         .prepare(
             "SELECT id, last_name, first_name, sort_order, active
@@ -536,4 +539,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-

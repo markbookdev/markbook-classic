@@ -50,7 +50,10 @@ fn class_exists(conn: &Connection, class_id: &str) -> Result<bool, HandlerErr> {
     })
 }
 
-fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<BasicStudent>, HandlerErr> {
+fn list_students_for_class(
+    conn: &Connection,
+    class_id: &str,
+) -> Result<Vec<BasicStudent>, HandlerErr> {
     let mut stmt = conn
         .prepare(
             "SELECT id, last_name, first_name, sort_order, active
@@ -81,7 +84,10 @@ fn list_students_for_class(conn: &Connection, class_id: &str) -> Result<Vec<Basi
     })
 }
 
-fn loaned_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn loaned_list(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     if !class_exists(conn, &class_id)? {
         return Err(HandlerErr {
@@ -152,7 +158,10 @@ fn loaned_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_js
     Ok(json!({ "items": rows }))
 }
 
-fn loaned_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn loaned_get(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let item_id = get_required_str(params, "itemId")?;
     let mut stmt = conn
@@ -205,7 +214,10 @@ fn loaned_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_jso
     Ok(json!({ "item": item }))
 }
 
-fn loaned_update(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn loaned_update(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let student_id = get_required_str(params, "studentId")?;
     let item_name = get_required_str(params, "itemName")?;
@@ -279,7 +291,10 @@ fn loaned_update(conn: &Connection, params: &serde_json::Value) -> Result<serde_
     Ok(json!({ "ok": true, "itemId": item_id }))
 }
 
-fn devices_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn devices_list(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     if !class_exists(conn, &class_id)? {
         return Err(HandlerErr {
@@ -331,7 +346,10 @@ fn devices_list(conn: &Connection, params: &serde_json::Value) -> Result<serde_j
     Ok(json!({ "devices": rows }))
 }
 
-fn devices_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn devices_get(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let student_id = get_required_str(params, "studentId")?;
     let row = conn
@@ -376,7 +394,10 @@ fn devices_get(conn: &Connection, params: &serde_json::Value) -> Result<serde_js
     Ok(json!({ "device": device }))
 }
 
-fn devices_update(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn devices_update(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     let student_id = get_required_str(params, "studentId")?;
     let device_code = params
@@ -448,7 +469,10 @@ fn devices_update(conn: &Connection, params: &serde_json::Value) -> Result<serde
     Ok(json!({ "ok": true }))
 }
 
-fn learning_skills_open(conn: &Connection, params: &serde_json::Value) -> Result<serde_json::Value, HandlerErr> {
+fn learning_skills_open(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
     let class_id = get_required_str(params, "classId")?;
     if !class_exists(conn, &class_id)? {
         return Err(HandlerErr {
@@ -748,4 +772,3 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         _ => None,
     }
 }
-
