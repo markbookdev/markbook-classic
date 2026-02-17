@@ -202,6 +202,10 @@ pub struct ParityDiagnostics {
     pub weight_method_applied: i64,
     pub selected_assessment_count: usize,
     pub selected_category_count: usize,
+    pub selected_assessments_for_stats: usize,
+    pub selected_assessments_for_calc: usize,
+    pub excluded_by_weight_count: usize,
+    pub excluded_by_category_weight_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -711,6 +715,17 @@ pub fn compute_mark_set_summary(
         category_weight_map.insert(c.name.to_ascii_lowercase(), c.weight);
     }
 
+    // CalcMethod parity: if total category weight excluding BONUS is 0, force entry weighting.
+    let bonus_cat_name = categories
+        .iter()
+        .find(|c| c.name.trim().eq_ignore_ascii_case("BONUS"))
+        .map(|c| c.name.clone());
+    let non_bonus_cat_weight_sum: f64 = categories
+        .iter()
+        .filter(|c| !c.name.trim().eq_ignore_ascii_case("BONUS"))
+        .map(|c| c.weight)
+        .sum();
+
     let mut per_student: Vec<StudentFinal> = Vec::new();
     let mut per_category_totals: HashMap<String, (f64, usize, i64, f64)> = HashMap::new();
     let mut per_category_assessment_counts: HashMap<String, i64> = HashMap::new();
@@ -723,12 +738,58 @@ pub fn compute_mark_set_summary(
         *per_category_assessment_counts.entry(key).or_insert(0) += 1;
     }
 
-    let weight_method_applied = weight_method.clamp(0, 2);
+    let weight_method_setting = weight_method.clamp(0, 2);
+    let weight_method_applied = if weight_method_setting == 1 && non_bonus_cat_weight_sum == 0.0 {
+        0
+    } else {
+        weight_method_setting
+    };
     let calc_method_applied = if (0..=4).contains(&calc_method) {
         calc_method
     } else {
         0
     };
+
+    let mut excluded_by_weight_count = 0usize;
+    let mut excluded_by_category_weight_count = 0usize;
+
+    let selected_assessments_for_stats: Vec<SummaryAssessment> = selected_assessments.clone();
+    let selected_assessments_for_calc: Vec<SummaryAssessment> = selected_assessments_for_stats
+        .iter()
+        .filter(|a| {
+            // VB6 Okay: exclude if entry weight is 0.
+            if a.weight <= 0.0 {
+                excluded_by_weight_count += 1;
+                return false;
+            }
+
+            // If category weighting is applied, exclude entries in categories with weight 0.
+            if weight_method_applied == 1 {
+                let cat = a
+                    .category_name
+                    .as_deref()
+                    .unwrap_or("Uncategorized")
+                    .to_ascii_lowercase();
+                let cat_weight = category_weight_map.get(&cat).copied().unwrap_or(0.0);
+                if cat_weight <= 0.0 {
+                    excluded_by_category_weight_count += 1;
+                    return false;
+                }
+            }
+            true
+        })
+        .cloned()
+        .collect();
+
+    // Use calc-assessments for category counts in calculation model.
+    per_category_assessment_counts.clear();
+    for a in &selected_assessments_for_calc {
+        let key = a
+            .category_name
+            .clone()
+            .unwrap_or_else(|| "Uncategorized".to_string());
+        *per_category_assessment_counts.entry(key).or_insert(0) += 1;
+    }
 
     for s in &students {
         let valid_kid = is_valid_kid(s.active, &s.mark_set_mask, mark_set_sort_order);
@@ -757,13 +818,13 @@ pub fn compute_mark_set_summary(
         // Category method.
         let mut cat_inner: HashMap<String, (f64, f64)> = HashMap::new(); // sum, denom
         let mut entries_by_cat: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // percent, entry weight
+        let mut bonus_inner: Option<(f64, f64)> = None; // sum, denom
 
-        for a in &selected_assessments {
+        for a in &selected_assessments_for_calc {
             let state = score_by_pair
                 .get(&(a.id.clone(), s.id.clone()))
                 .copied()
                 .unwrap_or(ScoreState::NoMark);
-            let assessment_weight = if a.weight > 0.0 { a.weight } else { 1.0 };
             let percent_opt = match state {
                 ScoreState::NoMark => {
                     no_mark_count += 1;
@@ -787,67 +848,72 @@ pub fn compute_mark_set_summary(
                 continue;
             };
 
-            let use_weight = if weight_method_applied == 0 {
-                assessment_weight
-            } else {
-                1.0
-            };
-            weighted_sum += percent * use_weight;
-            weighted_denom += use_weight;
+            // VB6 Wrk_EntWT: if equal weighting, included entries have weight 1; else use entry weight.
+            let entry_weight = if weight_method_applied == 2 { 1.0 } else { a.weight };
 
             let category = a
                 .category_name
                 .clone()
                 .unwrap_or_else(|| "Uncategorized".to_string());
-            let entry = cat_inner.entry(category).or_insert((0.0, 0.0));
-            entry.0 += percent * assessment_weight;
-            entry.1 += assessment_weight;
-            entries_by_cat
-                .entry(
-                    a.category_name
-                        .clone()
-                        .unwrap_or_else(|| "Uncategorized".to_string()),
-                )
-                .or_default()
-                .push((percent, assessment_weight));
+            let is_bonus = bonus_cat_name
+                .as_deref()
+                .map(|b| b.eq_ignore_ascii_case(&category))
+                .unwrap_or(false);
+
+            // BONUS does not participate in the base denominator; it is added afterward.
+            if !is_bonus {
+                weighted_sum += percent * entry_weight;
+                weighted_denom += entry_weight;
+            }
+
+            if is_bonus {
+                let entry = bonus_inner.get_or_insert((0.0, 0.0));
+                entry.0 += percent * entry_weight;
+                entry.1 += entry_weight;
+            } else {
+                let entry = cat_inner.entry(category.clone()).or_insert((0.0, 0.0));
+                entry.0 += percent * entry_weight;
+                entry.1 += entry_weight;
+                entries_by_cat.entry(category).or_default().push((percent, entry_weight));
+            }
         }
 
-        let average_mark = {
-            if weight_method_applied == 1 {
-                let mut sum = 0.0_f64;
-                let mut denom = 0.0_f64;
-                let mut sum_equal = 0.0_f64;
-                let mut denom_equal = 0.0_f64;
-
-                for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
-                    if *cat_denom <= 0.0 {
-                        continue;
-                    }
-                    let cat_avg = *cat_sum / *cat_denom;
-                    let cat_weight = category_weight_map
-                        .get(&cat_name.to_ascii_lowercase())
-                        .copied()
-                        .unwrap_or(0.0);
-                    if cat_weight > 0.0 {
-                        sum += cat_avg * cat_weight;
-                        denom += cat_weight;
-                    }
-                    sum_equal += cat_avg;
-                    denom_equal += 1.0;
-                }
-
-                if denom > 0.0 {
-                    Some(sum / denom)
-                } else if denom_equal > 0.0 {
-                    Some(sum_equal / denom_equal)
-                } else {
-                    None
-                }
-            } else if weighted_denom > 0.0 {
-                Some(weighted_sum / weighted_denom)
+        let bonus_avg = bonus_inner.and_then(|(sum, denom)| {
+            if denom > 0.0 {
+                Some(sum / denom)
             } else {
                 None
             }
+        });
+        let bonus_weight = bonus_cat_name
+            .as_deref()
+            .map(|b| category_weight_map.get(&b.to_ascii_lowercase()).copied().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let bonus_add = bonus_avg.unwrap_or(0.0) * (bonus_weight / 100.0);
+
+        let average_mark_base = if weight_method_applied == 1 {
+            // Category weighting: combine category averages by category weights.
+            let mut sum = 0.0_f64;
+            let mut denom = 0.0_f64;
+            for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
+                if *cat_denom <= 0.0 {
+                    continue;
+                }
+                let cat_avg = *cat_sum / *cat_denom;
+                let cat_weight = category_weight_map
+                    .get(&cat_name.to_ascii_lowercase())
+                    .copied()
+                    .unwrap_or(0.0);
+                if cat_weight > 0.0 {
+                    sum += cat_avg * cat_weight;
+                    denom += cat_weight;
+                }
+            }
+            if denom > 0.0 { Some(sum / denom) } else { None }
+        } else if weighted_denom > 0.0 {
+            Some(weighted_sum / weighted_denom)
+        } else {
+            None
         };
 
         let build_weighted_values = || -> Vec<(f64, f64)> {
@@ -856,12 +922,7 @@ pub fn compute_mark_set_summary(
                     .values()
                     .flat_map(|vals| {
                         vals.iter().map(|(pct, entry_wt)| {
-                            let w = if weight_method_applied == 0 {
-                                *entry_wt
-                            } else {
-                                1.0
-                            };
-                            (*pct, w)
+                            (*pct, *entry_wt)
                         })
                     })
                     .collect();
@@ -905,8 +966,7 @@ pub fn compute_mark_set_summary(
                     continue;
                 }
                 for (pct, ew) in vals {
-                    let entry_base = if weight_method_applied == 0 { *ew } else { 1.0 };
-                    out.push((*pct, cat_factor * entry_base / denom));
+                    out.push((*pct, cat_factor * *ew / denom));
                 }
             }
             out
@@ -922,8 +982,7 @@ pub fn compute_mark_set_summary(
                 let cat_vals: Vec<(f64, f64)> = vals
                     .iter()
                     .map(|(pct, ew)| {
-                        let w = if weight_method_applied == 0 { *ew } else { 1.0 };
-                        (*pct, w)
+                        (*pct, *ew)
                     })
                     .collect();
                 let cat_value = if mode {
@@ -966,14 +1025,19 @@ pub fn compute_mark_set_summary(
             }
         };
 
-        let final_mark_raw = match calc_method_applied {
+        let final_mark_raw_base = match calc_method_applied {
             1 => weighted_median(&build_weighted_values()),
             2 => weighted_mode(&build_weighted_values()),
             3 => blended_mark(true),
             4 => blended_mark(false),
-            _ => average_mark,
+            _ => average_mark_base,
         };
 
+        let final_mark_raw = match final_mark_raw_base {
+            Some(v) => Some(v + bonus_add),
+            None if bonus_avg.is_some() => Some(bonus_add),
+            None => None,
+        };
         let final_mark = final_mark_raw.map(round_off_1_decimal);
         per_student.push(StudentFinal {
             student_id: s.id.clone(),
@@ -1103,6 +1167,10 @@ pub fn compute_mark_set_summary(
                 weight_method_applied,
                 selected_assessment_count: selected_assessments.len(),
                 selected_category_count,
+                selected_assessments_for_stats: selected_assessments_for_stats.len(),
+                selected_assessments_for_calc: selected_assessments_for_calc.len(),
+                excluded_by_weight_count,
+                excluded_by_category_weight_count,
             })
         } else {
             None

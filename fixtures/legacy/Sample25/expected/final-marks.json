@@ -1,15 +1,15 @@
 {
   "MAT1": {
-    "O'Shanter, Tam": 42.4,
-    "Beach, Shelley": 66.1,
-    "Bell, Clarissa": 89.4,
-    "Wilco, Roger": 90.4
+    "O'Shanter, Tam": 42.8,
+    "Beach, Shelley": 66.2,
+    "Bell, Clarissa": 89.6,
+    "Wilco, Roger": 90.5
   },
   "SNC1": {
     "O'Shanter, Tam": 63.3,
     "Boame, Gerald": 45.9,
     "Bell, Clarissa": 82.1,
-    "D'Lionne, Daniel": 0.0
+    "D'Lionne, Daniel": 0
   },
   "MAT2": {
     "O'Shanter, Tam": 41.2,
@@ -25,7 +25,7 @@
     "Boame, Gerald": 36.5,
     "Beach, Shelley": 40.1,
     "Bell, Clarissa": 87.2,
-    "Hughes, Amber": 88.0,
+    "Hughes, Amber": 88,
     "Lowe, Glenda": 82.8,
     "Wilco, Roger": 87.7
   }
