@@ -43,6 +43,13 @@ pub struct ParsedStudent {
     pub raw_line: String,
 }
 
+pub struct ParsedLegacyUserCfg {
+    pub mode_active_levels: usize,
+    pub mode_vals: Vec<i64>,
+    pub mode_symbols: Vec<String>,
+    pub roff_default: bool,
+}
+
 pub fn parse_legacy_cl(cl_path: &Path) -> anyhow::Result<ParsedCl> {
     let bytes = std::fs::read(cl_path)?;
     let text = String::from_utf8_lossy(&bytes);
@@ -181,6 +188,123 @@ fn parse_mark_set_mask_token(token: &str) -> Option<String> {
         return Some(up);
     }
     None
+}
+
+pub fn parse_legacy_user_cfg(path: &Path) -> anyhow::Result<ParsedLegacyUserCfg> {
+    // Legacy files may contain non-UTF8 bytes (copyright symbol, etc).
+    // Decode lossily so we can still parse the numeric config values.
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+
+    let mut in_calc_section = false;
+    let mut tokens: Vec<String> = Vec::new();
+
+    for raw in text.lines() {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        if raw.starts_with('[') && raw.ends_with(']') {
+            in_calc_section = raw
+                .to_ascii_lowercase()
+                .starts_with("[calculation and levels options");
+            continue;
+        }
+        if !in_calc_section {
+            continue;
+        }
+        // VB6 writes section separators as a line containing just "".
+        if raw == "\"\"" {
+            continue;
+        }
+
+        for t in split_cfg_csv_line(raw) {
+            tokens.push(unquote_cfg_token(&t));
+        }
+    }
+
+    // VB6 dl_UserIni() layout under "[Calculation and Levels Options]":
+    // 1) ABC active levels (int)
+    // 2) 22 pairs: LGV(x), LGS$(x)
+    // 3) Mode active levels (int)
+    // 4) 22 pairs: MLevelVal(x), MLevelSymbol$(x)
+    // 5) CalcMarkDflt (int)
+    // 6) WtMethDflt (int)
+    // 7) Trigger (int)
+    // 8) RoffDflt (int)
+    let mut idx = 0usize;
+    let take_i64 = |tokens: &[String], idx: &mut usize| -> anyhow::Result<i64> {
+        let Some(s) = tokens.get(*idx) else {
+            anyhow::bail!("unexpected EOF in user cfg");
+        };
+        *idx += 1;
+        Ok(s.trim().parse::<i64>().unwrap_or(0))
+    };
+    let take_string = |tokens: &[String], idx: &mut usize| -> anyhow::Result<String> {
+        let Some(s) = tokens.get(*idx) else {
+            anyhow::bail!("unexpected EOF in user cfg");
+        };
+        *idx += 1;
+        Ok(s.to_string())
+    };
+
+    let _abc_active = take_i64(&tokens, &mut idx)?;
+    for _ in 0..22 {
+        let _ = take_i64(&tokens, &mut idx)?;
+        let _ = take_string(&tokens, &mut idx)?;
+    }
+
+    let mode_active_levels = take_i64(&tokens, &mut idx)?;
+    let mut mode_vals: Vec<i64> = Vec::with_capacity(22);
+    let mut mode_symbols: Vec<String> = Vec::with_capacity(22);
+    for _ in 0..22 {
+        mode_vals.push(take_i64(&tokens, &mut idx)?);
+        mode_symbols.push(take_string(&tokens, &mut idx)?);
+    }
+
+    // Skip CalcMarkDflt, WtMethDflt, Trigger.
+    let _ = take_i64(&tokens, &mut idx)?;
+    let _ = take_i64(&tokens, &mut idx)?;
+    let _ = take_i64(&tokens, &mut idx)?;
+    let roff_default = take_i64(&tokens, &mut idx)? != 0;
+
+    Ok(ParsedLegacyUserCfg {
+        mode_active_levels: usize::try_from(mode_active_levels).unwrap_or(4).min(21),
+        mode_vals,
+        mode_symbols,
+        roff_default,
+    })
+}
+
+fn split_cfg_csv_line(line: &str) -> Vec<String> {
+    // Minimal CSV splitter: handles quoted tokens containing commas.
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut in_quotes = false;
+    for ch in line.chars() {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+                cur.push(ch);
+            }
+            ',' if !in_quotes => {
+                out.push(cur);
+                cur = String::new();
+            }
+            _ => cur.push(ch),
+        }
+    }
+    out.push(cur);
+    out
+}
+
+fn unquote_cfg_token(token: &str) -> String {
+    let t = token.trim();
+    if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
+        t[1..t.len() - 1].to_string()
+    } else {
+        t.to_string()
+    }
 }
 
 fn parse_mark_set_def(line: &str, sort_order: usize) -> Option<ParsedMarkSetDef> {
@@ -1537,6 +1661,17 @@ mod tests {
     fn fixture_path(rel: &str) -> PathBuf {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base.join("../../").join(rel)
+    }
+
+    #[test]
+    fn parse_legacy_user_cfg_mode_levels_and_roff() {
+        let p = fixture_path("fixtures/legacy/Sample25/MB_v12_USR.CFG");
+        let cfg = parse_legacy_user_cfg(&p).expect("parse user cfg");
+        assert_eq!(cfg.mode_active_levels, 7);
+        assert_eq!(cfg.mode_vals.get(0).copied().unwrap_or(-1), 0);
+        assert_eq!(cfg.mode_vals.get(1).copied().unwrap_or(-1), 50);
+        assert_eq!(cfg.mode_vals.get(2).copied().unwrap_or(-1), 60);
+        assert!(cfg.roff_default);
     }
 
     #[test]

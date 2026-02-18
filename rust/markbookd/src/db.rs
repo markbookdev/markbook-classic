@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use serde_json::Value as JsonValue;
 use std::path::Path;
 
 pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
@@ -6,6 +7,9 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     let db_path = workspace.join("markbook.sqlite3");
     let conn = Connection::open(db_path)?;
     conn.execute("PRAGMA foreign_keys = ON", [])?;
+
+    // Workspace-scoped key/value settings. Stored as JSON for forwards compatibility.
+    ensure_workspace_settings(&conn)?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS classes(
@@ -394,6 +398,43 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     migrate_scores_statuses(&conn)?;
 
     Ok(conn)
+}
+
+fn ensure_workspace_settings(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_settings(
+            key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL
+        )",
+        [],
+    )?;
+    Ok(())
+}
+
+pub fn settings_get_json(conn: &Connection, key: &str) -> anyhow::Result<Option<JsonValue>> {
+    use rusqlite::OptionalExtension;
+    let s: Option<String> = conn
+        .query_row(
+            "SELECT value_json FROM workspace_settings WHERE key = ?",
+            [key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(s) = s else {
+        return Ok(None);
+    };
+    let v: JsonValue = serde_json::from_str(&s)?;
+    Ok(Some(v))
+}
+
+pub fn settings_set_json(conn: &Connection, key: &str, value: &JsonValue) -> anyhow::Result<()> {
+    let s = serde_json::to_string(value)?;
+    conn.execute(
+        "INSERT INTO workspace_settings(key, value_json) VALUES(?, ?)
+         ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+        (key, s),
+    )?;
+    Ok(())
 }
 
 fn ensure_students_sort_order(conn: &Connection) -> anyhow::Result<()> {
