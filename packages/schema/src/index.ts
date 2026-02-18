@@ -380,6 +380,26 @@ const CalcPerStudentSchema = z.object({
   scoredCount: z.number()
 });
 
+const CalcSettingsAppliedSchema = z.object({
+  weightMethodApplied: z.number(),
+  calcMethodApplied: z.number(),
+  roffApplied: z.boolean(),
+  modeActiveLevels: z.number(),
+  modeLevelVals: z.array(z.number())
+});
+
+const CalcPerStudentCategoryBreakdownSchema = z.object({
+  studentId: z.string(),
+  categories: z.array(
+    z.object({
+      name: z.string(),
+      value: z.number().nullable(),
+      weight: z.number(),
+      hasData: z.boolean()
+    })
+  )
+});
+
 export const CalcAssessmentStatsResultSchema = z.object({
   assessments: z.array(CalcPerAssessmentSchema)
 });
@@ -430,6 +450,8 @@ export const CalcMarkSetSummaryResultSchema = z.object({
   perAssessment: z.array(CalcPerAssessmentSchema),
   perCategory: z.array(CalcPerCategorySchema),
   perStudent: z.array(CalcPerStudentSchema),
+  settingsApplied: CalcSettingsAppliedSchema.optional(),
+  perStudentCategories: z.array(CalcPerStudentCategoryBreakdownSchema).optional(),
   parityDiagnostics: z
     .object({
       calcMethodApplied: z.number(),
