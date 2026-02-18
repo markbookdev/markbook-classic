@@ -24,8 +24,9 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Mark Set Setup: DONE (categories + assessments CRUD/reorder + mark set settings)
 - Companion import fidelity: IN PROGRESS (`.RMK/.TYP/.IDX/.R*` + `ALL!*.IDX` + `.TBK` + `.ICC` shipped)
 - Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; calc-method routing now in `calc.rs`, golden set expanded to MAT2/SNC2)
-- Playwright harness: DONE (17 specs green incl. attendance, seating, comments, bulk edit, backup/exchange, report exports)
+- Playwright harness: DONE (24 specs green + 1 packaged smoke intentionally opt-in)
 - IPC router de-monolith: DONE (`rust/markbookd/src/ipc/router.rs` is dispatch-only; no legacy fallback)
+- Packaging hardening: IN PROGRESS (sidecar staging + packaged smoke + CI matrix added)
 
 ## Deliverables (Implemented)
 - Desktop app launches in dev (`bun run dev`)
@@ -65,6 +66,21 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Purpose of snapshot:
   - lock known-good baseline before further parity extraction
   - ensure no IPC contract drift while moving calc/report handling into typed handlers
+
+### Baseline / Regression Snapshot (2026-02-18)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports renderer tests: `bun run test:reports` => PASS
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Desktop E2E regression: `bun run test:e2e` => PASS (24 passed, 1 skipped packaged smoke)
+- Packaging smoke: `bun run test:packaging` => PASS
+- Packaged app smoke: `bun run test:e2e:packaged` => PASS
+- Strict parity lane: `bun run test:parity:strict` => FAIL (expected until fresh legacy markfiles are added under `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/*.Y25`)
+- New in this snapshot:
+  - `grid.bulkUpdate` now returns optional rejection diagnostics (`rejected`, `errors[]`) without breaking the existing contract.
+  - Marks screen now supports keyboard commit navigation (Enter/Tab/Shift+Tab) with single-click mark-cell editing.
+  - Marks screen now includes an in-context remarks pane (comment set + bank quick insert + save) to avoid screen-hopping.
+  - Added DB migration snapshot fixtures/tests to protect backward compatibility (`rust/markbookd/tests/db_migration_snapshots.rs`).
+  - Added CI workflow for packaged smoke on macOS + Windows (`.github/workflows/packaged-smoke.yml`).
 
 ### Router/Report Extraction Notes
 - All `reports.*Model` methods are now handled directly in `rust/markbookd/src/ipc/handlers/reports.rs` (no legacy router fallback).

@@ -67,6 +67,7 @@ fn request_ok(
 
 #[test]
 fn generate_calc_behavior_locks_when_enabled() {
+    // Opt-in generator only. Never rewrites fixture locks unless explicitly requested.
     if std::env::var("MBC_GEN_LOCKS").ok().as_deref() != Some("1") {
         // Not a "skip" because this is an integration test binary; just a no-op.
         return;

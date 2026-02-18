@@ -14,9 +14,13 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import {
   CalcAssessmentStatsResultSchema,
   CalcMarkSetSummaryResultSchema,
+  CommentsBanksListResultSchema,
+  CommentsBanksOpenResultSchema,
+  CommentsSetsListResultSchema,
+  CommentsSetsOpenResultSchema,
+  CommentsSetsUpsertResultSchema,
   GridBulkUpdateResultSchema,
   GridGetResultSchema,
-  GridSetStateResultSchema,
   GridUpdateCellResultSchema,
   MarkSetOpenResultSchema,
   StudentsMembershipGetResultSchema
@@ -45,6 +49,37 @@ type BulkScoreEdit = {
   col: number;
   state: "scored" | "zero" | "no_mark";
   value: number | null;
+};
+
+type CommentSetMeta = {
+  id: string;
+  setNumber: number;
+  title: string;
+  fitMode: number;
+  fitFontSize: number;
+  fitWidth: number;
+  fitLines: number;
+  fitSubj: string;
+  maxChars: number;
+  isDefault: boolean;
+  bankShort: string | null;
+};
+
+type BankRow = {
+  id: string;
+  shortName: string;
+  isDefault: boolean;
+  fitProfile: string | null;
+  sourcePath: string | null;
+  entryCount: number;
+};
+
+type BankEntry = {
+  id: string;
+  sortOrder: number;
+  typeCode: string;
+  levelCode: string;
+  text: string;
 };
 
 export function MarksScreen(props: {
@@ -107,6 +142,19 @@ export function MarksScreen(props: {
   const [membershipMaskByStudentId, setMembershipMaskByStudentId] = useState<Record<string, string>>({});
   const [membershipMarkSetSortById, setMembershipMarkSetSortById] = useState<Record<string, number>>({});
 
+  const [commentSets, setCommentSets] = useState<CommentSetMeta[]>([]);
+  const [selectedCommentSetNumber, setSelectedCommentSetNumber] = useState<number | null>(null);
+  const [selectedCommentSetMeta, setSelectedCommentSetMeta] = useState<CommentSetMeta | null>(null);
+  const [remarksByStudentId, setRemarksByStudentId] = useState<Record<string, string>>({});
+  const [remarkDraft, setRemarkDraft] = useState("");
+  const [remarkDirty, setRemarkDirty] = useState(false);
+  const [remarkSaveState, setRemarkSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [remarkApplyMode, setRemarkApplyMode] = useState<"append" | "replace">("append");
+  const [banks, setBanks] = useState<BankRow[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [bankEntriesByBankId, setBankEntriesByBankId] = useState<Record<string, BankEntry[]>>({});
+  const [selectedBankEntryId, setSelectedBankEntryId] = useState<string | null>(null);
+
   const editorRef = useRef<DataEditorRef | null>(null);
   const [editingCell, setEditingCell] = useState<{
     col: number;
@@ -114,6 +162,15 @@ export function MarksScreen(props: {
     text: string;
   } | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedStudent =
+    selectedCell && selectedCell.row >= 0 && selectedCell.row < students.length
+      ? students[selectedCell.row]
+      : null;
+  const selectedStudentId = selectedStudent?.id ?? null;
+  const selectedBankEntries = selectedBankId ? bankEntriesByBankId[selectedBankId] ?? [] : [];
+  const selectedBankEntry =
+    selectedBankEntries.find((e) => e.id === selectedBankEntryId) ?? selectedBankEntries[0] ?? null;
 
   // Avoid stale filter closures in async calc refreshes.
   const calcFiltersRef = useRef(calcFilters);
@@ -212,6 +269,97 @@ export function MarksScreen(props: {
     }
   }
 
+  async function loadCommentSet(setNumber: number, availableBanks: BankRow[] = banks) {
+    const open = await requestParsed(
+      "comments.sets.open",
+      {
+        classId: props.selectedClassId,
+        markSetId: props.selectedMarkSetId,
+        setNumber
+      },
+      CommentsSetsOpenResultSchema
+    );
+    const setMeta = open.set as CommentSetMeta;
+    setSelectedCommentSetMeta(setMeta);
+    setSelectedCommentSetNumber(setMeta.setNumber);
+    setRemarksByStudentId(
+      Object.fromEntries(
+        open.remarksByStudent.map((r) => [r.studentId, r.remark])
+      )
+    );
+    const linked = setMeta.bankShort
+      ? availableBanks.find(
+          (b) => b.shortName.toUpperCase() === setMeta.bankShort?.toUpperCase()
+        )
+      : null;
+    setSelectedBankId((cur) => {
+      if (linked) return linked.id;
+      if (cur && availableBanks.some((b) => b.id === cur)) return cur;
+      return availableBanks[0]?.id ?? null;
+    });
+  }
+
+  async function refreshCommentsAndBanks() {
+    try {
+      const [setsRes, banksRes] = await Promise.all([
+        requestParsed(
+          "comments.sets.list",
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId
+          },
+          CommentsSetsListResultSchema
+        ),
+        requestParsed("comments.banks.list", {}, CommentsBanksListResultSchema)
+      ]);
+
+      const nextSets = setsRes.sets as CommentSetMeta[];
+      const nextBanks = banksRes.banks as BankRow[];
+      setCommentSets(nextSets);
+      setBanks(nextBanks);
+
+      const nextSetNumber =
+        selectedCommentSetNumber != null &&
+        nextSets.some((s) => s.setNumber === selectedCommentSetNumber)
+          ? selectedCommentSetNumber
+          : (nextSets[0]?.setNumber ?? null);
+
+      if (nextSetNumber == null) {
+        setSelectedCommentSetNumber(null);
+        setSelectedCommentSetMeta(null);
+        setRemarksByStudentId({});
+      } else {
+        await loadCommentSet(nextSetNumber, nextBanks);
+      }
+
+    } catch {
+      setCommentSets([]);
+      setSelectedCommentSetNumber(null);
+      setSelectedCommentSetMeta(null);
+      setRemarksByStudentId({});
+      setBanks([]);
+      setSelectedBankId(null);
+      setBankEntriesByBankId({});
+      setSelectedBankEntryId(null);
+    }
+  }
+
+  async function ensureBankEntriesLoaded(bankId: string) {
+    if (!bankId) return;
+    if (bankEntriesByBankId[bankId]) return;
+    const res = await requestParsed(
+      "comments.banks.open",
+      { bankId },
+      CommentsBanksOpenResultSchema
+    );
+    const entries = (res.entries as BankEntry[]).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    setBankEntriesByBankId((prev) => ({ ...prev, [bankId]: entries }));
+    setSelectedBankEntryId((cur) => {
+      if (cur && entries.some((e) => e.id === cur)) return cur;
+      return entries[0]?.id ?? null;
+    });
+  }
+
   // When type checkboxes change, derive the bitmask expected by the sidecar.
   useEffect(() => {
     const all = typesSelected.every(Boolean);
@@ -237,6 +385,48 @@ export function MarksScreen(props: {
     void refreshMembership();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.selectedClassId]);
+
+  // Load comments + banks for the current class/mark set.
+  useEffect(() => {
+    void refreshCommentsAndBanks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.selectedClassId, props.selectedMarkSetId]);
+
+  useEffect(() => {
+    if (selectedCommentSetNumber == null) return;
+    if (selectedCommentSetMeta?.setNumber === selectedCommentSetNumber) return;
+    void loadCommentSet(selectedCommentSetNumber);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCommentSetNumber]);
+
+  useEffect(() => {
+    if (!selectedBankId) {
+      setSelectedBankEntryId(null);
+      return;
+    }
+    const existing = bankEntriesByBankId[selectedBankId];
+    if (existing) {
+      setSelectedBankEntryId((cur) => {
+        if (cur && existing.some((e) => e.id === cur)) return cur;
+        return existing[0]?.id ?? null;
+      });
+      return;
+    }
+    void ensureBankEntriesLoaded(selectedBankId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBankId, bankEntriesByBankId]);
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      setRemarkDraft("");
+      setRemarkDirty(false);
+      setRemarkSaveState("idle");
+      return;
+    }
+    setRemarkDraft(remarksByStudentId[selectedStudentId] ?? "");
+    setRemarkDirty(false);
+    setRemarkSaveState("idle");
+  }, [selectedStudentId, remarksByStudentId, selectedCommentSetNumber]);
 
   function makeEditFromDisplayValue(row: number, gridCol: number, value: number | null): BulkScoreEdit {
     if (value == null) {
@@ -264,7 +454,7 @@ export function MarksScreen(props: {
     if (edits.length === 0) return;
     props.onError(null);
     try {
-      await requestParsed(
+      const res = await requestParsed(
         "grid.bulkUpdate",
         {
           classId: props.selectedClassId,
@@ -273,7 +463,23 @@ export function MarksScreen(props: {
         },
         GridBulkUpdateResultSchema
       );
-      applyEditsLocally(edits);
+
+      const failedKeys = new Set<string>(
+        (res.errors ?? []).map((e) => `${e.row}:${e.col}`)
+      );
+      const acceptedEdits =
+        failedKeys.size === 0
+          ? edits
+          : edits.filter((e) => !failedKeys.has(`${e.row}:${e.col}`));
+      applyEditsLocally(acceptedEdits);
+
+      if ((res.rejected ?? 0) > 0) {
+        const first = res.errors?.[0];
+        const firstMsg = first
+          ? ` first error at row ${first.row + 1}, col ${first.col + 1}: ${first.message}`
+          : "";
+        props.onError(`Bulk edit rejected ${res.rejected} cell(s).${firstMsg}`);
+      }
       void refreshCalcViews();
     } catch (e: any) {
       props.onError(e?.message ?? String(e));
@@ -353,6 +559,53 @@ export function MarksScreen(props: {
     await applyBulkEdits(edits);
   }
 
+  function applySelectedBankEntry() {
+    if (!selectedBankEntry) return;
+    const bankText = selectedBankEntry.text?.trim();
+    if (!bankText) return;
+    setRemarkDraft((cur) => {
+      if (remarkApplyMode === "replace") return bankText;
+      const t = cur.trim();
+      return t.length > 0 ? `${cur}${cur.endsWith(" ") ? "" : " "}${bankText}` : bankText;
+    });
+    setRemarkDirty(true);
+    setRemarkSaveState("idle");
+  }
+
+  async function saveSelectedStudentRemark() {
+    if (!selectedStudentId) return;
+    if (!selectedCommentSetMeta) return;
+    props.onError(null);
+    setRemarkSaveState("saving");
+    try {
+      await requestParsed(
+        "comments.sets.upsert",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          setNumber: selectedCommentSetMeta.setNumber,
+          title: selectedCommentSetMeta.title,
+          fitMode: selectedCommentSetMeta.fitMode,
+          fitFontSize: selectedCommentSetMeta.fitFontSize,
+          fitWidth: selectedCommentSetMeta.fitWidth,
+          fitLines: selectedCommentSetMeta.fitLines,
+          fitSubj: selectedCommentSetMeta.fitSubj,
+          maxChars: selectedCommentSetMeta.maxChars,
+          isDefault: selectedCommentSetMeta.isDefault,
+          bankShort: selectedCommentSetMeta.bankShort,
+          remarksByStudent: [{ studentId: selectedStudentId, remark: remarkDraft }]
+        },
+        CommentsSetsUpsertResultSchema
+      );
+      setRemarksByStudentId((prev) => ({ ...prev, [selectedStudentId]: remarkDraft }));
+      setRemarkDirty(false);
+      setRemarkSaveState("saved");
+    } catch (e: any) {
+      setRemarkSaveState("idle");
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   function parsePastedValue(raw: string): { state: "scored" | "zero" | "no_mark"; value: number | null } | null {
     const t = raw.trim();
     if (t === "") return { state: "no_mark", value: null };
@@ -420,6 +673,7 @@ export function MarksScreen(props: {
       } catch {
         // no-op
       }
+      setSelectedCell({ row, col });
       setEditingCell({ col, row, text });
       return true;
     };
@@ -576,6 +830,15 @@ export function MarksScreen(props: {
     });
   }, [editingCell?.col, editingCell?.row]);
 
+  function openEditorAt(col: number, row: number) {
+    if (col <= 0 || col > assessments.length) return;
+    if (row < 0 || row >= students.length) return;
+    const cur = cells[row]?.[col - 1] ?? null;
+    const text = cur == null ? "" : String(cur);
+    editorRef.current?.scrollTo(col, row);
+    setEditingCell({ col, row, text });
+  }
+
   async function handleCellEdited(
     cell: readonly [number, number],
     newValue: EditableGridCell
@@ -669,7 +932,7 @@ export function MarksScreen(props: {
     }
   }
 
-  async function commitEditingCell() {
+  async function commitEditingCell(move: "none" | "down" | "right" | "left" = "none") {
     if (!editingCell) return;
     const { col, row } = editingCell;
     if (col === 0) return;
@@ -716,8 +979,24 @@ export function MarksScreen(props: {
         return next;
       });
       void refreshCalcViews();
-      setEditingCell(null);
-      props.onGridEvent?.(`committed r${row} c${col}`);
+
+      let nextCol = col;
+      let nextRow = row;
+      if (move === "down") {
+        nextRow = Math.min(students.length - 1, row + 1);
+      } else if (move === "right") {
+        nextCol = Math.min(assessments.length, col + 1);
+      } else if (move === "left") {
+        nextCol = Math.max(1, col - 1);
+      }
+
+      setSelectedCell({ row: nextRow, col: nextCol });
+      if (move === "none" || (nextRow === row && nextCol === col)) {
+        setEditingCell(null);
+      } else {
+        openEditorAt(nextCol, nextRow);
+      }
+      props.onGridEvent?.(`committed r${row} c${col} move=${move}`);
     } catch (e: any) {
       props.onError(e?.message ?? String(e));
     }
@@ -964,6 +1243,141 @@ export function MarksScreen(props: {
                     </table>
                   )}
                 </div>
+
+                <div style={{ marginTop: 10, borderTop: "1px solid #eee", paddingTop: 8 }}>
+                  <div style={{ color: "#666", fontSize: 10, marginBottom: 6 }}>Remarks</div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                    <select
+                      data-testid="marks-remark-set-select"
+                      value={selectedCommentSetNumber == null ? "" : String(selectedCommentSetNumber)}
+                      onChange={(e) => {
+                        const n = Number(e.currentTarget.value);
+                        setSelectedCommentSetNumber(Number.isFinite(n) ? n : null);
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      {commentSets.length === 0 ? (
+                        <option value="">No comment sets</option>
+                      ) : (
+                        commentSets.map((set) => (
+                          <option key={set.setNumber} value={set.setNumber}>
+                            Set {set.setNumber}: {set.title}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <select
+                      data-testid="marks-remark-append-toggle"
+                      value={remarkApplyMode}
+                      onChange={(e) =>
+                        setRemarkApplyMode(e.currentTarget.value === "replace" ? "replace" : "append")
+                      }
+                    >
+                      <option value="append">Append</option>
+                      <option value="replace">Replace</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                    <select
+                      data-testid="marks-remark-bank-select"
+                      value={selectedBankId ?? ""}
+                      onChange={(e) => setSelectedBankId(e.currentTarget.value || null)}
+                      style={{ flex: 1 }}
+                    >
+                      {banks.length === 0 ? (
+                        <option value="">No banks</option>
+                      ) : (
+                        banks.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.shortName} ({b.entryCount})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <button
+                      data-testid="marks-remark-apply-btn"
+                      disabled={!selectedBankEntry}
+                      onClick={() => applySelectedBankEntry()}
+                    >
+                      Insert
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: 6,
+                      maxHeight: 88,
+                      overflow: "auto",
+                      padding: 4,
+                      marginBottom: 6
+                    }}
+                  >
+                    {selectedBankEntries.length === 0 ? (
+                      <div style={{ color: "#888", fontSize: 11, padding: 4 }}>No bank entries</div>
+                    ) : (
+                      selectedBankEntries.slice(0, 20).map((entry) => (
+                        <button
+                          key={entry.id}
+                          data-testid={`marks-remark-entry-${entry.id}`}
+                          onClick={() => {
+                            setSelectedBankEntryId(entry.id);
+                            const bankText = entry.text?.trim();
+                            if (!bankText) return;
+                            setRemarkDraft((cur) => {
+                              if (remarkApplyMode === "replace") return bankText;
+                              const t = cur.trim();
+                              return t.length > 0
+                                ? `${cur}${cur.endsWith(" ") ? "" : " "}${bankText}`
+                                : bankText;
+                            });
+                            setRemarkDirty(true);
+                            setRemarkSaveState("idle");
+                          }}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            textAlign: "left",
+                            border: "1px solid #ddd",
+                            borderRadius: 4,
+                            margin: "0 0 4px 0",
+                            padding: "4px 6px",
+                            background: selectedBankEntryId === entry.id ? "#eef5ff" : "#fff",
+                            fontSize: 11
+                          }}
+                        >
+                          {entry.text}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <textarea
+                    data-testid="marks-remark-textarea"
+                    value={remarkDraft}
+                    onChange={(e) => {
+                      setRemarkDraft(e.currentTarget.value);
+                      setRemarkDirty(true);
+                      setRemarkSaveState("idle");
+                    }}
+                    rows={4}
+                    style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
+                    placeholder="Remark for selected student"
+                  />
+                  <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      data-testid="marks-remark-save-btn"
+                      disabled={!selectedStudentId || !selectedCommentSetMeta || !remarkDirty || remarkSaveState === "saving"}
+                      onClick={() => void saveSelectedStudentRemark()}
+                    >
+                      {remarkSaveState === "saving" ? "Saving..." : "Save Remark"}
+                    </button>
+                    <span style={{ color: "#666", fontSize: 11 }}>
+                      {remarkSaveState === "saved" ? "Saved" : remarkDirty ? "Unsaved changes" : ""}
+                    </span>
+                  </div>
+                </div>
               </div>
             );
           })()
@@ -985,19 +1399,23 @@ export function MarksScreen(props: {
         cellActivationBehavior="double-click"
         editOnType={false}
         onCellClicked={(cell) => {
-          props.onGridEvent?.(`clicked r${cell[1]} c${cell[0]}`);
-          setSelectedCell({ row: cell[1], col: cell[0] });
+          const [col, row] = cell;
+          props.onGridEvent?.(`clicked r${row} c${col}`);
+          setSelectedCell({ row, col });
           editorRef.current?.focus();
+          if (col > 0 && col <= assessments.length) {
+            // Mark columns edit on single-click for classroom-speed entry.
+            openEditorAt(col, row);
+          } else {
+            setEditingCell(null);
+          }
         }}
         onCellActivated={(cell) => {
           const [col, row] = cell;
           props.onGridEvent?.(`activated r${row} c${col}`);
           setSelectedCell({ row, col });
           if (col === 0 || col === assessments.length + 1) return;
-          const cur = cells[row]?.[col - 1] ?? null;
-          const text = cur == null ? "" : String(cur);
-          editorRef.current?.scrollTo(col, row);
-          setEditingCell({ col, row, text });
+          openEditorAt(col, row);
         }}
         // Safety: if built-in overlay ever triggers, keep it wired.
         onCellEdited={(cell, newValue) => {
@@ -1043,7 +1461,10 @@ export function MarksScreen(props: {
               e.stopPropagation();
               if (e.key === "Enter") {
                 e.preventDefault();
-                void commitEditingCell();
+                void commitEditingCell("down");
+              } else if (e.key === "Tab") {
+                e.preventDefault();
+                void commitEditingCell(e.shiftKey ? "left" : "right");
               } else if (e.key === "Escape") {
                 e.preventDefault();
                 setEditingCell(null);

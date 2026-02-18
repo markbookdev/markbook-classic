@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "Parity fixture requirements for Sample25.",
+  "required": {
+    "regression": [
+      "calc-behavior-locks.json",
+      "final-marks.json"
+    ],
+    "strict": [
+      "fresh-markfiles/MB8D25/MAT18D.Y25",
+      "fresh-markfiles/MB8D25/MAT28D.Y25",
+      "fresh-markfiles/MB8D25/MAT38D.Y25",
+      "fresh-markfiles/MB8D25/SNC18D.Y25",
+      "fresh-markfiles/MB8D25/SNC28D.Y25",
+      "fresh-markfiles/MB8D25/SNC38D.Y25"
+    ]
+  }
+}
+

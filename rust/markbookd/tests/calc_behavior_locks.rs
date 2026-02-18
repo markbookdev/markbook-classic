@@ -68,9 +68,16 @@ fn request_ok(
 
 #[test]
 fn sample25_calc_behavior_locks_hold() {
+    // NOTE: This suite is intentionally a regression lock, not a strict legacy-truth lock.
+    // It guards against accidental drift in the current calc engine behavior until fresh
+    // legacy exports are available and promoted into strict parity fixtures.
     let locks_path = fixture_path("fixtures/legacy/Sample25/expected/calc-behavior-locks.json");
     let text = fs::read_to_string(&locks_path).expect("read calc-behavior-locks.json");
     let locks: serde_json::Value = serde_json::from_str(&text).expect("parse json");
+    let _version = locks
+        .get("version")
+        .and_then(|v| v.as_i64())
+        .expect("calc-behavior-locks.json must include numeric version");
 
     let marksets_obj = locks
         .get("markSets")

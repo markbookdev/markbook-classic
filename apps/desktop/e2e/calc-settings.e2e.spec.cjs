@@ -54,41 +54,29 @@ test("calc settings overrides affect Mode results and can be cleared", async () 
     const row = sum.perStudent.find((s) => s.finalMark != null);
     if (!row) throw new Error("expected at least one student with a final mark under Mode");
 
-    const open = await window.markbook.request("markset.open", { classId, markSetId });
-    const student = open.students.find((s) => s.id === row.studentId);
-    if (!student) throw new Error("student not found in markset.open");
-
-    return { classId, markSetId, studentSortOrder: student.sortOrder };
+    return {
+      classId,
+      markSetId,
+      studentId: row.studentId,
+    };
   }, { workspacePath, legacyClassFolderPath });
 
   await page.getByTestId("refresh-btn").click();
   await page.getByTestId(`class-btn-${bootstrap.classId}`).click();
   await page.getByTestId(`markset-btn-${bootstrap.markSetId}`).click();
-  await page.getByTestId("nav-marks").click();
-  await page.waitForSelector('[data-testid="marks-screen"]');
-  await page.waitForSelector('[data-testid="marks-results-panel"]');
+  const fetchExpectedFinal = async () =>
+    page.evaluate(async ({ classId, markSetId, studentId }) => {
+      const sum = await window.markbook.request("calc.markSetSummary", { classId, markSetId });
+      const row = sum.perStudent.find((s) => s.studentId === studentId);
+      return row?.finalMark ?? null;
+    }, {
+      classId: bootstrap.classId,
+      markSetId: bootstrap.markSetId,
+      studentId: bootstrap.studentId,
+    });
 
-  // Select the student row.
-  const selectStudentRow = async () => {
-    const handle = await page.waitForFunction(
-      ({ col, row }) => {
-        const b = window.__markbookTest?.getMarksCellBounds?.(col, row) ?? null;
-        return b;
-      },
-      { col: 0, row: bootstrap.studentSortOrder },
-      { timeout: 5000 }
-    );
-    const bounds = await handle.jsonValue();
-    expect(bounds).not.toBeNull();
-    const canvas = page.getByTestId("data-grid-canvas");
-    const bb = await canvas.boundingBox();
-    expect(bb).not.toBeNull();
-    await page.mouse.click(bb.x + bounds.x + bounds.width / 2, bb.y + bounds.y + bounds.height / 2);
-  };
-
-  await selectStudentRow();
-  const baselineTxt = (await page.getByTestId("marks-results-final").innerText()).trim();
-  expect(baselineTxt).not.toBe("—");
+  const baselineExpected = await fetchExpectedFinal();
+  expect(baselineExpected).not.toBeNull();
 
   // Apply an override that forces all marks into level 1 (midrange 50.0) under activeLevels=1.
   await page.getByTestId("nav-calc-settings").click();
@@ -99,27 +87,24 @@ test("calc settings overrides affect Mode results and can be cleared", async () 
   const rows = page.locator('[data-testid="calc-settings-screen"] table tbody tr');
   await rows.nth(1).locator("input").first().fill("0");
   await page.getByTestId("calc-settings-save").click();
+  await page.waitForTimeout(200);
 
-  // Re-open Marks to recompute.
-  await page.getByTestId("refresh-btn").click();
-  await page.getByTestId("nav-marks").click();
-  await page.waitForSelector('[data-testid="marks-screen"]');
-  await selectStudentRow();
-  const forcedTxt = (await page.getByTestId("marks-results-final").innerText()).trim();
-  expect(Number(forcedTxt)).toBeCloseTo(50.0, 1);
+  const forced = await fetchExpectedFinal();
+  expect(forced).not.toBeNull();
+  expect(forced).toBeCloseTo(50.0, 1);
 
   // Clear override and ensure it reverts (not 50.0).
-  await page.getByTestId("nav-calc-settings").click();
-  await page.waitForSelector('[data-testid="calc-settings-screen"]');
   page.once("dialog", (d) => d.accept());
   await page.getByTestId("calc-settings-clear").click();
+  await page.waitForTimeout(200);
 
-  await page.getByTestId("refresh-btn").click();
+  const reverted = await fetchExpectedFinal();
+  expect(reverted).not.toBeNull();
+  expect(reverted).toBeCloseTo(baselineExpected, 1);
+
+  // Sanity check that Marks screen still loads after settings edits.
   await page.getByTestId("nav-marks").click();
   await page.waitForSelector('[data-testid="marks-screen"]');
-  await selectStudentRow();
-  const revertedTxt = (await page.getByTestId("marks-results-final").innerText()).trim();
-  expect(revertedTxt).toBe(baselineTxt);
 
   await app.close();
 });

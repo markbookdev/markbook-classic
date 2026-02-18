@@ -401,42 +401,111 @@ fn handle_grid_bulk_update(state: &mut AppState, req: &Request) -> serde_json::V
     };
 
     let mut updated: usize = 0;
-    for edit in edits_arr {
+    let mut errors: Vec<serde_json::Value> = Vec::new();
+
+    for (i, edit) in edits_arr.iter().enumerate() {
         let Some(obj) = edit.as_object() else {
+            errors.push(json!({
+                "row": -1,
+                "col": -1,
+                "code": "bad_params",
+                "message": format!("edit at index {} must be an object", i),
+            }));
             continue;
         };
-        let Some(row) = obj.get("row").and_then(|v| v.as_i64()) else {
-            continue;
+
+        let row = match obj.get("row").and_then(|v| v.as_i64()) {
+            Some(v) if v >= 0 => v,
+            _ => {
+                errors.push(json!({
+                    "row": -1,
+                    "col": -1,
+                    "code": "bad_params",
+                    "message": format!("edit at index {} missing/invalid row", i),
+                }));
+                continue;
+            }
         };
-        let Some(col) = obj.get("col").and_then(|v| v.as_i64()) else {
-            continue;
+
+        let col = match obj.get("col").and_then(|v| v.as_i64()) {
+            Some(v) if v >= 0 => v,
+            _ => {
+                errors.push(json!({
+                    "row": row,
+                    "col": -1,
+                    "code": "bad_params",
+                    "message": format!("edit at index {} missing/invalid col", i),
+                }));
+                continue;
+            }
         };
-        if row < 0 || col < 0 {
-            continue;
-        }
 
         let state_value = obj.get("state").and_then(|v| v.as_str());
         let value = obj.get("value").and_then(|v| v.as_f64());
 
         let (raw_value, status) = match resolve_score_state(state_value, value) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                errors.push(json!({
+                    "row": row,
+                    "col": col,
+                    "code": e.code,
+                    "message": e.message,
+                }));
+                continue;
+            }
         };
+
         let student_id = match resolve_student_id_by_row(conn, &class_id, row) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                errors.push(json!({
+                    "row": row,
+                    "col": col,
+                    "code": e.code,
+                    "message": e.message,
+                }));
+                continue;
+            }
         };
         let assessment_id = match resolve_assessment_id_by_col(conn, &mark_set_id, col) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                errors.push(json!({
+                    "row": row,
+                    "col": col,
+                    "code": e.code,
+                    "message": e.message,
+                }));
+                continue;
+            }
         };
 
-        if upsert_score(conn, &assessment_id, &student_id, raw_value, status).is_ok() {
-            updated += 1;
+        match upsert_score(conn, &assessment_id, &student_id, raw_value, status) {
+            Ok(()) => updated += 1,
+            Err(e) => errors.push(json!({
+                "row": row,
+                "col": col,
+                "code": e.code,
+                "message": e.message,
+            })),
         }
     }
 
-    ok(&req.id, json!({ "ok": true, "updated": updated }))
+    let rejected = errors.len();
+    let mut result = json!({ "ok": true, "updated": updated });
+    if rejected > 0 {
+        result
+            .as_object_mut()
+            .expect("result should be object")
+            .insert("rejected".into(), json!(rejected));
+        result
+            .as_object_mut()
+            .expect("result should be object")
+            .insert("errors".into(), json!(errors));
+    }
+
+    ok(&req.id, result)
 }
 
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {

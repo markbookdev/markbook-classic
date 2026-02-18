@@ -84,15 +84,20 @@ test("students membership toggle affects calc and persists", async () => {
   await page.waitForSelector('[data-testid="marks-results-panel"]');
 
   // Click student row cell (col 0, row=sortOrder) to drive results panel.
-  const bounds = await page.evaluate(async ({ col, row }) => {
-    return window.__markbookTest?.getMarksCellBounds?.(col, row) ?? null;
-  }, { col: 0, row: bootstrap.studentSortOrder });
-  expect(bounds).not.toBeNull();
-  const canvas = page.getByTestId("data-grid-canvas");
-  const bb = await canvas.boundingBox();
-  expect(bb).not.toBeNull();
-  // bounds are relative to the grid; offset into canvas bounds.
-  await page.mouse.click(bb.x + bounds.x + bounds.width / 2, bb.y + bounds.y + bounds.height / 2);
+  const selectedViaHarness = await page.evaluate(({ row }) => {
+    return window.__markbookTest?.openMarksCellEditor?.(1, row) ?? false;
+  }, { row: bootstrap.studentSortOrder });
+  if (!selectedViaHarness) {
+    const bounds = await page.evaluate(({ col, row }) => {
+      return window.__markbookTest?.getMarksCellBounds?.(col, row) ?? null;
+    }, { col: 0, row: bootstrap.studentSortOrder });
+    expect(bounds).not.toBeNull();
+    const canvas = page.getByTestId("data-grid-canvas");
+    const bb = await canvas.boundingBox();
+    expect(bb).not.toBeNull();
+    // bounds are relative to the grid; offset into canvas bounds.
+    await page.mouse.click(bb.x + bounds.x + bounds.width / 2, bb.y + bounds.y + bounds.height / 2);
+  }
 
   const finalTxt = (await page.getByTestId("marks-results-final").innerText()).trim();
   expect(finalTxt).toBe("—");

@@ -119,7 +119,18 @@ export const GridSetStateResultSchema = z.object({
 
 export const GridBulkUpdateResultSchema = z.object({
   ok: z.literal(true),
-  updated: z.number()
+  updated: z.number(),
+  rejected: z.number().optional(),
+  errors: z
+    .array(
+      z.object({
+        row: z.number(),
+        col: z.number(),
+        code: z.string(),
+        message: z.string()
+      })
+    )
+    .optional()
 });
 
 export const ReportsMarkSetGridModelResultSchema = z.object({

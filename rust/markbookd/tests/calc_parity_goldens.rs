@@ -72,9 +72,8 @@ fn request(
 #[test]
 fn sample25_named_students_match_locked_final_mark_goldens() {
     // NOTE: This is a regression lock against the current calc engine implementation.
-    // Until we can refresh these values from a "known-good" legacy export workflow, treat
-    // `fixtures/legacy/Sample25/expected/final-marks.json` as a stability gate, not a
-    // source-of-truth parity oracle.
+    // `final-marks.json` is intentionally treated as a stability gate (not strict legacy-truth)
+    // until fresh legacy export outputs are available and promoted into strict fixtures.
     let workspace = temp_dir("markbook-calc-parity");
     let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
     let expected_text = std::fs::read_to_string(fixture_path(
