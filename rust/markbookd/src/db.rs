@@ -437,6 +437,11 @@ pub fn settings_set_json(conn: &Connection, key: &str, value: &JsonValue) -> any
     Ok(())
 }
 
+pub fn settings_delete(conn: &Connection, key: &str) -> anyhow::Result<()> {
+    conn.execute("DELETE FROM workspace_settings WHERE key = ?", [key])?;
+    Ok(())
+}
+
 fn ensure_students_sort_order(conn: &Connection) -> anyhow::Result<()> {
     // If the column already exists, we're done.
     if table_has_column(conn, "students", "sort_order")? {

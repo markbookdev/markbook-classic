@@ -316,8 +316,12 @@ fn default_mode_config() -> ModeConfig {
 
 fn load_mode_config(conn: &Connection) -> Result<ModeConfig, CalcError> {
     let mut cfg = default_mode_config();
-    let mode = db::settings_get_json(conn, "user_cfg.mode_levels")
+    let mut mode = db::settings_get_json(conn, "user_cfg.override.mode_levels")
         .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    if mode.is_none() {
+        mode = db::settings_get_json(conn, "user_cfg.mode_levels")
+            .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    }
     if let Some(v) = mode {
         if let Some(obj) = v.as_object() {
             if let Some(n) = obj.get("activeLevels").and_then(|v| v.as_u64()) {
@@ -335,8 +339,12 @@ fn load_mode_config(conn: &Connection) -> Result<ModeConfig, CalcError> {
             }
         }
     }
-    let roff = db::settings_get_json(conn, "user_cfg.roff")
+    let mut roff = db::settings_get_json(conn, "user_cfg.override.roff")
         .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    if roff.is_none() {
+        roff = db::settings_get_json(conn, "user_cfg.roff")
+            .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    }
     if let Some(v) = roff {
         if let Some(obj) = v.as_object() {
             if let Some(b) = obj.get("roff").and_then(|v| v.as_bool()) {

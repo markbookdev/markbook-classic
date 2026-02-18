@@ -21,6 +21,7 @@ import { BackupScreen } from "../screens/BackupScreen";
 import { ExchangeScreen } from "../screens/ExchangeScreen";
 import { LoanedItemsScreen } from "../screens/LoanedItemsScreen";
 import { DeviceMappingsScreen } from "../screens/DeviceMappingsScreen";
+import { CalcSettingsScreen } from "../screens/CalcSettingsScreen";
 
 type Screen =
   | "dashboard"
@@ -34,6 +35,7 @@ type Screen =
   | "learning_skills"
   | "loaned_items"
   | "device_mappings"
+  | "calc_settings"
   | "backup"
   | "exchange";
 
@@ -419,6 +421,12 @@ export function AppShell() {
               >
                 Device Mappings
               </button>
+              <button
+                data-testid="nav-calc-settings"
+                onClick={() => setScreen("calc_settings")}
+              >
+                Calc Settings
+              </button>
               <button data-testid="nav-backup" onClick={() => setScreen("backup")}>
                 Backup
               </button>
@@ -497,6 +505,8 @@ export function AppShell() {
             <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "learning_skills" ? (
             <LearningSkillsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "calc_settings" ? (
+            <CalcSettingsScreen onError={setSidecarError} />
           ) : screen === "loaned_items" ? (
             <LoanedItemsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "device_mappings" ? (
