@@ -3,6 +3,7 @@ import {
   StudentsCreateResultSchema,
   StudentsDeleteResultSchema,
   StudentsListResultSchema,
+  StudentsMembershipBulkSetResultSchema,
   StudentsMembershipGetResultSchema,
   StudentsMembershipSetResultSchema,
   StudentsReorderResultSchema,
@@ -237,21 +238,35 @@ export function StudentsScreen(props: {
     setMembershipLoading(true);
     props.onError(null);
     try {
-      for (const s of membershipStudents) {
-        const idx = ms.sortOrder;
-        const ch = s.mask?.[idx] ?? "1";
-        const checked = ch === "1";
-        if (checked === enabled) continue;
-        const res = await requestParsed(
-          "students.membership.set",
-          { classId: props.selectedClassId, studentId: s.id, markSetId, enabled },
-          StudentsMembershipSetResultSchema
-        );
-        setMembershipStudents((prev) =>
-          prev.map((row) => (row.id === s.id ? { ...row, mask: res.mask } : row))
+      const idx = ms.sortOrder;
+      const updates = membershipStudents
+        .map((s) => {
+          const ch = s.mask?.[idx] ?? "1";
+          const checked = ch === "1";
+          return { studentId: s.id, needsUpdate: checked !== enabled };
+        })
+        .filter((x) => x.needsUpdate)
+        .map((x) => ({ studentId: x.studentId, enabled }));
+
+      if (updates.length === 0) {
+        return;
+      }
+
+      const result = await requestParsed(
+        "students.membership.bulkSet",
+        { classId: props.selectedClassId, markSetId, updates },
+        StudentsMembershipBulkSetResultSchema
+      );
+      if ((result.failed?.length ?? 0) > 0) {
+        const first = result.failed?.[0];
+        props.onError(
+          `Updated ${result.updated}; failed ${result.failed?.length}: ${first?.message ?? "unknown"}`
         );
       }
-      await props.onChanged?.();
+      await loadMembership();
+      if (!result.failed || result.failed.length === 0) {
+        await props.onChanged?.();
+      }
     } catch (e: any) {
       props.onError(e?.message ?? String(e));
       await loadMembership();

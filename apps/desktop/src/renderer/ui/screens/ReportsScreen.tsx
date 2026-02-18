@@ -38,7 +38,21 @@ export function ReportsScreen(props: {
   const [exportingClassListPdf, setExportingClassListPdf] = useState(false);
   const [exportingLearningSkillsPdf, setExportingLearningSkillsPdf] = useState(false);
   const [students, setStudents] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentScope, setStudentScope] = useState<"all" | "active" | "valid">("all");
+  const [reportFilters, setReportFilters] = useState<{
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  }>({
+    term: null,
+    categoryName: null,
+    typesMask: null
+  });
+  const [typesSelected, setTypesSelected] = useState<[boolean, boolean, boolean, boolean, boolean]>(
+    [true, true, true, true, true]
+  );
   const [attendanceMonth, setAttendanceMonth] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
@@ -55,6 +69,15 @@ export function ReportsScreen(props: {
         );
         if (cancelled) return;
         setStudents(open.students.map((s) => ({ id: s.id, displayName: s.displayName })));
+        const cats = Array.from(
+          new Set(
+            open.assessments
+              .map((a) => a.categoryName ?? "")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+        setCategoryOptions(cats);
         setSelectedStudentId((cur) => {
           if (cur && open.students.some((s) => s.id === cur)) return cur;
           return open.students[0]?.id ?? null;
@@ -62,6 +85,7 @@ export function ReportsScreen(props: {
       } catch {
         if (cancelled) return;
         setStudents([]);
+        setCategoryOptions([]);
         setSelectedStudentId(null);
       }
     }
@@ -71,13 +95,29 @@ export function ReportsScreen(props: {
     };
   }, [props.selectedClassId, props.selectedMarkSetId]);
 
+  React.useEffect(() => {
+    let mask = 0;
+    for (let i = 0; i < typesSelected.length; i += 1) {
+      if (typesSelected[i]) mask |= 1 << i;
+    }
+    setReportFilters((cur) => ({
+      ...cur,
+      typesMask: mask === 0 || mask === 31 ? null : mask
+    }));
+  }, [typesSelected]);
+
   async function exportMarkSetGridPdf() {
     setExportingGridPdf(true);
     props.onError(null);
     try {
       const model = await requestParsed(
         "reports.markSetGridModel",
-        { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          filters: reportFilters,
+          studentScope
+        },
         ReportsMarkSetGridModelResultSchema
       );
       const html = renderMarkSetGridReportHtml(model);
@@ -98,7 +138,12 @@ export function ReportsScreen(props: {
     try {
       const model = await requestParsed(
         "reports.markSetSummaryModel",
-        { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          filters: reportFilters,
+          studentScope
+        },
         ReportsMarkSetSummaryModelResultSchema
       );
       const html = renderMarkSetSummaryReportHtml(model);
@@ -119,7 +164,12 @@ export function ReportsScreen(props: {
     try {
       const model = await requestParsed(
         "reports.categoryAnalysisModel",
-        { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          filters: reportFilters,
+          studentScope
+        },
         ReportsCategoryAnalysisModelResultSchema
       );
       const html = renderCategoryAnalysisReportHtml(model);
@@ -144,7 +194,9 @@ export function ReportsScreen(props: {
         {
           classId: props.selectedClassId,
           markSetId: props.selectedMarkSetId,
-          studentId: selectedStudentId
+          studentId: selectedStudentId,
+          filters: reportFilters,
+          studentScope
         },
         ReportsStudentSummaryModelResultSchema
       );
@@ -224,6 +276,108 @@ export function ReportsScreen(props: {
   return (
     <div data-testid="reports-screen" style={{ padding: 24 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Reports</div>
+      <div
+        data-testid="reports-filters-panel"
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: 10,
+          marginBottom: 14,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8
+        }}
+      >
+        <div style={{ fontWeight: 600 }}>Marks Filters (applies to mark-set reports)</div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Scope
+            <select
+              data-testid="reports-filter-student-scope"
+              value={studentScope}
+              onChange={(e) =>
+                setStudentScope(
+                  e.currentTarget.value === "active"
+                    ? "active"
+                    : e.currentTarget.value === "valid"
+                      ? "valid"
+                      : "all"
+                )
+              }
+            >
+              <option value="all">All students</option>
+              <option value="active">Active students</option>
+              <option value="valid">Valid for mark set</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Term
+            <select
+              data-testid="reports-filter-term"
+              value={reportFilters.term == null ? "ALL" : String(reportFilters.term)}
+              onChange={(e) =>
+                setReportFilters((cur) => ({
+                  ...cur,
+                  term: e.currentTarget.value === "ALL" ? null : Number(e.currentTarget.value)
+                }))
+              }
+            >
+              <option value="ALL">ALL</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Category
+            <select
+              data-testid="reports-filter-category"
+              value={reportFilters.categoryName ?? "ALL"}
+              onChange={(e) =>
+                setReportFilters((cur) => ({
+                  ...cur,
+                  categoryName:
+                    e.currentTarget.value === "ALL" ? null : e.currentTarget.value
+                }))
+              }
+            >
+              <option value="ALL">ALL</option>
+              {categoryOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {[
+            ["Summative", 0],
+            ["Formative", 1],
+            ["Diagnostic", 2],
+            ["Self", 3],
+            ["Peer", 4]
+          ].map(([label, idx]) => (
+            <label key={String(idx)} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                data-testid={`reports-filter-type-${idx}`}
+                type="checkbox"
+                checked={typesSelected[idx as number]}
+                onChange={(e) => {
+                  const checked = e.currentTarget.checked;
+                  setTypesSelected((cur) => {
+                    const next = [...cur] as [boolean, boolean, boolean, boolean, boolean];
+                    next[idx as number] = checked;
+                    return next;
+                  });
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div style={{ color: "#444", marginBottom: 8 }}>Print Mark Set Grid</div>
       <button
         data-testid="export-markset-grid-pdf-btn"

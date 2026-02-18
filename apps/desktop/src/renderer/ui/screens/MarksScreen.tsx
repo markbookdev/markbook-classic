@@ -18,7 +18,7 @@ import {
   CommentsBanksOpenResultSchema,
   CommentsSetsListResultSchema,
   CommentsSetsOpenResultSchema,
-  CommentsSetsUpsertResultSchema,
+  CommentsRemarksUpsertOneResultSchema,
   GridBulkUpdateResultSchema,
   GridGetResultSchema,
   GridUpdateCellResultSchema,
@@ -26,6 +26,7 @@ import {
   StudentsMembershipGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
+import { expandWindow, tilesForWindow, type GridTile } from "../state/marksGridCache";
 
 type StudentRow = {
   id: string;
@@ -88,6 +89,11 @@ export function MarksScreen(props: {
   onError: (msg: string | null) => void;
   onGridEvent?: (msg: string) => void;
 }) {
+  const GRID_TILE_ROWS = 40;
+  const GRID_TILE_COLS = 8;
+  const GRID_PREFETCH_ROWS = 20;
+  const GRID_PREFETCH_COLS = 6;
+
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
   const [cells, setCells] = useState<Array<Array<number | null>>>([]);
@@ -162,6 +168,10 @@ export function MarksScreen(props: {
     text: string;
   } | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const loadedTileKeysRef = useRef<Set<string>>(new Set());
+  const inflightTileKeysRef = useRef<Set<string>>(new Set());
+  const requestEpochRef = useRef(0);
+  const [gridGetRequests, setGridGetRequests] = useState(0);
 
   const selectedStudent =
     selectedCell && selectedCell.row >= 0 && selectedCell.row < students.length
@@ -177,6 +187,108 @@ export function MarksScreen(props: {
   useEffect(() => {
     calcFiltersRef.current = calcFilters;
   }, [calcFilters]);
+
+  function resetGridCache() {
+    loadedTileKeysRef.current = new Set();
+    inflightTileKeysRef.current = new Set();
+    setGridGetRequests(0);
+  }
+
+  function applyGridSlice(
+    prev: Array<Array<number | null>>,
+    tile: GridTile,
+    slice: Array<Array<number | null>>
+  ): Array<Array<number | null>> {
+    if (prev.length === 0) return prev;
+
+    const next = prev.slice();
+    const rowLimit = Math.min(tile.rowCount, slice.length);
+    for (let r = 0; r < rowLimit; r++) {
+      const rowIdx = tile.rowStart + r;
+      if (rowIdx < 0 || rowIdx >= next.length) continue;
+      const rowPrev = next[rowIdx] ? next[rowIdx].slice() : [];
+      const source = slice[r] ?? [];
+      const colLimit = Math.min(tile.colCount, source.length);
+      for (let c = 0; c < colLimit; c++) {
+        const colIdx = tile.colStart + c;
+        if (colIdx < 0) continue;
+        rowPrev[colIdx] = source[c] ?? null;
+      }
+      next[rowIdx] = rowPrev;
+    }
+    return next;
+  }
+
+  async function fetchGridTile(tile: GridTile, requestEpoch: number) {
+    if (requestEpoch !== requestEpochRef.current) return;
+    if (loadedTileKeysRef.current.has(tile.key)) return;
+    if (inflightTileKeysRef.current.has(tile.key)) return;
+
+    inflightTileKeysRef.current.add(tile.key);
+    props.onGridEvent?.(
+      `grid.get r${tile.rowStart}+${tile.rowCount} c${tile.colStart}+${tile.colCount}`
+    );
+    setGridGetRequests((x) => x + 1);
+
+    try {
+      const grid = await requestParsed(
+        "grid.get",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          rowStart: tile.rowStart,
+          rowCount: tile.rowCount,
+          colStart: tile.colStart,
+          colCount: tile.colCount
+        },
+        GridGetResultSchema
+      );
+
+      if (requestEpoch !== requestEpochRef.current) return;
+      setCells((prev) => applyGridSlice(prev, tile, grid.cells));
+      loadedTileKeysRef.current.add(tile.key);
+    } catch (e: any) {
+      if (requestEpoch !== requestEpochRef.current) return;
+      props.onError(e?.message ?? String(e));
+    } finally {
+      inflightTileKeysRef.current.delete(tile.key);
+    }
+  }
+
+  function ensureGridWindowLoaded(
+    window: {
+      rowStart: number;
+      rowCount: number;
+      colStart: number;
+      colCount: number;
+    },
+    dims?: { rowCount: number; colCount: number }
+  ) {
+    const totalRows = dims?.rowCount ?? students.length;
+    const totalCols = dims?.colCount ?? assessments.length;
+    if (totalRows <= 0 || totalCols <= 0) return;
+
+    const expanded = expandWindow(
+      window,
+      totalRows,
+      totalCols,
+      GRID_PREFETCH_ROWS,
+      GRID_PREFETCH_COLS
+    );
+    const tiles = tilesForWindow(
+      expanded,
+      totalRows,
+      totalCols,
+      GRID_TILE_ROWS,
+      GRID_TILE_COLS
+    );
+    const epoch = requestEpochRef.current;
+    for (const tile of tiles) {
+      if (loadedTileKeysRef.current.has(tile.key)) continue;
+      if (inflightTileKeysRef.current.has(tile.key)) continue;
+      void fetchGridTile(tile, epoch);
+    }
+  }
 
   async function refreshCalcViews() {
     try {
@@ -579,23 +691,15 @@ export function MarksScreen(props: {
     setRemarkSaveState("saving");
     try {
       await requestParsed(
-        "comments.sets.upsert",
+        "comments.remarks.upsertOne",
         {
           classId: props.selectedClassId,
           markSetId: props.selectedMarkSetId,
           setNumber: selectedCommentSetMeta.setNumber,
-          title: selectedCommentSetMeta.title,
-          fitMode: selectedCommentSetMeta.fitMode,
-          fitFontSize: selectedCommentSetMeta.fitFontSize,
-          fitWidth: selectedCommentSetMeta.fitWidth,
-          fitLines: selectedCommentSetMeta.fitLines,
-          fitSubj: selectedCommentSetMeta.fitSubj,
-          maxChars: selectedCommentSetMeta.maxChars,
-          isDefault: selectedCommentSetMeta.isDefault,
-          bankShort: selectedCommentSetMeta.bankShort,
-          remarksByStudent: [{ studentId: selectedStudentId, remark: remarkDraft }]
+          studentId: selectedStudentId,
+          remark: remarkDraft
         },
-        CommentsSetsUpsertResultSchema
+        CommentsRemarksUpsertOneResultSchema
       );
       setRemarksByStudentId((prev) => ({ ...prev, [selectedStudentId]: remarkDraft }));
       setRemarkDirty(false);
@@ -666,21 +770,20 @@ export function MarksScreen(props: {
       if (!Number.isInteger(col) || !Number.isInteger(row)) return false;
       if (col <= 0 || col > assessments.length) return false;
       if (row < 0 || row >= students.length) return false;
-      const cur = cells[row]?.[col - 1] ?? null;
-      const text = cur == null ? "" : String(cur);
-      try {
-        editorRef.current?.scrollTo(col, row);
-      } catch {
-        // no-op
-      }
       setSelectedCell({ row, col });
-      setEditingCell({ col, row, text });
+      openEditorAt(col, row);
       return true;
     };
+    w.__markbookTest.getMarksGridDebug = () => ({
+      gridGetRequests,
+      loadedTiles: loadedTileKeysRef.current.size,
+      inflightTiles: inflightTileKeysRef.current.size
+    });
     return () => {
       if (w.__markbookTest?.openMarksCellEditor) delete w.__markbookTest.openMarksCellEditor;
+      if (w.__markbookTest?.getMarksGridDebug) delete w.__markbookTest.getMarksGridDebug;
     };
-  }, [assessments.length, cells, students.length]);
+  }, [assessments.length, cells, gridGetRequests, students.length]);
 
   useEffect(() => {
     function onErr(e: ErrorEvent) {
@@ -704,6 +807,9 @@ export function MarksScreen(props: {
     let cancelled = false;
     async function run() {
       props.onError(null);
+      requestEpochRef.current += 1;
+      const runEpoch = requestEpochRef.current;
+      resetGridCache();
       try {
         const open = await requestParsed(
           "markset.open",
@@ -711,8 +817,14 @@ export function MarksScreen(props: {
           MarkSetOpenResultSchema
         );
         if (cancelled) return;
+        if (runEpoch !== requestEpochRef.current) return;
         setStudents(open.students);
         setAssessments(open.assessments);
+        setCells(
+          Array.from({ length: open.rowCount }, () =>
+            Array.from({ length: open.colCount }, () => null)
+          )
+        );
         // Default to showing results for a student immediately (and keep selection in range
         // across mark-set changes). This also stabilizes E2E by ensuring the results panel
         // always has a deterministic selected row once data is loaded.
@@ -722,21 +834,19 @@ export function MarksScreen(props: {
           const col = cur?.col != null ? cur.col : 0;
           return { row, col };
         });
-
-        const grid = await requestParsed(
-          "grid.get",
-          {
-            classId: props.selectedClassId,
-            markSetId: props.selectedMarkSetId,
+        const initialRows = Math.min(open.rowCount, GRID_TILE_ROWS);
+        const initialCols = Math.min(open.colCount, GRID_TILE_COLS);
+        if (initialRows > 0 && initialCols > 0) {
+          ensureGridWindowLoaded(
+            {
             rowStart: 0,
-            rowCount: open.rowCount,
+            rowCount: initialRows,
             colStart: 0,
-            colCount: open.colCount
-          },
-          GridGetResultSchema
-        );
-        if (cancelled) return;
-        setCells(grid.cells);
+            colCount: initialCols
+            },
+            { rowCount: open.rowCount, colCount: open.colCount }
+          );
+        }
 
         await refreshCalcViews();
         if (cancelled) return;
@@ -833,6 +943,12 @@ export function MarksScreen(props: {
   function openEditorAt(col: number, row: number) {
     if (col <= 0 || col > assessments.length) return;
     if (row < 0 || row >= students.length) return;
+    ensureGridWindowLoaded({
+      rowStart: row,
+      rowCount: 1,
+      colStart: col - 1,
+      colCount: 1
+    });
     const cur = cells[row]?.[col - 1] ?? null;
     const text = cur == null ? "" : String(cur);
     editorRef.current?.scrollTo(col, row);
@@ -1078,6 +1194,7 @@ export function MarksScreen(props: {
           .map((a) => `${a.title}: ${a.avgRaw.toFixed(1)}`)
           .join(" | ")}
       >
+        Fetches: {gridGetRequests} |{" "}
         Avg Raw:{" "}
         {assessmentStats.length === 0
           ? "—"
@@ -1396,6 +1513,26 @@ export function MarksScreen(props: {
         gridSelection={gridSelection}
         onGridSelectionChange={setGridSelection}
         onPaste={onGridPaste}
+        onVisibleRegionChanged={(range) => {
+          const rowStart = Math.max(0, range.y);
+          const rowCount = Math.max(
+            0,
+            Math.min(students.length - rowStart, range.height)
+          );
+          if (rowCount <= 0) return;
+
+          const firstMarkCol = Math.max(1, range.x);
+          const lastVisibleCol = range.x + range.width - 1;
+          const lastMarkCol = Math.min(assessments.length, lastVisibleCol);
+          if (lastMarkCol < firstMarkCol) return;
+
+          ensureGridWindowLoaded({
+            rowStart,
+            rowCount,
+            colStart: firstMarkCol - 1,
+            colCount: lastMarkCol - firstMarkCol + 1
+          });
+        }}
         cellActivationBehavior="double-click"
         editOnType={false}
         onCellClicked={(cell) => {

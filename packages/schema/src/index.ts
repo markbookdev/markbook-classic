@@ -175,7 +175,15 @@ export const ReportsMarkSetGridModelResultSchema = z.object({
       noMarkCount: z.number()
     })
   ),
-  cells: z.array(z.array(z.number().nullable()))
+  cells: z.array(z.array(z.number().nullable())),
+  filters: z
+    .object({
+      term: z.number().nullable(),
+      categoryName: z.string().nullable(),
+      typesMask: z.number().nullable()
+    })
+    .optional(),
+  studentScope: z.enum(["all", "active", "valid"]).optional()
 });
 
 export const StudentsListResultSchema = z.object({
@@ -231,6 +239,20 @@ export const StudentsMembershipGetResultSchema = z.object({
 export const StudentsMembershipSetResultSchema = z.object({
   ok: z.literal(true),
   mask: z.string()
+});
+
+export const StudentsMembershipBulkSetResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number(),
+  failed: z
+    .array(
+      z.object({
+        studentId: z.string(),
+        code: z.string(),
+        message: z.string()
+      })
+    )
+    .optional()
 });
 
 export const CategoriesListResultSchema = z.object({
@@ -612,6 +634,10 @@ export const CommentsSetsDeleteResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const CommentsRemarksUpsertOneResultSchema = z.object({
+  ok: z.literal(true)
+});
+
 export const CommentsBanksListResultSchema = z.object({
   banks: z.array(
     z.object({
@@ -699,7 +725,8 @@ export const ReportsCategoryAnalysisModelResultSchema = z.object({
     })
   ),
   perCategory: z.array(CalcPerCategorySchema),
-  perAssessment: z.array(CalcPerAssessmentSchema)
+  perAssessment: z.array(CalcPerAssessmentSchema),
+  studentScope: z.enum(["all", "active", "valid"]).optional()
 });
 
 export const ReportsStudentSummaryModelResultSchema = z.object({
@@ -725,6 +752,7 @@ export const ReportsStudentSummaryModelResultSchema = z.object({
     categoryName: z.string().nullable(),
     typesMask: z.number().nullable()
   }),
+  studentScope: z.enum(["all", "active", "valid"]).optional(),
   student: CalcPerStudentSchema,
   assessments: z.array(
     z.object({

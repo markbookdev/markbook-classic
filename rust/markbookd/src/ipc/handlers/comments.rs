@@ -530,6 +530,107 @@ fn comments_sets_delete(
     Ok(json!({ "ok": true }))
 }
 
+fn comments_remarks_upsert_one(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    let set_number = params
+        .get("setNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing setNumber".to_string(),
+            details: None,
+        })?;
+    let student_id = get_required_str(params, "studentId")?;
+    let remark = params
+        .get("remark")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    if !mark_set_exists(conn, &class_id, &mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "mark set not found".to_string(),
+            details: None,
+        });
+    }
+
+    let student_exists: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM students WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    if student_exists.is_none() {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "student not found".to_string(),
+            details: None,
+        });
+    }
+
+    let set_id: Option<String> = conn
+        .query_row(
+            "SELECT id
+             FROM comment_set_indexes
+             WHERE class_id = ? AND mark_set_id = ? AND set_number = ?",
+            (&class_id, &mark_set_id, set_number),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    let Some(set_id) = set_id else {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "comment set not found".to_string(),
+            details: None,
+        });
+    };
+
+    if remark.is_empty() {
+        conn.execute(
+            "DELETE FROM comment_set_remarks WHERE comment_set_index_id = ? AND student_id = ?",
+            (&set_id, &student_id),
+        )
+        .map_err(|e| HandlerErr {
+            code: "db_delete_failed",
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_set_remarks" })),
+        })?;
+    } else {
+        let remark_id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+             VALUES(?, ?, ?, ?)
+             ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+               remark = excluded.remark",
+            (&remark_id, &set_id, &student_id, &remark),
+        )
+        .map_err(|e| HandlerErr {
+            code: "db_insert_failed",
+            message: e.to_string(),
+            details: Some(json!({ "table": "comment_set_remarks" })),
+        })?;
+    }
+
+    Ok(json!({ "ok": true }))
+}
+
 fn comments_banks_list(conn: &Connection) -> Result<serde_json::Value, HandlerErr> {
     let mut stmt = conn
         .prepare(
@@ -1226,6 +1327,7 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "comments.sets.open" => Some(handle_comments_sets_open(state, req)),
         "comments.sets.upsert" => Some(handle_comments_sets_upsert(state, req)),
         "comments.sets.delete" => Some(handle_comments_sets_delete(state, req)),
+        "comments.remarks.upsertOne" => Some(handle_comments_remarks_upsert_one(state, req)),
         "comments.banks.list" => Some(handle_comments_banks_list(state, req)),
         "comments.banks.open" => Some(handle_comments_banks_open(state, req)),
         "comments.banks.create" => Some(handle_comments_banks_create(state, req)),
@@ -1235,5 +1337,15 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "comments.banks.importBnk" => Some(handle_comments_banks_import_bnk(state, req)),
         "comments.banks.exportBnk" => Some(handle_comments_banks_export_bnk(state, req)),
         _ => None,
+    }
+}
+
+fn handle_comments_remarks_upsert_one(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    match comments_remarks_upsert_one(conn, &req.params) {
+        Ok(v) => ok(&req.id, v),
+        Err(e) => e.response(&req.id),
     }
 }

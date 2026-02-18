@@ -778,6 +778,153 @@ fn handle_students_membership_set(state: &mut AppState, req: &Request) -> serde_
     ok(&req.id, json!({ "ok": true, "mask": new_mask }))
 }
 
+fn handle_students_membership_bulk_set(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let Some(updates) = req.params.get("updates").and_then(|v| v.as_array()) else {
+        return err(&req.id, "bad_params", "missing/invalid updates", None);
+    };
+
+    let (mark_set_sort_order, mark_set_count): (i64, i64) = match conn.query_row(
+        "SELECT sort_order, (SELECT COUNT(*) FROM mark_sets WHERE class_id = ?)
+         FROM mark_sets
+         WHERE id = ? AND class_id = ?",
+        (&class_id, &mark_set_id, &class_id),
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    ) {
+        Ok(v) => v,
+        Err(_) => return err(&req.id, "not_found", "mark set not found", None),
+    };
+    let Ok(ms_count) = usize::try_from(mark_set_count) else {
+        return err(&req.id, "db_query_failed", "invalid mark set count", None);
+    };
+    let Ok(bit_idx) = usize::try_from(mark_set_sort_order) else {
+        return err(&req.id, "db_query_failed", "invalid mark set sort order", None);
+    };
+
+    let mut stmt = match conn.prepare(
+        "SELECT id, mark_set_mask
+         FROM students
+         WHERE class_id = ?",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let mut masks_by_student: std::collections::HashMap<String, String> = match stmt
+        .query_map([&class_id], |row| {
+            let id: String = row.get(0)?;
+            let mask: Option<String> = row.get(1)?;
+            Ok((id, normalize_mark_set_mask(mask, ms_count)))
+        })
+        .and_then(|it| it.collect::<Result<std::collections::HashMap<_, _>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+
+    let mut updated: usize = 0;
+    let mut failed: Vec<serde_json::Value> = Vec::new();
+
+    for raw in updates {
+        let Some(student_id) = raw.get("studentId").and_then(|v| v.as_str()) else {
+            failed.push(json!({
+                "studentId": "",
+                "code": "bad_params",
+                "message": "missing studentId"
+            }));
+            continue;
+        };
+        let Some(enabled) = raw.get("enabled").and_then(|v| v.as_bool()) else {
+            failed.push(json!({
+                "studentId": student_id,
+                "code": "bad_params",
+                "message": "missing enabled"
+            }));
+            continue;
+        };
+
+        let Some(current_mask) = masks_by_student.get(student_id).cloned() else {
+            failed.push(json!({
+                "studentId": student_id,
+                "code": "not_found",
+                "message": "student not found"
+            }));
+            continue;
+        };
+
+        let mut next = current_mask.into_bytes();
+        if bit_idx >= next.len() {
+            failed.push(json!({
+                "studentId": student_id,
+                "code": "db_query_failed",
+                "message": "invalid mark set sort order"
+            }));
+            continue;
+        }
+        next[bit_idx] = if enabled { b'1' } else { b'0' };
+        let new_mask = String::from_utf8_lossy(&next).to_string();
+
+        match tx.execute(
+            "UPDATE students
+             SET mark_set_mask = ?,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE id = ? AND class_id = ?",
+            (&new_mask, student_id, &class_id),
+        ) {
+            Ok(changed) if changed > 0 => {
+                updated += 1;
+                masks_by_student.insert(student_id.to_string(), new_mask);
+            }
+            Ok(_) => {
+                failed.push(json!({
+                    "studentId": student_id,
+                    "code": "not_found",
+                    "message": "student not found"
+                }));
+            }
+            Err(e) => {
+                failed.push(json!({
+                    "studentId": student_id,
+                    "code": "db_update_failed",
+                    "message": e.to_string()
+                }));
+            }
+        }
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+
+    if failed.is_empty() {
+        ok(&req.id, json!({ "ok": true, "updated": updated }))
+    } else {
+        ok(
+            &req.id,
+            json!({
+                "ok": true,
+                "updated": updated,
+                "failed": failed
+            }),
+        )
+    }
+}
+
 fn handle_notes_get(state: &mut AppState, req: &Request) -> serde_json::Value {
     let Some(conn) = state.db.as_ref() else {
         return err(&req.id, "no_workspace", "select a workspace first", None);
@@ -898,6 +1045,7 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "students.delete" => Some(handle_students_delete(state, req)),
         "students.membership.get" => Some(handle_students_membership_get(state, req)),
         "students.membership.set" => Some(handle_students_membership_set(state, req)),
+        "students.membership.bulkSet" => Some(handle_students_membership_bulk_set(state, req)),
         "notes.get" => Some(handle_notes_get(state, req)),
         "notes.update" => Some(handle_notes_update(state, req)),
         _ => None,

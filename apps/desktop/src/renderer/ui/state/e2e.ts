@@ -29,10 +29,23 @@ const t = ensure();
 t.renderMarkSetGridReportHtml = renderMarkSetGridReportHtml;
 
 // Export a mark set grid report to a specific PDF path without a Save dialog.
-t.exportMarkSetGridPdfToPath = async (classId: string, markSetId: string, outPath: string) => {
+t.exportMarkSetGridPdfToPath = async (
+  classId: string,
+  markSetId: string,
+  outPath: string,
+  options?: {
+    filters?: { term?: number | null; categoryName?: string | null; typesMask?: number | null };
+    studentScope?: "all" | "active" | "valid";
+  }
+) => {
   if (!window.markbook?.request) throw new Error("window.markbook.request missing");
   if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
-  const model = await window.markbook.request("reports.markSetGridModel", { classId, markSetId });
+  const model = await window.markbook.request("reports.markSetGridModel", {
+    classId,
+    markSetId,
+    ...(options?.filters ? { filters: options.filters } : {}),
+    ...(options?.studentScope ? { studentScope: options.studentScope } : {})
+  });
   const html = renderMarkSetGridReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
   return { ok: true };
@@ -41,13 +54,19 @@ t.exportMarkSetGridPdfToPath = async (classId: string, markSetId: string, outPat
 t.exportMarkSetSummaryPdfToPath = async (
   classId: string,
   markSetId: string,
-  outPath: string
+  outPath: string,
+  options?: {
+    filters?: { term?: number | null; categoryName?: string | null; typesMask?: number | null };
+    studentScope?: "all" | "active" | "valid";
+  }
 ) => {
   if (!window.markbook?.request) throw new Error("window.markbook.request missing");
   if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
   const model = await window.markbook.request("reports.markSetSummaryModel", {
     classId,
-    markSetId
+    markSetId,
+    ...(options?.filters ? { filters: options.filters } : {}),
+    ...(options?.studentScope ? { studentScope: options.studentScope } : {})
   });
   const html = renderMarkSetSummaryReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
@@ -57,13 +76,19 @@ t.exportMarkSetSummaryPdfToPath = async (
 t.exportCategoryAnalysisPdfToPath = async (
   classId: string,
   markSetId: string,
-  outPath: string
+  outPath: string,
+  options?: {
+    filters?: { term?: number | null; categoryName?: string | null; typesMask?: number | null };
+    studentScope?: "all" | "active" | "valid";
+  }
 ) => {
   if (!window.markbook?.request) throw new Error("window.markbook.request missing");
   if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
   const model = await window.markbook.request("reports.categoryAnalysisModel", {
     classId,
-    markSetId
+    markSetId,
+    ...(options?.filters ? { filters: options.filters } : {}),
+    ...(options?.studentScope ? { studentScope: options.studentScope } : {})
   });
   const html = renderCategoryAnalysisReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
@@ -74,14 +99,20 @@ t.exportStudentSummaryPdfToPath = async (
   classId: string,
   markSetId: string,
   studentId: string,
-  outPath: string
+  outPath: string,
+  options?: {
+    filters?: { term?: number | null; categoryName?: string | null; typesMask?: number | null };
+    studentScope?: "all" | "active" | "valid";
+  }
 ) => {
   if (!window.markbook?.request) throw new Error("window.markbook.request missing");
   if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
   const model = await window.markbook.request("reports.studentSummaryModel", {
     classId,
     markSetId,
-    studentId
+    studentId,
+    ...(options?.filters ? { filters: options.filters } : {}),
+    ...(options?.studentScope ? { studentScope: options.studentScope } : {})
   });
   const html = renderStudentSummaryReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);

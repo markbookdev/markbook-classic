@@ -82,6 +82,26 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - Added DB migration snapshot fixtures/tests to protect backward compatibility (`rust/markbookd/tests/db_migration_snapshots.rs`).
   - Added CI workflow for packaged smoke on macOS + Windows (`.github/workflows/packaged-smoke.yml`).
 
+### Classroom Workflow Iteration Snapshot (2026-02-18, windowing/filters/bulk)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports renderer tests: `bun run test:reports` => PASS
+- Playwright regression: `bun run test:e2e` => PASS (26 passed, 1 skipped packaged smoke)
+- Packaging smoke: `bun run test:packaging` => PASS
+- Packaged smoke: `bun run test:e2e:packaged` => PASS
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Implemented in this slice:
+  - Marks grid now uses windowed/tiled loading in renderer state instead of eager full-matrix load on open.
+  - Added `grid.get` range hard validation (`bad_params` on negative/oversized windows).
+  - Added bulk membership endpoint `students.membership.bulkSet` and switched Students screen bulk actions to one IPC call.
+  - Added single-remark endpoint `comments.remarks.upsertOne` and switched Marks remark save to point updates (no full set rewrite).
+  - Report model endpoints now accept optional `filters` + `studentScope` and include applied values in model payloads.
+  - Reports screen now exposes Marks-aligned filter controls (term/category/types/scope) and sends them into model requests.
+  - Reports HTML templates now print applied filter/scope metadata in report headers.
+  - Added E2E coverage:
+    - `apps/desktop/e2e/marks-windowed-fetch.e2e.spec.cjs`
+    - `apps/desktop/e2e/reports-filters-alignment.e2e.spec.cjs`
+  - CI packaged smoke workflow now uploads diagnostics artifacts on failure (`test-results`, `playwright-report`, `apps/desktop/out`).
+
 ### Router/Report Extraction Notes
 - All `reports.*Model` methods are now handled directly in `rust/markbookd/src/ipc/handlers/reports.rs` (no legacy router fallback).
 - Added Rust integration smoke test: `rust/markbookd/tests/reports_models_smoke.rs`.

@@ -36,8 +36,21 @@ jobs:
 
       - name: Packaged E2E smoke (macOS)
         if: matrix.packaged_e2e == '1'
+        env:
+          MARKBOOK_E2E_READY_FILE: ${{ github.workspace }}/test-results/packaged-ready.json
         run: bun run test:e2e:packaged
 
       - name: Packaging smoke (Windows)
         if: matrix.packaged_e2e == '0'
         run: bun run test:packaging
+
+      - name: Upload packaged smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-smoke-${{ matrix.os }}-diagnostics
+          if-no-files-found: ignore
+          path: |
+            test-results/**
+            playwright-report/**
+            apps/desktop/out/**

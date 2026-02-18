@@ -36,6 +36,95 @@ fn parse_filters(req: &Request, default: bool) -> Result<calc::SummaryFilters, s
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StudentScope {
+    All,
+    Active,
+    Valid,
+}
+
+impl StudentScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            StudentScope::All => "all",
+            StudentScope::Active => "active",
+            StudentScope::Valid => "valid",
+        }
+    }
+}
+
+fn parse_student_scope(req: &Request) -> Result<StudentScope, serde_json::Value> {
+    match req
+        .params
+        .get("studentScope")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        None | Some("all") => Ok(StudentScope::All),
+        Some("active") => Ok(StudentScope::Active),
+        Some("valid") => Ok(StudentScope::Valid),
+        Some(other) => Err(err(
+            &req.id,
+            "bad_params",
+            "studentScope must be one of: all, active, valid",
+            Some(json!({ "studentScope": other })),
+        )),
+    }
+}
+
+fn student_id_scope_filter(
+    conn: &Connection,
+    class_id: &str,
+    mark_set_id: &str,
+    scope: StudentScope,
+) -> Result<Option<std::collections::HashSet<String>>, calc::CalcError> {
+    if scope == StudentScope::All {
+        return Ok(None);
+    }
+
+    let mark_set_sort_order: i64 = conn
+        .query_row(
+            "SELECT sort_order FROM mark_sets WHERE id = ? AND class_id = ?",
+            (mark_set_id, class_id),
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?
+        .ok_or_else(|| calc::CalcError::new("not_found", "mark set not found"))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, active, COALESCE(mark_set_mask, 'TBA')
+             FROM students
+             WHERE class_id = ?",
+        )
+        .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+
+    let ids = stmt
+        .query_map([class_id], |r| {
+            let id: String = r.get(0)?;
+            let active: i64 = r.get(1)?;
+            let mask: String = r.get(2)?;
+            Ok((id, active != 0, mask))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+
+    let mut keep = std::collections::HashSet::new();
+    for (id, active, mask) in ids {
+        let include = match scope {
+            StudentScope::All => true,
+            StudentScope::Active => active,
+            StudentScope::Valid => calc::is_valid_kid(active, &mask, mark_set_sort_order),
+        };
+        if include {
+            keep.insert(id);
+        }
+    }
+    Ok(Some(keep))
+}
+
 fn calc_context<'a>(
     conn: &'a Connection,
     class_id: &'a str,
@@ -118,13 +207,44 @@ fn handle_reports_markset_summary_model(state: &mut AppState, req: &Request) -> 
         Ok(v) => v,
         Err(e) => return e,
     };
-    let filters = match parse_filters(req, true) {
+    let filters = match parse_filters(req, false) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
         Ok(v) => v,
         Err(e) => return e,
     };
 
     match calc::compute_mark_set_summary(&calc_context(conn, &class_id, &mark_set_id), &filters) {
-        Ok(summary) => ok(&req.id, json!(summary)),
+        Ok(mut summary) => {
+            if student_scope != StudentScope::All {
+                let allowed = match student_id_scope_filter(
+                    conn,
+                    &class_id,
+                    &mark_set_id,
+                    student_scope,
+                ) {
+                    Ok(Some(v)) => v,
+                    Ok(None) => std::collections::HashSet::new(),
+                    Err(e) => return calc_err(req, e),
+                };
+                summary
+                    .per_student
+                    .retain(|s| allowed.contains(&s.student_id));
+                if let Some(rows) = summary.per_student_categories.as_mut() {
+                    rows.retain(|r| allowed.contains(&r.student_id));
+                }
+            }
+            let mut payload = json!(summary);
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert(
+                    "studentScope".to_string(),
+                    serde_json::Value::String(student_scope.as_str().to_string()),
+                );
+            }
+            ok(&req.id, payload)
+        }
         Err(e) => calc_err(req, e),
     }
 }
@@ -149,6 +269,10 @@ fn handle_reports_category_analysis_model(
         Ok(v) => v,
         Err(e) => return e,
     };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
 
     match calc::compute_mark_set_summary(&calc_context(conn, &class_id, &mark_set_id), &filters) {
         Ok(summary) => ok(
@@ -161,6 +285,7 @@ fn handle_reports_category_analysis_model(
                 "categories": summary.categories,
                 "perCategory": summary.per_category,
                 "perAssessment": summary.per_assessment,
+                "studentScope": student_scope.as_str(),
             }),
         ),
         Err(e) => calc_err(req, e),
@@ -188,9 +313,22 @@ fn handle_reports_student_summary_model(state: &mut AppState, req: &Request) -> 
         Ok(v) => v,
         Err(e) => return e,
     };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
 
     match calc::compute_mark_set_summary(&calc_context(conn, &class_id, &mark_set_id), &filters) {
         Ok(summary) => {
+            let student_scope_filter = match student_id_scope_filter(
+                conn,
+                &class_id,
+                &mark_set_id,
+                student_scope,
+            ) {
+                Ok(v) => v,
+                Err(e) => return calc_err(req, e),
+            };
             let student = summary
                 .per_student
                 .iter()
@@ -199,6 +337,11 @@ fn handle_reports_student_summary_model(state: &mut AppState, req: &Request) -> 
             let Some(student) = student else {
                 return err(&req.id, "not_found", "student not found in mark set", None);
             };
+            if let Some(filter) = student_scope_filter {
+                if !filter.contains(&student.student_id) {
+                    return err(&req.id, "not_found", "student not found in mark set", None);
+                }
+            }
             ok(
                 &req.id,
                 json!({
@@ -206,6 +349,7 @@ fn handle_reports_student_summary_model(state: &mut AppState, req: &Request) -> 
                     "markSet": summary.mark_set,
                     "settings": summary.settings,
                     "filters": summary.filters,
+                    "studentScope": student_scope.as_str(),
                     "student": student,
                     "assessments": summary.assessments,
                     "perAssessment": summary.per_assessment,
@@ -381,6 +525,14 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
         Ok(v) => v,
         Err(e) => return e,
     };
+    let filters = match parse_filters(req, false) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
 
     let class_name: Option<String> = match conn
         .query_row("SELECT name FROM classes WHERE id = ?", [&class_id], |r| {
@@ -497,18 +649,18 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
         assessments_json.push(j);
     }
 
-    let row_count = student_ids.len();
+    let source_row_count = student_ids.len();
     let col_count = assessment_ids.len();
 
-    let mut cells: Vec<Vec<Option<f64>>> = vec![vec![None; col_count]; row_count];
+    let mut source_cells: Vec<Vec<Option<f64>>> = vec![vec![None; col_count]; source_row_count];
 
-    if row_count > 0 && col_count > 0 {
+    if source_row_count > 0 && col_count > 0 {
         let assess_placeholders = std::iter::repeat("?")
             .take(col_count)
             .collect::<Vec<_>>()
             .join(",");
         let stud_placeholders = std::iter::repeat("?")
-            .take(row_count)
+            .take(source_row_count)
             .collect::<Vec<_>>()
             .join(",");
         let sql = format!(
@@ -517,7 +669,7 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
             assess_placeholders, stud_placeholders
         );
 
-        let mut bind_values: Vec<Value> = Vec::with_capacity(col_count + row_count);
+        let mut bind_values: Vec<Value> = Vec::with_capacity(col_count + source_row_count);
         for id in &assessment_ids {
             bind_values.push(Value::Text(id.clone()));
         }
@@ -565,12 +717,35 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
                         "scored" => r.2,
                         _ => r.2,
                     };
-                    cells[r_i][c_i] = display_value;
+                    source_cells[r_i][c_i] = display_value;
                 }
             }
             Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
         }
     }
+
+    let keep_row = |row_idx: usize| -> bool {
+        match student_scope {
+            StudentScope::All => true,
+            StudentScope::Active => students_json
+                .get(row_idx)
+                .and_then(|s| s.get("active"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            StudentScope::Valid => *student_valid.get(row_idx).unwrap_or(&false),
+        }
+    };
+
+    let kept_row_indices: Vec<usize> = (0..source_row_count).filter(|i| keep_row(*i)).collect();
+    let students_json: Vec<serde_json::Value> = kept_row_indices
+        .iter()
+        .filter_map(|idx| students_json.get(*idx).cloned())
+        .collect();
+    let cells: Vec<Vec<Option<f64>>> = kept_row_indices
+        .iter()
+        .filter_map(|idx| source_cells.get(*idx).cloned())
+        .collect();
+    let row_count = students_json.len();
 
     let out_of_by_col: Vec<f64> = assessments_json
         .iter()
@@ -592,11 +767,11 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
             .and_then(|v| v.as_i64())
             .unwrap_or(c_i as i64);
         let avg = calc::assessment_average(
-            (0..row_count).filter_map(|r_i| {
-                if !*student_valid.get(r_i).unwrap_or(&true) {
+            kept_row_indices.iter().filter_map(|r_i| {
+                if !*student_valid.get(*r_i).unwrap_or(&true) {
                     return None;
                 }
-                match cells[r_i][c_i] {
+                match source_cells[*r_i][c_i] {
                     None => Some(calc::ScoreState::NoMark),
                     Some(v) if v == 0.0 => Some(calc::ScoreState::Zero),
                     Some(v) => Some(calc::ScoreState::Scored(v)),
@@ -625,7 +800,9 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
             "rowCount": row_count,
             "colCount": col_count,
             "assessmentAverages": assessment_averages,
-            "cells": cells
+            "cells": cells,
+            "filters": filters,
+            "studentScope": student_scope.as_str()
         }),
     )
 }

@@ -62,7 +62,8 @@ test("packaged (dir) app starts renderer + sidecar", async () => {
   expect(fs.existsSync(exe)).toBeTruthy();
 
   const userDataDir = mkdtemp("markbook-userdata-packaged-");
-  const readyFile = path.join(userDataDir, "ready.json");
+  const readyFile = process.env.MARKBOOK_E2E_READY_FILE || path.join(userDataDir, "ready.json");
+  fs.mkdirSync(path.dirname(readyFile), { recursive: true });
 
   const child = cp.spawn(exe, [], {
     stdio: "ignore",

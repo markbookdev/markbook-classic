@@ -6,6 +6,9 @@ use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+const GRID_GET_MAX_ROWS: i64 = 2000;
+const GRID_GET_MAX_COLS: i64 = 256;
+
 struct HandlerErr {
     code: &'static str,
     message: String,
@@ -176,6 +179,42 @@ fn handle_grid_get(state: &mut AppState, req: &Request) -> serde_json::Value {
         .get("colCount")
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
+
+    if row_start < 0 || col_start < 0 {
+        return err(
+            &req.id,
+            "bad_params",
+            "rowStart/colStart must be >= 0",
+            Some(json!({
+                "rowStart": row_start,
+                "colStart": col_start
+            })),
+        );
+    }
+    if row_count_req < 0 || col_count_req < 0 {
+        return err(
+            &req.id,
+            "bad_params",
+            "rowCount/colCount must be >= 0",
+            Some(json!({
+                "rowCount": row_count_req,
+                "colCount": col_count_req
+            })),
+        );
+    }
+    if row_count_req > GRID_GET_MAX_ROWS || col_count_req > GRID_GET_MAX_COLS {
+        return err(
+            &req.id,
+            "bad_params",
+            "requested grid range is too large",
+            Some(json!({
+                "rowCount": row_count_req,
+                "colCount": col_count_req,
+                "maxRows": GRID_GET_MAX_ROWS,
+                "maxCols": GRID_GET_MAX_COLS
+            })),
+        );
+    }
 
     let mut student_stmt = match conn
         .prepare("SELECT id FROM students WHERE class_id = ? ORDER BY sort_order LIMIT ? OFFSET ?")

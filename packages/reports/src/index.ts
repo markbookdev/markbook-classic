@@ -49,6 +49,12 @@ export type MarkSetGridReportModel = {
   // - 0 => Zero (counts as 0)
   // - >0 => scored
   cells: Array<Array<number | null>>;
+  filters?: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  studentScope?: "all" | "active" | "valid";
 };
 
 export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): string {
@@ -124,6 +130,8 @@ export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): stri
           <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
     model.markSet.description
   )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">
@@ -167,6 +175,8 @@ export type MarkSetSummaryReportModel = {
     categoryName: string | null;
     typesMask: number | null;
   };
+  studentScope?: "all" | "active" | "valid";
+  studentScope?: "all" | "active" | "valid";
   categories: Array<{ name: string; weight: number; sortOrder: number }>;
   assessments: Array<{
     assessmentId: string;
@@ -218,6 +228,27 @@ function methodLabel(weightMethod: number): string {
   if (weightMethod === 1) return "Category weighting";
   if (weightMethod === 2) return "Equal weighting";
   return `Method ${weightMethod}`;
+}
+
+function reportStudentScopeLabel(scope?: "all" | "active" | "valid"): string {
+  if (scope === "active") return "Active students";
+  if (scope === "valid") return "Valid for mark set";
+  return "All students";
+}
+
+function reportFiltersLabel(filters?: {
+  term: number | null;
+  categoryName: string | null;
+  typesMask: number | null;
+}): string {
+  if (!filters) return "ALL";
+  const bits: string[] = [];
+  bits.push(filters.term == null ? "Term: ALL" : `Term: ${filters.term}`);
+  bits.push(
+    filters.categoryName == null ? "Category: ALL" : `Category: ${filters.categoryName}`
+  );
+  bits.push(filters.typesMask == null ? "Types: ALL" : `Types mask: ${filters.typesMask}`);
+  return bits.join(", ");
 }
 
 export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel): string {
@@ -298,6 +329,8 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
           <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
     model.markSet.description
   )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">
@@ -472,6 +505,8 @@ export function renderCategoryAnalysisReportHtml(model: CategoryAnalysisReportMo
           <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
     model.markSet.description
   )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">${escapeHtml(generatedAt)}</div>
@@ -529,6 +564,7 @@ export type StudentSummaryReportModel = {
     categoryName: string | null;
     typesMask: number | null;
   };
+  studentScope?: "all" | "active" | "valid";
   student: {
     studentId: string;
     displayName: string;
@@ -613,6 +649,8 @@ export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel)
     model.markSet.description
   )}</div>
           <div><strong>Student:</strong> ${escapeHtml(model.student.displayName)}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">${escapeHtml(generatedAt)}</div>
