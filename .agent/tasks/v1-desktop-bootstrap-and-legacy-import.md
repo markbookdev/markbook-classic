@@ -12,18 +12,21 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Fixture data available in-repo for repeatable testing
 
 ## Status
-- Overall: IN PROGRESS
+- Overall: IN PROGRESS (parity-focused beta)
 - Bootstrap: DONE
-- Sidecar/SQLite: DONE (classes + students tables)
+- Sidecar/SQLite: DONE (core + companions + setup tables)
 - Legacy import v0: DONE (CL file -> class + students)
 - Mark set import: DONE (mark_sets/categories/assessments/scores)
-- Grid backed by real data: DONE (Glide grid via grid.get + grid.updateCell)
+- Grid backed by real data: DONE (Glide grid via grid.get + grid.updateCell + bulk/state ops)
 - Reports pipeline: DONE (grid + summary PDFs via Chromium printToPDF)
-- App shell + navigation: DONE (Dashboard, Marks, Students, Mark Set Setup, Notes, Reports)
+- App shell + navigation: DONE (Dashboard, Marks, Students, Mark Set Setup, Attendance, Notes, Seating, Learning Skills, Reports, Backup, Exchange)
 - Students screen: DONE (CRUD + active toggle + reorder)
 - Mark Set Setup: DONE (categories + assessments CRUD/reorder + mark set settings)
-- Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped)
-- Playwright harness: DONE (edit persistence, reorder, grid PDF, summary PDF)
+- Companion import fidelity: IN PROGRESS (`.RMK/.TYP/.IDX/.R*` + `ALL!*.IDX` + `.TBK` + `.ICC` shipped)
+- Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; calc-method routing now in `calc.rs`, golden set expanded to MAT2/SNC2)
+- Playwright harness: DONE (24 specs green + 1 packaged smoke intentionally opt-in)
+- IPC router de-monolith: DONE (`rust/markbookd/src/ipc/router.rs` is dispatch-only; no legacy fallback)
+- Packaging hardening: IN PROGRESS (sidecar staging + packaged smoke + CI matrix added)
 
 ## Deliverables (Implemented)
 - Desktop app launches in dev (`bun run dev`)
@@ -37,27 +40,83 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 
 ## Next Steps (Prioritized)
 1. Calc parity hardening:
-   - port remaining VB6 weighting/filter semantics exactly (term/type/category edge cases, bonus handling)
-   - add fixture parity assertions for final marks (named students) and median/rank behavior
-2. Companion imports still missing:
-   - parse/import `*.IDX` (comment bank metadata)
-   - parse/import seating (`*.SPL`) and attendance companions
-3. Remaining core screens:
-   - Attendance (real data model + entry UI)
-   - Seating Plan (import + editor + persistence)
-4. Grid UX polish:
-   - explicit “set zero” action (current edit semantics treat 0 as No Mark)
-   - copy/paste, fill/bulk edits, keyboard parity
-5. Reports expansion:
-   - category analysis + student summary reports from `calc.markSetSummary`
-   - pagination/fit improvements for wide classes
-6. Packaging + data portability:
-   - production sidecar bundling verification
-   - backup/restore + exchange/export flows
+   - finish strict VB6 parity extraction from `ipc` internals into `calc.rs` types/functions
+   - expand locked fixtures to additional mark sets and category-level parity checks
+2. IPC architecture hardening:
+   - keep transport/router thin and improve method-level unit tests
+   - continue deduping shared validation/SQL helpers across handlers
+3. Marks/comments UX parity:
+   - finish keyboard-first in-grid flows (copy/paste/fill/state controls already started)
+   - tighten remarks/bank editing ergonomics and multi-student workflows
+4. Reports completion:
+   - attendance/class-list/learning-skills layouts are implemented; iterate on pagination and fidelity
+   - add remaining parity report variants from legacy manuals
+5. Packaging/release hardening:
+   - validate production sidecar bundling on macOS + Windows
+   - upgrade backup bundle format from sqlite-copy to zip manifest bundle
 
 ## Notes
 - Fixture data is currently copied into:
   - `fixtures/legacy/Sample25`
+
+### Baseline / Regression Snapshot (2026-02-17)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Desktop renderer build: `bun run --cwd apps/desktop build:renderer` => PASS
+- Playwright regression: `bun run test:e2e` => PASS (19/19)
+- Purpose of snapshot:
+  - lock known-good baseline before further parity extraction
+  - ensure no IPC contract drift while moving calc/report handling into typed handlers
+
+### Baseline / Regression Snapshot (2026-02-18)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports renderer tests: `bun run test:reports` => PASS
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Desktop E2E regression: `bun run test:e2e` => PASS (24 passed, 1 skipped packaged smoke)
+- Packaging smoke: `bun run test:packaging` => PASS
+- Packaged app smoke: `bun run test:e2e:packaged` => PASS
+- Strict parity lane: `bun run test:parity:strict` => FAIL (expected until fresh legacy markfiles are added under `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/*.Y25`)
+- New in this snapshot:
+  - `grid.bulkUpdate` now returns optional rejection diagnostics (`rejected`, `errors[]`) without breaking the existing contract.
+  - Marks screen now supports keyboard commit navigation (Enter/Tab/Shift+Tab) with single-click mark-cell editing.
+  - Marks screen now includes an in-context remarks pane (comment set + bank quick insert + save) to avoid screen-hopping.
+  - Added DB migration snapshot fixtures/tests to protect backward compatibility (`rust/markbookd/tests/db_migration_snapshots.rs`).
+  - Added CI workflow for packaged smoke on macOS + Windows (`.github/workflows/packaged-smoke.yml`).
+
+### Classroom Workflow Iteration Snapshot (2026-02-18, windowing/filters/bulk)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports renderer tests: `bun run test:reports` => PASS
+- Playwright regression: `bun run test:e2e` => PASS (26 passed, 1 skipped packaged smoke)
+- Packaging smoke: `bun run test:packaging` => PASS
+- Packaged smoke: `bun run test:e2e:packaged` => PASS
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Implemented in this slice:
+  - Marks grid now uses windowed/tiled loading in renderer state instead of eager full-matrix load on open.
+  - Added `grid.get` range hard validation (`bad_params` on negative/oversized windows).
+  - Added bulk membership endpoint `students.membership.bulkSet` and switched Students screen bulk actions to one IPC call.
+  - Added single-remark endpoint `comments.remarks.upsertOne` and switched Marks remark save to point updates (no full set rewrite).
+  - Report model endpoints now accept optional `filters` + `studentScope` and include applied values in model payloads.
+  - Reports screen now exposes Marks-aligned filter controls (term/category/types/scope) and sends them into model requests.
+  - Reports HTML templates now print applied filter/scope metadata in report headers.
+  - Added E2E coverage:
+    - `apps/desktop/e2e/marks-windowed-fetch.e2e.spec.cjs`
+    - `apps/desktop/e2e/reports-filters-alignment.e2e.spec.cjs`
+  - CI packaged smoke workflow now uploads diagnostics artifacts on failure (`test-results`, `playwright-report`, `apps/desktop/out`).
+
+### Router/Report Extraction Notes
+- All `reports.*Model` methods are now handled directly in `rust/markbookd/src/ipc/handlers/reports.rs` (no legacy router fallback).
+- Added Rust integration smoke test: `rust/markbookd/tests/reports_models_smoke.rs`.
+
+### Calc Parity Notes
+- Added assessment-stats recompute lock: `rust/markbookd/tests/assessment_stats_parity.rs`.
+- Calc now models legacy `valid_kid(kid, MkSet)` semantics:
+  - `students.active` corresponds to `valid_kid(kid, 0)`
+  - `students.mark_set_mask` corresponds to the per-markset membership bits (`dummy$` trailing field in `CL*.Yxx`)
+  - A student is considered valid for a mark set if `active && mask_bit(mark_set.sort_order)` (with `TBA` meaning include all mark sets).
+- Added membership effect lock: `rust/markbookd/tests/valid_kid_membership_affects_averages.rs`.
+- `*.Yxx` mark files include stored per-assessment average fields in summary lines, but those can drift if the class list validity flags change after a calculation pass. The lock test recomputes expected stats from raw scores + current valid-kid mask to match VB6 `Calculate` semantics.
+- Added an optional strict lock against freshly-saved legacy mark files:
+  - `rust/markbookd/tests/assessment_stats_vs_fresh_legacy_summaries.rs`
+  - fixture instructions: `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/README.md`
 
 ### Parsing Gotchas / Sentinel Mapping
 - Mark files `*.Yxx` store per-student values as `percent, raw`.
@@ -66,3 +125,7 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `raw < 0` (typically `-1`) => Zero (counts as 0, displayed as 0)
 - In SQLite `scores.status` is one of: `scored`, `no_mark`, `zero`.
 - Percent is redundant for v1 grid; grid displays and edits raw score only.
+- TBK (`*.TBK`) is structured as: item count, per-item metadata, then per-student item-id/note rows.
+- ICC (`*.ICC`) is a `(students+1) x (subjects+1)` matrix (row 0 defaults + per-student rows).
+- Combined comment sets from `ALL!<class>.IDX` can overlap set numbers with mark-set IDX files; importer remaps to the next free set number per mark set to preserve both.
+- Legacy export helper files (`*.13`, `*.15`, `*.32`, `*.40`, `*.5`, `*.6`, `*.7`) may contain either 27 or 28 value rows per block for a 27-student class; parser must tolerate both.

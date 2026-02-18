@@ -1,0 +1,12 @@
+pub mod assets;
+pub mod attendance;
+pub mod backup_exchange;
+pub mod classes;
+pub mod comments;
+pub mod core;
+pub mod grid;
+pub mod import_legacy;
+pub mod markset_setup;
+pub mod reports;
+pub mod seating;
+pub mod students;

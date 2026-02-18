@@ -17,5 +17,9 @@ contextBridge.exposeInMainWorld("markbook", {
   exportPdfHtml: (html, outPath) =>
     ipcRenderer.invoke("pdf.exportHtml", { html, outPath }),
   exportPdfHtmlWithSaveDialog: (html, defaultFilename) =>
-    ipcRenderer.invoke("pdf.exportHtmlWithSaveDialog", { html, defaultFilename })
+    ipcRenderer.invoke("pdf.exportHtmlWithSaveDialog", { html, defaultFilename }),
+  files: {
+    pickSave: (options) => ipcRenderer.invoke("files.pickSave", options || {}),
+    pickOpen: (options) => ipcRenderer.invoke("files.pickOpen", options || {})
+  }
 });

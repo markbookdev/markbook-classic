@@ -7,7 +7,7 @@ function mkdtemp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-async function launchElectronApp() {
+async function launchElectronApp(extraEnv = {}) {
   const repoRoot = path.join(__dirname, "..", "..", "..");
   const appDir = path.join(repoRoot, "apps", "desktop");
   const electronExecutable = require("electron");
@@ -22,6 +22,7 @@ async function launchElectronApp() {
       ...process.env,
       VITE_DEV_SERVER_URL: "",
       MARKBOOK_USER_DATA_DIR: userDataDir,
+      ...extraEnv,
     },
   });
 

@@ -6,6 +6,7 @@ dist/
 apps/desktop/dist/
 apps/desktop/.vite/
 apps/desktop/out/
+apps/desktop/resources/markbookd/markbookd*
 
 # Rust
 rust/markbookd/target/
@@ -21,6 +22,7 @@ test-results/
 .workspaces/
 *.sqlite
 *.sqlite3
+!rust/markbookd/tests/fixtures/db/**/markbook.sqlite3
 
 # Optional: exclude scratch notes
 .agent/scratch/*

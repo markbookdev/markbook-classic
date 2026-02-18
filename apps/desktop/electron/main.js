@@ -62,6 +62,30 @@ let sidecarPathUsed = null;
 let nextReqId = 1;
 const pending = new Map(); // id -> { resolve, reject }
 let sidecarWatchInterval = null;
+let sidecarMissingWarned = false;
+
+function writeE2eReady(patch) {
+  const outPath = process.env.MARKBOOK_E2E_READY_FILE;
+  if (!outPath) return;
+  try {
+    const cur = (() => {
+      try {
+        return JSON.parse(fs.readFileSync(outPath, "utf8"));
+      } catch {
+        return {};
+      }
+    })();
+    const next = {
+      ...cur,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(next, null, 2), "utf8");
+  } catch {
+    // ignore
+  }
+}
 
 function startSidecarWatcher() {
   // Dev convenience: when rebuilding the Rust binary, restart the running sidecar.
@@ -143,6 +167,29 @@ function startSidecar() {
     console.warn(
       "markbookd not found. Looked for:\n" + candidates.map((p) => "  " + p).join("\n")
     );
+    writeE2eReady({
+      sidecarRunning: false,
+      sidecarPath: null,
+      sidecarMissing: true,
+      sidecarCandidates: candidates,
+    });
+
+    if (app.isPackaged && !sidecarMissingWarned) {
+      sidecarMissingWarned = true;
+      try {
+        dialog.showMessageBox({
+          type: "error",
+          title: "MarkBook Classic",
+          message: "Required component missing: markbookd",
+          detail:
+            "The MarkBook sidecar binary was not found in this app bundle.\n\nSearched:\n" +
+            candidates.map((p) => "  " + p).join("\n") +
+            "\n\nReinstall the app or contact support.",
+        });
+      } catch {
+        // ignore
+      }
+    }
     return;
   }
 
@@ -150,11 +197,24 @@ function startSidecar() {
   sidecar = spawn(sidecarPath, [], { stdio: ["pipe", "pipe", "pipe"] });
   startSidecarWatcher();
 
+  writeE2eReady({
+    sidecarRunning: true,
+    sidecarMissing: false,
+    sidecarPath: sidecarPathUsed,
+    sidecarPid: sidecar?.pid ?? null,
+  });
+
   sidecar.on("exit", (code, sig) => {
     console.warn("markbookd exited", { code, sig });
     sidecar = null;
     sidecarPathUsed = null;
     stopSidecarWatcher();
+    writeE2eReady({
+      sidecarRunning: false,
+      sidecarPath: null,
+      sidecarPid: null,
+      sidecarExit: { code, sig },
+    });
     for (const [id, p] of pending.entries()) {
       p.reject(new Error("markbookd exited"));
       pending.delete(id);
@@ -200,6 +260,7 @@ function stopSidecar() {
   sidecar = null;
   sidecarPathUsed = null;
   stopSidecarWatcher();
+  writeE2eReady({ sidecarRunning: false, sidecarPath: null, sidecarPid: null });
 }
 
 function sidecarRequest(method, params) {
@@ -259,10 +320,23 @@ function createMainWindow() {
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) mainWindow.loadURL(devUrl);
   else mainWindow.loadFile(path.join(__dirname, "..", "dist", "renderer", "index.html"));
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    writeE2eReady({
+      rendererLoaded: true,
+      sidecarRunning: Boolean(sidecar),
+      sidecarPath: sidecarPathUsed,
+      sidecarPid: sidecar?.pid ?? null,
+    });
+  });
 }
 
 app.whenReady().then(() => {
   createMainWindow();
+  // In packaged builds we want failures to show early; for E2E we also want a clear signal.
+  if (app.isPackaged || process.env.MARKBOOK_E2E_READY_FILE) {
+    startSidecar();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -326,6 +400,40 @@ ipcMain.handle("legacy.selectClassFolder", async () => {
   const res = await dialog.showOpenDialog({
     properties: ["openDirectory"]
   });
+  if (res.canceled || !res.filePaths[0]) return null;
+  return res.filePaths[0];
+});
+
+ipcMain.handle("files.pickSave", async (_evt, payload) => {
+  if (process.env.MARKBOOK_E2E_PICK_SAVE_PATH) {
+    return process.env.MARKBOOK_E2E_PICK_SAVE_PATH;
+  }
+
+  const options = {
+    title: payload?.title || "Save File",
+    defaultPath: payload?.defaultPath,
+    filters: Array.isArray(payload?.filters) ? payload.filters : undefined,
+  };
+  const res = mainWindow
+    ? await dialog.showSaveDialog(mainWindow, options)
+    : await dialog.showSaveDialog(options);
+  if (res.canceled || !res.filePath) return null;
+  return res.filePath;
+});
+
+ipcMain.handle("files.pickOpen", async (_evt, payload) => {
+  if (process.env.MARKBOOK_E2E_PICK_OPEN_PATH) {
+    return process.env.MARKBOOK_E2E_PICK_OPEN_PATH;
+  }
+
+  const options = {
+    title: payload?.title || "Open File",
+    properties: ["openFile"],
+    filters: Array.isArray(payload?.filters) ? payload.filters : undefined,
+  };
+  const res = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
   if (res.canceled || !res.filePaths[0]) return null;
   return res.filePaths[0];
 });

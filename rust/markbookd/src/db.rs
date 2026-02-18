@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use serde_json::Value as JsonValue;
 use std::path::Path;
 
 pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
@@ -6,6 +7,9 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     let db_path = workspace.join("markbook.sqlite3");
     let conn = Connection::open(db_path)?;
     conn.execute("PRAGMA foreign_keys = ON", [])?;
+
+    // Workspace-scoped key/value settings. Stored as JSON for forwards compatibility.
+    ensure_workspace_settings(&conn)?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS classes(
@@ -26,6 +30,7 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
             active INTEGER NOT NULL,
             sort_order INTEGER NOT NULL,
             raw_line TEXT NOT NULL,
+            mark_set_mask TEXT,
             updated_at TEXT,
             FOREIGN KEY(class_id) REFERENCES classes(id)
         )",
@@ -39,6 +44,7 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     // Existing workspaces may have a students table without sort_order. Add and backfill if needed.
     ensure_students_sort_order(&conn)?;
     ensure_students_updated_at(&conn)?;
+    ensure_students_mark_set_mask(&conn)?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_students_class_sort ON students(class_id, sort_order)",
         [],
@@ -62,6 +68,153 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS learning_skills_cells(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            term INTEGER NOT NULL,
+            skill_code TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_at TEXT,
+            PRIMARY KEY(class_id, student_id, term, skill_code),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_skills_class ON learning_skills_cells(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_skills_student ON learning_skills_cells(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_settings(
+            class_id TEXT PRIMARY KEY,
+            school_year_start_month INTEGER NOT NULL DEFAULT 9,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_months(
+            class_id TEXT NOT NULL,
+            month INTEGER NOT NULL,
+            type_of_day_codes TEXT NOT NULL,
+            PRIMARY KEY(class_id, month),
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attendance_student_months(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            month INTEGER NOT NULL,
+            day_codes TEXT NOT NULL,
+            PRIMARY KEY(class_id, student_id, month),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_months_class ON attendance_months(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_student_months_class ON attendance_student_months(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attendance_student_months_student ON attendance_student_months(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seating_plans(
+            class_id TEXT PRIMARY KEY,
+            rows INTEGER NOT NULL,
+            seats_per_row INTEGER NOT NULL,
+            blocked_mask TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seating_assignments(
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            seat_code INTEGER NOT NULL,
+            PRIMARY KEY(class_id, student_id),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_seating_assignments_class ON seating_assignments(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_seating_assignments_student ON seating_assignments(student_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS loaned_items(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            mark_set_id TEXT,
+            item_name TEXT NOT NULL,
+            quantity REAL,
+            notes TEXT,
+            raw_line TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(mark_set_id) REFERENCES mark_sets(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_class ON loaned_items(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_student ON loaned_items(student_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_loaned_items_mark_set ON loaned_items(mark_set_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS student_device_map(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            device_code TEXT NOT NULL,
+            raw_line TEXT NOT NULL,
+            UNIQUE(class_id, student_id),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_student_device_map_class ON student_device_map(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_student_device_map_student ON student_device_map(student_id)",
         [],
     )?;
 
@@ -162,12 +315,131 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_set_indexes(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            mark_set_id TEXT NOT NULL,
+            set_number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            fit_mode INTEGER NOT NULL DEFAULT 0,
+            fit_font_size INTEGER NOT NULL DEFAULT 8,
+            fit_width INTEGER NOT NULL DEFAULT 50,
+            fit_lines INTEGER NOT NULL DEFAULT 1,
+            fit_subj TEXT NOT NULL DEFAULT '',
+            max_chars INTEGER NOT NULL DEFAULT 100,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            bank_short TEXT,
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(mark_set_id) REFERENCES mark_sets(id),
+            UNIQUE(mark_set_id, set_number)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_set_remarks(
+            id TEXT PRIMARY KEY,
+            comment_set_index_id TEXT NOT NULL,
+            student_id TEXT NOT NULL,
+            remark TEXT NOT NULL,
+            FOREIGN KEY(comment_set_index_id) REFERENCES comment_set_indexes(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            UNIQUE(comment_set_index_id, student_id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_banks(
+            id TEXT PRIMARY KEY,
+            short_name TEXT NOT NULL UNIQUE,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            fit_profile TEXT,
+            source_path TEXT
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS comment_bank_entries(
+            id TEXT PRIMARY KEY,
+            bank_id TEXT NOT NULL,
+            sort_order INTEGER NOT NULL,
+            type_code TEXT NOT NULL,
+            level_code TEXT NOT NULL,
+            text TEXT NOT NULL,
+            FOREIGN KEY(bank_id) REFERENCES comment_banks(id),
+            UNIQUE(bank_id, sort_order)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_indexes_class ON comment_set_indexes(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_indexes_mark_set ON comment_set_indexes(mark_set_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_remarks_set ON comment_set_remarks(comment_set_index_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_set_remarks_student ON comment_set_remarks(student_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_comment_bank_entries_bank ON comment_bank_entries(bank_id)",
+        [],
+    )?;
+
     // Migrate older workspaces to the expanded mark-state semantics:
     // - "missing" (raw_value NULL) => "zero"
     // - "scored" with raw_value=0 => "no_mark"
     migrate_scores_statuses(&conn)?;
 
     Ok(conn)
+}
+
+fn ensure_workspace_settings(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_settings(
+            key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL
+        )",
+        [],
+    )?;
+    Ok(())
+}
+
+pub fn settings_get_json(conn: &Connection, key: &str) -> anyhow::Result<Option<JsonValue>> {
+    use rusqlite::OptionalExtension;
+    let s: Option<String> = conn
+        .query_row(
+            "SELECT value_json FROM workspace_settings WHERE key = ?",
+            [key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(s) = s else {
+        return Ok(None);
+    };
+    let v: JsonValue = serde_json::from_str(&s)?;
+    Ok(Some(v))
+}
+
+pub fn settings_set_json(conn: &Connection, key: &str, value: &JsonValue) -> anyhow::Result<()> {
+    let s = serde_json::to_string(value)?;
+    conn.execute(
+        "INSERT INTO workspace_settings(key, value_json) VALUES(?, ?)
+         ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+        (key, s),
+    )?;
+    Ok(())
+}
+
+pub fn settings_delete(conn: &Connection, key: &str) -> anyhow::Result<()> {
+    conn.execute("DELETE FROM workspace_settings WHERE key = ?", [key])?;
+    Ok(())
 }
 
 fn ensure_students_sort_order(conn: &Connection) -> anyhow::Result<()> {
@@ -211,6 +483,70 @@ fn ensure_students_updated_at(conn: &Connection) -> anyhow::Result<()> {
     }
     conn.execute("ALTER TABLE students ADD COLUMN updated_at TEXT", [])?;
     Ok(())
+}
+
+fn ensure_students_mark_set_mask(conn: &Connection) -> anyhow::Result<()> {
+    if !table_has_column(conn, "students", "mark_set_mask")? {
+        conn.execute("ALTER TABLE students ADD COLUMN mark_set_mask TEXT", [])?;
+    }
+
+    // Backfill from legacy `raw_line` where possible, otherwise default to TBA (include active
+    // students in all mark sets). Also normalize any existing invalid/empty values.
+    let mut stmt =
+        conn.prepare("SELECT id, mark_set_mask, raw_line FROM students ORDER BY rowid")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, existing, raw_line) = row?;
+
+        let existing_norm = existing
+            .as_deref()
+            .map(|s| s.trim().to_ascii_uppercase())
+            .filter(|s| is_mark_set_mask_valid(s));
+
+        let raw_norm = extract_mark_set_mask_from_raw_line(&raw_line);
+
+        let desired = existing_norm
+            .or(raw_norm)
+            .unwrap_or_else(|| "TBA".into());
+
+        if existing.map(|s| s.trim().to_ascii_uppercase()) != Some(desired.clone()) {
+            conn.execute(
+                "UPDATE students SET mark_set_mask = ? WHERE id = ?",
+                (&desired, &id),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_mark_set_mask_from_raw_line(raw_line: &str) -> Option<String> {
+    let t = raw_line.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let last = t.split(',').last()?.trim();
+    if last.is_empty() {
+        return None;
+    }
+    let up = last.to_ascii_uppercase();
+    if up == "TBA" {
+        return Some("TBA".into());
+    }
+    if is_mark_set_mask_valid(&up) {
+        return Some(up);
+    }
+    None
+}
+
+fn is_mark_set_mask_valid(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|ch| ch == '0' || ch == '1')
 }
 
 fn ensure_mark_sets_settings_columns(conn: &Connection) -> anyhow::Result<()> {

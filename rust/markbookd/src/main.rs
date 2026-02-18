@@ -1,3 +1,4 @@
+mod backup;
 mod calc;
 mod db;
 mod ipc;

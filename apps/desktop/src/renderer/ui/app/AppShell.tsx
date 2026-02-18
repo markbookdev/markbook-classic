@@ -16,6 +16,12 @@ import { MarkSetSetupScreen } from "../screens/MarkSetSetupScreen";
 import { AttendanceScreen } from "../screens/AttendanceScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { SeatingPlanScreen } from "../screens/SeatingPlanScreen";
+import { LearningSkillsScreen } from "../screens/LearningSkillsScreen";
+import { BackupScreen } from "../screens/BackupScreen";
+import { ExchangeScreen } from "../screens/ExchangeScreen";
+import { LoanedItemsScreen } from "../screens/LoanedItemsScreen";
+import { DeviceMappingsScreen } from "../screens/DeviceMappingsScreen";
+import { CalcSettingsScreen } from "../screens/CalcSettingsScreen";
 
 type Screen =
   | "dashboard"
@@ -25,7 +31,13 @@ type Screen =
   | "markset_setup"
   | "attendance"
   | "notes"
-  | "seating_plan";
+  | "seating_plan"
+  | "learning_skills"
+  | "loaned_items"
+  | "device_mappings"
+  | "calc_settings"
+  | "backup"
+  | "exchange";
 
 type ClassRow = {
   id: string;
@@ -394,6 +406,33 @@ export function AppShell() {
               <button data-testid="nav-seating" onClick={() => setScreen("seating_plan")}>
                 Seating Plan
               </button>
+              <button
+                data-testid="nav-learning-skills"
+                onClick={() => setScreen("learning_skills")}
+              >
+                Learning Skills
+              </button>
+              <button data-testid="nav-loaned-items" onClick={() => setScreen("loaned_items")}>
+                Loaned Items
+              </button>
+              <button
+                data-testid="nav-device-mappings"
+                onClick={() => setScreen("device_mappings")}
+              >
+                Device Mappings
+              </button>
+              <button
+                data-testid="nav-calc-settings"
+                onClick={() => setScreen("calc_settings")}
+              >
+                Calc Settings
+              </button>
+              <button data-testid="nav-backup" onClick={() => setScreen("backup")}>
+                Backup
+              </button>
+              <button data-testid="nav-exchange" onClick={() => setScreen("exchange")}>
+                Exchange
+              </button>
               <button data-testid="nav-reports" onClick={() => setScreen("reports")}>
                 Reports
               </button>
@@ -459,11 +498,27 @@ export function AppShell() {
               onChanged={refresh}
             />
           ) : screen === "attendance" ? (
-            <AttendanceScreen />
+            <AttendanceScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "notes" ? (
             <NotesScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "seating_plan" ? (
-            <SeatingPlanScreen />
+            <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "learning_skills" ? (
+            <LearningSkillsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "calc_settings" ? (
+            <CalcSettingsScreen onError={setSidecarError} />
+          ) : screen === "loaned_items" ? (
+            <LoanedItemsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "device_mappings" ? (
+            <DeviceMappingsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "backup" ? (
+            <BackupScreen
+              workspacePath={health.workspacePath}
+              onError={setSidecarError}
+              onAfterImport={refresh}
+            />
+          ) : screen === "exchange" ? (
+            <ExchangeScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : (
             <div style={{ padding: 24, color: "#666" }}>(unknown screen)</div>
           )}

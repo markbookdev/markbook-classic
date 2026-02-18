@@ -49,6 +49,12 @@ export type MarkSetGridReportModel = {
   // - 0 => Zero (counts as 0)
   // - >0 => scored
   cells: Array<Array<number | null>>;
+  filters?: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  studentScope?: "all" | "active" | "valid";
 };
 
 export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): string {
@@ -100,6 +106,7 @@ export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): stri
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; vertical-align: top; }
       th { background: #f6f6f6; font-weight: 700; }
       tfoot td { background: #fafafa; font-weight: 700; }
@@ -123,6 +130,8 @@ export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): stri
           <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
     model.markSet.description
   )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">
@@ -166,6 +175,8 @@ export type MarkSetSummaryReportModel = {
     categoryName: string | null;
     typesMask: number | null;
   };
+  studentScope?: "all" | "active" | "valid";
+  studentScope?: "all" | "active" | "valid";
   categories: Array<{ name: string; weight: number; sortOrder: number }>;
   assessments: Array<{
     assessmentId: string;
@@ -217,6 +228,27 @@ function methodLabel(weightMethod: number): string {
   if (weightMethod === 1) return "Category weighting";
   if (weightMethod === 2) return "Equal weighting";
   return `Method ${weightMethod}`;
+}
+
+function reportStudentScopeLabel(scope?: "all" | "active" | "valid"): string {
+  if (scope === "active") return "Active students";
+  if (scope === "valid") return "Valid for mark set";
+  return "All students";
+}
+
+function reportFiltersLabel(filters?: {
+  term: number | null;
+  categoryName: string | null;
+  typesMask: number | null;
+}): string {
+  if (!filters) return "ALL";
+  const bits: string[] = [];
+  bits.push(filters.term == null ? "Term: ALL" : `Term: ${filters.term}`);
+  bits.push(
+    filters.categoryName == null ? "Category: ALL" : `Category: ${filters.categoryName}`
+  );
+  bits.push(filters.typesMask == null ? "Types: ALL" : `Types mask: ${filters.typesMask}`);
+  return bits.join(", ");
 }
 
 export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel): string {
@@ -275,6 +307,9 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
       .meta { font-size: 11px; color: #444; line-height: 1.3; }
       .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }
@@ -294,6 +329,8 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
           <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
     model.markSet.description
   )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
         </div>
       </div>
       <div class="meta">
@@ -362,6 +399,487 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
         </tr>
       </thead>
       <tbody>${studentRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type CategoryAnalysisReportModel = {
+  class: { id: string; name: string };
+  markSet: { id: string; code: string; description: string };
+  settings: {
+    fullCode: string | null;
+    room: string | null;
+    day: string | null;
+    period: string | null;
+    weightMethod: number;
+    calcMethod: number;
+  };
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  categories: Array<{ name: string; weight: number; sortOrder: number }>;
+  perCategory: Array<{
+    name: string;
+    weight: number;
+    sortOrder: number | null;
+    classAvg: number;
+    studentCount: number;
+    assessmentCount: number;
+  }>;
+  perAssessment: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    outOf: number;
+    avgRaw: number;
+    avgPercent: number;
+    medianPercent: number;
+    scoredCount: number;
+    zeroCount: number;
+    noMarkCount: number;
+  }>;
+};
+
+export function renderCategoryAnalysisReportHtml(model: CategoryAnalysisReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const perCategoryRows = model.perCategory
+    .map(
+      (c) => `<tr>
+      <td class="left">${escapeHtml(c.name)}</td>
+      <td class="num">${c.weight.toFixed(1)}</td>
+      <td class="num">${c.classAvg.toFixed(1)}</td>
+      <td class="num">${c.studentCount}</td>
+      <td class="num">${c.assessmentCount}</td>
+    </tr>`
+    )
+    .join("");
+  const perAssessmentRows = model.perAssessment
+    .map(
+      (a) => `<tr>
+      <td class="left">${escapeHtml(a.title)}</td>
+      <td class="left">${escapeHtml(a.categoryName ?? "")}</td>
+      <td class="num">${a.outOf.toFixed(1)}</td>
+      <td class="num">${a.avgRaw.toFixed(1)}</td>
+      <td class="num">${a.avgPercent.toFixed(1)}</td>
+      <td class="num">${a.medianPercent.toFixed(1)}</td>
+      <td class="num">${a.scoredCount}</td>
+      <td class="num">${a.zeroCount}</td>
+      <td class="num">${a.noMarkCount}</td>
+    </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+      .break { page-break-before: always; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Category Analysis</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
+    model.markSet.description
+  )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <h2>Category Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Category</th>
+          <th class="num">Weight</th>
+          <th class="num">Class Avg %</th>
+          <th class="num">Students</th>
+          <th class="num">Assessments</th>
+        </tr>
+      </thead>
+      <tbody>${perCategoryRows}</tbody>
+    </table>
+
+    <div class="break"></div>
+    <h2>Assessment Stats</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Assessment</th>
+          <th class="left">Category</th>
+          <th class="num">Out Of</th>
+          <th class="num">Avg Raw</th>
+          <th class="num">Avg %</th>
+          <th class="num">Median %</th>
+          <th class="num">Scored</th>
+          <th class="num">Zero</th>
+          <th class="num">No Mark</th>
+        </tr>
+      </thead>
+      <tbody>${perAssessmentRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type StudentSummaryReportModel = {
+  class: { id: string; name: string };
+  markSet: { id: string; code: string; description: string };
+  settings: {
+    fullCode: string | null;
+    room: string | null;
+    day: string | null;
+    period: string | null;
+    weightMethod: number;
+    calcMethod: number;
+  };
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  studentScope?: "all" | "active" | "valid";
+  student: {
+    studentId: string;
+    displayName: string;
+    sortOrder: number;
+    active: boolean;
+    finalMark: number | null;
+    noMarkCount: number;
+    zeroCount: number;
+    scoredCount: number;
+  };
+  assessments: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    term: number | null;
+    legacyType: number | null;
+    weight: number;
+    outOf: number;
+  }>;
+  perAssessment: Array<{
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    outOf: number;
+    avgRaw: number;
+    avgPercent: number;
+    medianPercent: number;
+    scoredCount: number;
+    zeroCount: number;
+    noMarkCount: number;
+  }>;
+};
+
+export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const statRows = model.perAssessment
+    .map(
+      (a) => `<tr>
+      <td class="left">${escapeHtml(a.title)}</td>
+      <td class="left">${escapeHtml(a.categoryName ?? "")}</td>
+      <td class="num">${a.outOf.toFixed(1)}</td>
+      <td class="num">${a.avgRaw.toFixed(1)}</td>
+      <td class="num">${a.avgPercent.toFixed(1)}</td>
+      <td class="num">${a.medianPercent.toFixed(1)}</td>
+    </tr>`
+    )
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Student Summary</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
+    model.markSet.description
+  )}</div>
+          <div><strong>Student:</strong> ${escapeHtml(model.student.displayName)}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div><strong>Final Mark:</strong> ${
+          model.student.finalMark == null ? "" : model.student.finalMark.toFixed(1)
+        }</div>
+        <div><strong>Scored:</strong> ${model.student.scoredCount}</div>
+      </div>
+      <div class="card">
+        <div><strong>Zero:</strong> ${model.student.zeroCount}</div>
+        <div><strong>No Mark:</strong> ${model.student.noMarkCount}</div>
+      </div>
+    </div>
+
+    <h2>Assessment Context</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Assessment</th>
+          <th class="left">Category</th>
+          <th class="num">Out Of</th>
+          <th class="num">Class Avg Raw</th>
+          <th class="num">Class Avg %</th>
+          <th class="num">Class Median %</th>
+        </tr>
+      </thead>
+      <tbody>${statRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type AttendanceMonthlyReportModel = {
+  class: { id: string; name: string };
+  attendance: {
+    month: string;
+    daysInMonth: number;
+    typeOfDayCodes: string;
+    students: Array<{ id: string; displayName: string; sortOrder: number; active: boolean }>;
+    rows: Array<{ studentId: string; dayCodes: string }>;
+  };
+};
+
+export function renderAttendanceMonthlyReportHtml(
+  model: AttendanceMonthlyReportModel
+): string {
+  const generatedAt = new Date().toLocaleString();
+  const days = Array.from({ length: model.attendance.daysInMonth }, (_, i) => i + 1);
+  const rowByStudent = new Map(model.attendance.rows.map((r) => [r.studentId, r.dayCodes]));
+  const rows = model.attendance.students
+    .map((s) => {
+      const dayCodes = rowByStudent.get(s.id) ?? "";
+      const cells = days
+        .map((d) => `<td class="c">${escapeHtml(dayCodes[d - 1] ?? "")}</td>`)
+        .join("");
+      return `<tr><td class="left">${escapeHtml(s.displayName)}</td>${cells}</tr>`;
+    })
+    .join("");
+  const typeRow = days
+    .map((d) => `<td class="c">${escapeHtml(model.attendance.typeOfDayCodes[d - 1] ?? "")}</td>`)
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4 landscape; margin: 10mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 9px; padding: 2px 3px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      td.c, th.c { text-align: center; width: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Attendance Monthly Report</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div><strong>Month:</strong> ${escapeHtml(model.attendance.month)}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          ${days.map((d) => `<th class="c">${d}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="left"><strong>Type</strong></td>${typeRow}</tr>
+        ${rows}
+      </tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type ClassListReportModel = {
+  class: { id: string; name: string };
+  students: Array<{
+    id: string;
+    displayName: string;
+    studentNo: string | null;
+    birthDate: string | null;
+    active: boolean;
+    sortOrder: number;
+    note: string;
+  }>;
+};
+
+export function renderClassListReportHtml(model: ClassListReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const rows = model.students
+    .map(
+      (s) => `<tr>
+      <td class="left">${escapeHtml(s.displayName)}</td>
+      <td>${escapeHtml(s.studentNo ?? "")}</td>
+      <td>${escapeHtml(s.birthDate ?? "")}</td>
+      <td>${s.active ? "Y" : "N"}</td>
+      <td class="left">${escapeHtml(s.note ?? "")}</td>
+    </tr>`
+    )
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; vertical-align: top; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Class List</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          <th>No</th>
+          <th>Birth Date</th>
+          <th>Active</th>
+          <th class="left">Note</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type LearningSkillsSummaryReportModel = {
+  class: { id: string; name: string };
+  term: number;
+  skillCodes: string[];
+  students: Array<{ id: string; displayName: string; sortOrder: number; active: boolean }>;
+  rows: Array<{ studentId: string; values: Record<string, string> }>;
+};
+
+export function renderLearningSkillsSummaryReportHtml(
+  model: LearningSkillsSummaryReportModel
+): string {
+  const generatedAt = new Date().toLocaleString();
+  const rowByStudent = new Map(model.rows.map((r) => [r.studentId, r.values]));
+  const bodyRows = model.students
+    .map((s) => {
+      const values = rowByStudent.get(s.id) ?? {};
+      const cells = model.skillCodes
+        .map((code) => `<td class="c">${escapeHtml(values[code] ?? "")}</td>`)
+        .join("");
+      return `<tr><td class="left">${escapeHtml(s.displayName)}</td>${cells}</tr>`;
+    })
+    .join("");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.c, th.c { text-align: center; width: 20mm; }
+    </style>
+  </head>
+  <body>
+    <h1>Learning Skills Summary</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div><strong>Term:</strong> ${model.term}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          ${model.skillCodes.map((code) => `<th class="c">${escapeHtml(code)}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
     </table>
   </body>
 </html>`;
