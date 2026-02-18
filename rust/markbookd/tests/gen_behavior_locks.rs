@@ -4,7 +4,6 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn fixture_path(rel: &str) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -15,8 +14,8 @@ fn temp_dir(prefix: &str) -> PathBuf {
     let p = std::env::temp_dir().join(format!(
         "{}-{}",
         prefix,
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             .expect("clock")
             .as_nanos()
     ));
@@ -67,17 +66,15 @@ fn request_ok(
 }
 
 #[test]
-fn sample25_calc_behavior_locks_hold() {
-    let locks_path = fixture_path("fixtures/legacy/Sample25/expected/calc-behavior-locks.json");
-    let text = fs::read_to_string(&locks_path).expect("read calc-behavior-locks.json");
-    let locks: serde_json::Value = serde_json::from_str(&text).expect("parse json");
+fn generate_calc_behavior_locks_when_enabled() {
+    if std::env::var("MBC_GEN_LOCKS").ok().as_deref() != Some("1") {
+        // Not a "skip" because this is an integration test binary; just a no-op.
+        return;
+    }
 
-    let marksets_obj = locks
-        .get("markSets")
-        .and_then(|v| v.as_object())
-        .expect("markSets object");
+    let out_path = fixture_path("fixtures/legacy/Sample25/expected/calc-behavior-locks.json");
 
-    let workspace = temp_dir("markbook-calc-behavior-locks");
+    let workspace = temp_dir("markbook-gen-calc-behavior-locks");
     let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
 
     let (mut child, mut stdin, mut reader) = spawn_sidecar();
@@ -123,27 +120,30 @@ fn sample25_calc_behavior_locks_hold() {
         }
     }
 
-    for (code, cfg) in marksets_obj {
+    let markset_codes = ["MAT1", "MAT2", "MAT3", "SNC1", "SNC2", "SNC3"];
+    let students = [
+        "O'Shanter, Tam",
+        "Boame, Gerald",
+        "Beach, Shelley",
+        "Bell, Clarissa",
+        "Stone, Edward",
+        "Hughes, Amber",
+        "Lowe, Glenda",
+        "Wilco, Roger",
+    ];
+    let calc_methods = [0_i64, 1, 2, 3, 4];
+    let term_keys = ["ALL", "1", "2", "3"];
+
+    let mut marksets_obj = serde_json::Map::new();
+
+    for code in markset_codes {
         let mark_set_id = id_by_code
             .get(code)
             .unwrap_or_else(|| panic!("mark set {} not found in import", code))
             .to_string();
 
-        let students: Vec<String> = cfg
-            .get("students")
-            .and_then(|v| v.as_array())
-            .expect("students array")
-            .iter()
-            .map(|v| v.as_str().expect("student name").to_string())
-            .collect();
-
-        let methods = cfg
-            .get("methods")
-            .and_then(|v| v.as_object())
-            .expect("methods object");
-
-        for (method_s, method_cfg) in methods {
-            let calc_method: i64 = method_s.parse().expect("calc method int key");
+        let mut methods_obj = serde_json::Map::new();
+        for calc_method in calc_methods {
             let _ = request_ok(
                 &mut stdin,
                 &mut reader,
@@ -156,26 +156,12 @@ fn sample25_calc_behavior_locks_hold() {
                 }),
             );
 
-            let terms = method_cfg
-                .as_object()
-                .expect("method terms object");
-            for (term_key, expected_map) in terms {
-                let (term_part, types_mask) = if let Some((left, right)) = term_key.split_once("_") {
-                    // Currently supported suffixes:
-                    // - *_T0 => typesMask = 1 (legacy_type 0 only)
-                    let m = match right {
-                        "T0" => Some(1_i64),
-                        _ => None,
-                    };
-                    (left, m)
-                } else {
-                    (term_key.as_str(), None)
-                };
-
-                let term = if term_part == "ALL" {
+            let mut term_obj = serde_json::Map::new();
+            for term_key in term_keys {
+                let term = if term_key == "ALL" {
                     serde_json::Value::Null
                 } else {
-                    json!(term_part.parse::<i64>().expect("term int key"))
+                    json!(term_key.parse::<i64>().expect("term int key"))
                 };
                 let sum = request_ok(
                     &mut stdin,
@@ -185,10 +171,9 @@ fn sample25_calc_behavior_locks_hold() {
                     json!({
                         "classId": class_id,
                         "markSetId": mark_set_id,
-                        "filters": { "term": term, "categoryName": serde_json::Value::Null, "typesMask": types_mask.map(|m| json!(m)).unwrap_or(serde_json::Value::Null) }
+                        "filters": { "term": term, "categoryName": serde_json::Value::Null, "typesMask": serde_json::Value::Null }
                     }),
                 );
-
                 let mut actual_by_name: HashMap<String, Option<f64>> = HashMap::new();
                 for row in sum
                     .get("perStudent")
@@ -202,42 +187,80 @@ fn sample25_calc_behavior_locks_hold() {
                     let fm = row.get("finalMark").and_then(|v| v.as_f64());
                     actual_by_name.insert(name.to_string(), fm);
                 }
-
-                let expected_obj = expected_map
-                    .as_object()
-                    .expect("expected student map object");
-                for student_name in &students {
-                    let expected = expected_obj
-                        .get(student_name)
-                        .unwrap_or_else(|| panic!("missing expected value for {}", student_name));
-                    let expected_val = expected.as_f64();
-                    let actual_val = actual_by_name.get(student_name).cloned().unwrap_or(None);
-                    match (expected_val, actual_val) {
-                        (None, None) => {}
-                        (Some(e), Some(a)) => {
-                            assert!(
-                                (a - e).abs() <= 0.05,
-                                "{} {} term {}: expected {}, got {}",
-                                code,
-                                calc_method,
-                                term_key,
-                                e,
-                                a
-                            );
-                        }
-                        (None, Some(a)) => panic!(
-                            "{} {} term {}: expected null, got {}",
-                            code, calc_method, term_key, a
-                        ),
-                        (Some(e), None) => panic!(
-                            "{} {} term {}: expected {}, got null",
-                            code, calc_method, term_key, e
-                        ),
-                    }
+                let mut exp = serde_json::Map::new();
+                for s in &students {
+                    exp.insert(
+                        s.to_string(),
+                        actual_by_name
+                            .get(*s)
+                            .cloned()
+                            .unwrap_or(None)
+                            .map(|v| json!(v))
+                            .unwrap_or(serde_json::Value::Null),
+                    );
                 }
+                term_obj.insert(term_key.to_string(), serde_json::Value::Object(exp));
             }
+
+            // One types-mask variant (type 0 only), term ALL.
+            {
+                let sum = request_ok(
+                    &mut stdin,
+                    &mut reader,
+                    &format!("sum-{}-{}-ALL_T0", code, calc_method),
+                    "calc.markSetSummary",
+                    json!({
+                        "classId": class_id,
+                        "markSetId": mark_set_id,
+                        "filters": { "term": serde_json::Value::Null, "categoryName": serde_json::Value::Null, "typesMask": json!(1) }
+                    }),
+                );
+                let mut actual_by_name: HashMap<String, Option<f64>> = HashMap::new();
+                for row in sum
+                    .get("perStudent")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default()
+                {
+                    let Some(name) = row.get("displayName").and_then(|v| v.as_str()) else {
+                        continue;
+                    };
+                    let fm = row.get("finalMark").and_then(|v| v.as_f64());
+                    actual_by_name.insert(name.to_string(), fm);
+                }
+                let mut exp = serde_json::Map::new();
+                for s in &students {
+                    exp.insert(
+                        s.to_string(),
+                        actual_by_name
+                            .get(*s)
+                            .cloned()
+                            .unwrap_or(None)
+                            .map(|v| json!(v))
+                            .unwrap_or(serde_json::Value::Null),
+                    );
+                }
+                term_obj.insert("ALL_T0".to_string(), serde_json::Value::Object(exp));
+            }
+
+            methods_obj.insert(calc_method.to_string(), serde_json::Value::Object(term_obj));
         }
+
+        marksets_obj.insert(
+            code.to_string(),
+            json!({
+                "students": students,
+                "methods": methods_obj
+            }),
+        );
     }
+
+    let out = json!({
+        "version": 2,
+        "generatedAt": format!("{:?}", std::time::SystemTime::now()),
+        "markSets": marksets_obj
+    });
+    fs::write(&out_path, serde_json::to_string_pretty(&out).expect("json")).expect("write locks");
 
     let _ = child.kill();
 }

@@ -6,6 +6,7 @@ dist/
 apps/desktop/dist/
 apps/desktop/.vite/
 apps/desktop/out/
+apps/desktop/resources/markbookd/markbookd*
 
 # Rust
 rust/markbookd/target/

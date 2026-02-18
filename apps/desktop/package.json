@@ -10,8 +10,8 @@
     "dev:electron": "wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "build": "bun run build:renderer && bun run build:electron",
     "build:renderer": "vite build",
-    "build:electron": "electron-builder --dir",
-    "pack": "bun run build:renderer && electron-builder"
+    "build:electron": "node scripts/stage-sidecar.cjs && electron-builder --dir",
+    "pack": "bun run build:renderer && node scripts/stage-sidecar.cjs && electron-builder"
   },
   "dependencies": {
     "@markbook/core": "workspace:*",

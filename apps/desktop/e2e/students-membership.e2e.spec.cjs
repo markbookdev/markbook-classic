@@ -72,11 +72,10 @@ test("students membership toggle affects calc and persists", async () => {
   await page.getByTestId("students-membership-tab").click();
   await page.waitForSelector('[data-testid="students-membership-table-wrap"]');
 
-  // Determine MAT1 markSetId from the sidebar selection we already have.
-  const cell = page.getByTestId(
-    `student-membership-cell-${bootstrap.studentId}-${bootstrap.markSetId}`
-  );
-  await cell.click();
+  // Bulk disable for this mark set (fast parity workflow), then verify the target student is unchecked.
+  await page.getByTestId(`membership-disable-all-${bootstrap.markSetId}`).click();
+
+  const cell = page.getByTestId(`student-membership-cell-${bootstrap.studentId}-${bootstrap.markSetId}`);
   await expect(cell).not.toBeChecked();
 
   // Navigate to Marks and select the target student row, then verify final mark is blank.
@@ -104,6 +103,14 @@ test("students membership toggle affects calc and persists", async () => {
   await page.waitForSelector('[data-testid="marks-screen"]');
   const finalTxt2 = (await page.getByTestId("marks-results-final").innerText()).trim();
   expect(finalTxt2).toBe("—");
+
+  // Cleanup: bulk enable so other tests/users aren't surprised when reusing this workspace.
+  await page.getByTestId("nav-students").click();
+  await page.waitForSelector('[data-testid="students-screen"]');
+  await page.getByTestId("students-membership-tab").click();
+  await page.waitForSelector('[data-testid="students-membership-table-wrap"]');
+  await page.getByTestId(`membership-enable-all-${bootstrap.markSetId}`).click();
+  await expect(cell).toBeChecked();
 
   await app.close();
 });

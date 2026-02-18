@@ -100,6 +100,7 @@ export function renderMarkSetGridReportHtml(model: MarkSetGridReportModel): stri
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; vertical-align: top; }
       th { background: #f6f6f6; font-weight: 700; }
       tfoot td { background: #fafafa; font-weight: 700; }
@@ -275,6 +276,9 @@ export function renderMarkSetSummaryReportHtml(model: MarkSetSummaryReportModel)
       .meta { font-size: 11px; color: #444; line-height: 1.3; }
       .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }
@@ -449,6 +453,9 @@ export function renderCategoryAnalysisReportHtml(model: CategoryAnalysisReportMo
       .meta { font-size: 11px; color: #444; line-height: 1.3; }
       .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }
@@ -585,6 +592,9 @@ export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel)
       .meta { font-size: 11px; color: #444; line-height: 1.3; }
       .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }
@@ -678,6 +688,9 @@ export function renderAttendanceMonthlyReportHtml(
       h1 { margin: 0; font-size: 18px; }
       .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 9px; padding: 2px 3px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -743,6 +756,9 @@ export function renderClassListReportHtml(model: ClassListReportModel): string {
       h1 { margin: 0; font-size: 18px; }
       .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; vertical-align: top; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }
@@ -802,6 +818,9 @@ export function renderLearningSkillsSummaryReportHtml(
       h1 { margin: 0; font-size: 18px; }
       .meta { font-size: 11px; color: #444; margin-bottom: 8px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
       th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
       th { background: #f6f6f6; }
       td.left, th.left { text-align: left; }

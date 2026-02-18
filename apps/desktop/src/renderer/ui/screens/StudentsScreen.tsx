@@ -229,6 +229,37 @@ export function StudentsScreen(props: {
     }
   }
 
+  async function bulkSetMembershipForMarkSet(markSetId: string, enabled: boolean) {
+    if (membershipLoading) return;
+    const ms = membershipMarkSets.find((m) => m.id === markSetId);
+    if (!ms) return;
+
+    setMembershipLoading(true);
+    props.onError(null);
+    try {
+      for (const s of membershipStudents) {
+        const idx = ms.sortOrder;
+        const ch = s.mask?.[idx] ?? "1";
+        const checked = ch === "1";
+        if (checked === enabled) continue;
+        const res = await requestParsed(
+          "students.membership.set",
+          { classId: props.selectedClassId, studentId: s.id, markSetId, enabled },
+          StudentsMembershipSetResultSchema
+        );
+        setMembershipStudents((prev) =>
+          prev.map((row) => (row.id === s.id ? { ...row, mask: res.mask } : row))
+        );
+      }
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+      await loadMembership();
+    } finally {
+      setMembershipLoading(false);
+    }
+  }
+
   return (
     <div data-testid="students-screen" style={{ padding: 24, maxWidth: 1040 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -486,7 +517,29 @@ export function StudentsScreen(props: {
                       style={{ textAlign: "center", padding: 10, minWidth: 80 }}
                       title={ms.code}
                     >
-                      {ms.code}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                        <div style={{ fontWeight: 700 }}>{ms.code}</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            data-testid={`membership-enable-all-${ms.id}`}
+                            disabled={membershipLoading}
+                            onClick={() => void bulkSetMembershipForMarkSet(ms.id, true)}
+                            style={{ fontSize: 11 }}
+                            title="Enable all students for this mark set"
+                          >
+                            All
+                          </button>
+                          <button
+                            data-testid={`membership-disable-all-${ms.id}`}
+                            disabled={membershipLoading}
+                            onClick={() => void bulkSetMembershipForMarkSet(ms.id, false)}
+                            style={{ fontSize: 11 }}
+                            title="Disable all students for this mark set"
+                          >
+                            None
+                          </button>
+                        </div>
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -535,4 +588,3 @@ export function StudentsScreen(props: {
     </div>
   );
 }
-

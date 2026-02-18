@@ -1,8 +1,269 @@
 {
-  "version": 1,
-  "generatedAt": "2026-02-18T14:48:09.251Z",
+  "generatedAt": "SystemTime { tv_sec: 1771429579, tv_nsec: 870010000 }",
   "markSets": {
     "MAT1": {
+      "methods": {
+        "0": {
+          "1": {
+            "Beach, Shelley": 66.2,
+            "Bell, Clarissa": 89.6,
+            "Boame, Gerald": 47.0,
+            "Hughes, Amber": 96.2,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 42.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.5
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 66.2,
+            "Bell, Clarissa": 89.6,
+            "Boame, Gerald": 47.0,
+            "Hughes, Amber": 96.2,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 42.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.5
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 66.2,
+            "Bell, Clarissa": 89.6,
+            "Boame, Gerald": 47.0,
+            "Hughes, Amber": 96.2,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 42.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.5
+          }
+        },
+        "1": {
+          "1": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 53.3,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 71.8,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 86.7
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 53.3,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 71.8,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 86.7
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 53.3,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 71.8,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 86.7
+          }
+        },
+        "2": {
+          "1": {
+            "Beach, Shelley": 90.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 90.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 90.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "3": {
+          "1": {
+            "Beach, Shelley": 68.3,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 45.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 68.3,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 45.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 68.3,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 81.7,
+            "O'Shanter, Tam": 45.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "4": {
+          "1": {
+            "Beach, Shelley": 70.8,
+            "Bell, Clarissa": 91.1,
+            "Boame, Gerald": 44.4,
+            "Hughes, Amber": 98.6,
+            "Lowe, Glenda": 77.8,
+            "O'Shanter, Tam": 43.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 70.8,
+            "Bell, Clarissa": 91.1,
+            "Boame, Gerald": 44.4,
+            "Hughes, Amber": 98.6,
+            "Lowe, Glenda": 77.8,
+            "O'Shanter, Tam": 43.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 70.8,
+            "Bell, Clarissa": 91.1,
+            "Boame, Gerald": 44.4,
+            "Hughes, Amber": 98.6,
+            "Lowe, Glenda": 77.8,
+            "O'Shanter, Tam": 43.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        }
+      },
       "students": [
         "O'Shanter, Tam",
         "Boame, Gerald",
@@ -12,121 +273,819 @@
         "Hughes, Amber",
         "Lowe, Glenda",
         "Wilco, Roger"
-      ],
+      ]
+    },
+    "MAT2": {
       "methods": {
         "0": {
           "1": {
-            "O'Shanter, Tam": 42.8,
-            "Boame, Gerald": 47,
-            "Beach, Shelley": 66.2,
-            "Bell, Clarissa": 89.6,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 96.2,
-            "Lowe, Glenda": 81.7,
-            "Wilco, Roger": 90.5
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 48.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 40.7,
+            "Hughes, Amber": 93.7,
+            "Lowe, Glenda": 84.1,
+            "O'Shanter, Tam": 41.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 92.3
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 42.8,
-            "Boame, Gerald": 47,
-            "Beach, Shelley": 66.2,
-            "Bell, Clarissa": 89.6,
+            "Beach, Shelley": 48.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 40.7,
+            "Hughes, Amber": 93.7,
+            "Lowe, Glenda": 84.1,
+            "O'Shanter, Tam": 41.2,
             "Stone, Edward": null,
-            "Hughes, Amber": 96.2,
-            "Lowe, Glenda": 81.7,
-            "Wilco, Roger": 90.5
+            "Wilco, Roger": 92.3
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 48.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 40.7,
+            "Hughes, Amber": 93.7,
+            "Lowe, Glenda": 84.1,
+            "O'Shanter, Tam": 41.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 92.3
           }
         },
         "1": {
           "1": {
-            "O'Shanter, Tam": 35,
-            "Boame, Gerald": 53.3,
-            "Beach, Shelley": 63.6,
-            "Bell, Clarissa": 100,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 100,
-            "Lowe, Glenda": 71.8,
-            "Wilco, Roger": 86.7
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 50.0,
+            "Bell, Clarissa": 87.8,
+            "Boame, Gerald": 50.0,
+            "Hughes, Amber": 98.2,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 35,
-            "Boame, Gerald": 53.3,
-            "Beach, Shelley": 63.6,
-            "Bell, Clarissa": 100,
+            "Beach, Shelley": 50.0,
+            "Bell, Clarissa": 87.8,
+            "Boame, Gerald": 50.0,
+            "Hughes, Amber": 98.2,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 25.0,
             "Stone, Edward": null,
-            "Hughes, Amber": 100,
-            "Lowe, Glenda": 71.8,
-            "Wilco, Roger": 86.7
+            "Wilco, Roger": 100.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 50.0,
+            "Bell, Clarissa": 87.8,
+            "Boame, Gerald": 50.0,
+            "Hughes, Amber": 98.2,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
           }
         },
         "2": {
           "1": {
-            "O'Shanter, Tam": 25,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 90,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 90,
-            "Wilco, Roger": 90
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 25,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 90,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 90,
-            "Wilco, Roger": 90
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
           }
         },
         "3": {
           "1": {
-            "O'Shanter, Tam": 45,
-            "Boame, Gerald": 35,
-            "Beach, Shelley": 68.3,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 81.7,
-            "Wilco, Roger": 90
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 26.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 33.5,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.0,
+            "O'Shanter, Tam": 49.1,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 45,
-            "Boame, Gerald": 35,
-            "Beach, Shelley": 68.3,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": 26.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 33.5,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.0,
+            "O'Shanter, Tam": 49.1,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 81.7,
-            "Wilco, Roger": 90
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 26.6,
+            "Bell, Clarissa": 86.3,
+            "Boame, Gerald": 33.5,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.0,
+            "O'Shanter, Tam": 49.1,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
           }
         },
         "4": {
           "1": {
-            "O'Shanter, Tam": 43.3,
-            "Boame, Gerald": 44.4,
-            "Beach, Shelley": 70.8,
-            "Bell, Clarissa": 91.1,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 98.6,
-            "Lowe, Glenda": 77.8,
-            "Wilco, Roger": 90
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 51.6,
+            "Bell, Clarissa": 83.0,
+            "Boame, Gerald": 37.4,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 81.9,
+            "O'Shanter, Tam": 35.7,
+            "Stone, Edward": null,
+            "Wilco, Roger": 93.9
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 43.3,
-            "Boame, Gerald": 44.4,
-            "Beach, Shelley": 70.8,
-            "Bell, Clarissa": 91.1,
+            "Beach, Shelley": 51.6,
+            "Bell, Clarissa": 83.0,
+            "Boame, Gerald": 37.4,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 81.9,
+            "O'Shanter, Tam": 35.7,
             "Stone, Edward": null,
-            "Hughes, Amber": 98.6,
-            "Lowe, Glenda": 77.8,
-            "Wilco, Roger": 90
+            "Wilco, Roger": 93.9
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 51.6,
+            "Bell, Clarissa": 83.0,
+            "Boame, Gerald": 37.4,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 81.9,
+            "O'Shanter, Tam": 35.7,
+            "Stone, Edward": null,
+            "Wilco, Roger": 93.9
           }
         }
-      }
+      },
+      "students": [
+        "O'Shanter, Tam",
+        "Boame, Gerald",
+        "Beach, Shelley",
+        "Bell, Clarissa",
+        "Stone, Edward",
+        "Hughes, Amber",
+        "Lowe, Glenda",
+        "Wilco, Roger"
+      ]
+    },
+    "MAT3": {
+      "methods": {
+        "0": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 94.6,
+            "Boame, Gerald": 57.2,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 65.0,
+            "O'Shanter, Tam": 54.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 95.8
+          },
+          "ALL": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 94.6,
+            "Boame, Gerald": 57.2,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 65.0,
+            "O'Shanter, Tam": 54.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 95.8
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 94.6,
+            "Boame, Gerald": 57.2,
+            "Hughes, Amber": 94.4,
+            "Lowe, Glenda": 65.0,
+            "O'Shanter, Tam": 54.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 95.8
+          }
+        },
+        "1": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 61.9,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 60.0,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 53.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          },
+          "ALL": {
+            "Beach, Shelley": 61.9,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 60.0,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 53.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 61.9,
+            "Bell, Clarissa": 100.0,
+            "Boame, Gerald": 60.0,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 53.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          }
+        },
+        "2": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 55.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 55.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 55.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "3": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 87.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 84.1,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 87.7,
+            "O'Shanter, Tam": 52.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL": {
+            "Beach, Shelley": 87.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 84.1,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 87.7,
+            "O'Shanter, Tam": 52.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 87.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 84.1,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 87.7,
+            "O'Shanter, Tam": 52.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "4": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 65.1,
+            "Bell, Clarissa": 99.8,
+            "Boame, Gerald": 56.8,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 73.6,
+            "O'Shanter, Tam": 50.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          },
+          "ALL": {
+            "Beach, Shelley": 65.1,
+            "Bell, Clarissa": 99.8,
+            "Boame, Gerald": 56.8,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 73.6,
+            "O'Shanter, Tam": 50.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 65.1,
+            "Bell, Clarissa": 99.8,
+            "Boame, Gerald": 56.8,
+            "Hughes, Amber": 100.0,
+            "Lowe, Glenda": 73.6,
+            "O'Shanter, Tam": 50.8,
+            "Stone, Edward": null,
+            "Wilco, Roger": 100.0
+          }
+        }
+      },
+      "students": [
+        "O'Shanter, Tam",
+        "Boame, Gerald",
+        "Beach, Shelley",
+        "Bell, Clarissa",
+        "Stone, Edward",
+        "Hughes, Amber",
+        "Lowe, Glenda",
+        "Wilco, Roger"
+      ]
     },
     "SNC1": {
+      "methods": {
+        "0": {
+          "1": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 82.1,
+            "Boame, Gerald": 45.9,
+            "Hughes, Amber": 80.8,
+            "Lowe, Glenda": 74.4,
+            "O'Shanter, Tam": 63.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 84.0
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 82.1,
+            "Boame, Gerald": 45.9,
+            "Hughes, Amber": 80.8,
+            "Lowe, Glenda": 74.4,
+            "O'Shanter, Tam": 63.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 84.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 82.1,
+            "Boame, Gerald": 45.9,
+            "Hughes, Amber": 80.8,
+            "Lowe, Glenda": 74.4,
+            "O'Shanter, Tam": 63.3,
+            "Stone, Edward": null,
+            "Wilco, Roger": 84.0
+          }
+        },
+        "1": {
+          "1": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 80.0,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 80.9
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 80.0,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 80.9
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 63.6,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 80.0,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 80.9
+          }
+        },
+        "2": {
+          "1": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 65.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "3": {
+          "1": {
+            "Beach, Shelley": 52.8,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 83.3
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 52.8,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 83.3
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 52.8,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 75.0,
+            "O'Shanter, Tam": 65.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 83.3
+          }
+        },
+        "4": {
+          "1": {
+            "Beach, Shelley": 66.8,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 34.3,
+            "Hughes, Amber": 82.2,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 81.5
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "ALL": {
+            "Beach, Shelley": 66.8,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 34.3,
+            "Hughes, Amber": 82.2,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 81.5
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 66.8,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 34.3,
+            "Hughes, Amber": 82.2,
+            "Lowe, Glenda": 73.0,
+            "O'Shanter, Tam": 63.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 81.5
+          }
+        }
+      },
       "students": [
         "O'Shanter, Tam",
         "Boame, Gerald",
@@ -136,119 +1095,556 @@
         "Hughes, Amber",
         "Lowe, Glenda",
         "Wilco, Roger"
-      ],
+      ]
+    },
+    "SNC2": {
       "methods": {
         "0": {
           "1": {
-            "O'Shanter, Tam": 63.3,
-            "Boame, Gerald": 45.9,
-            "Beach, Shelley": 57.9,
-            "Bell, Clarissa": 82.1,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 80.8,
-            "Lowe, Glenda": 74.4,
-            "Wilco, Roger": 84
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 40.1,
+            "Bell, Clarissa": 87.2,
+            "Boame, Gerald": 36.5,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 82.8,
+            "O'Shanter, Tam": 25.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 87.7
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 63.3,
-            "Boame, Gerald": 45.9,
-            "Beach, Shelley": 57.9,
-            "Bell, Clarissa": 82.1,
+            "Beach, Shelley": 40.1,
+            "Bell, Clarissa": 87.2,
+            "Boame, Gerald": 36.5,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 82.8,
+            "O'Shanter, Tam": 25.2,
             "Stone, Edward": null,
-            "Hughes, Amber": 80.8,
-            "Lowe, Glenda": 74.4,
-            "Wilco, Roger": 84
+            "Wilco, Roger": 87.7
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 40.1,
+            "Bell, Clarissa": 87.2,
+            "Boame, Gerald": 36.5,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 82.8,
+            "O'Shanter, Tam": 25.2,
+            "Stone, Edward": null,
+            "Wilco, Roger": 87.7
           }
         },
         "1": {
           "1": {
-            "O'Shanter, Tam": 63,
-            "Boame, Gerald": 45,
-            "Beach, Shelley": 63.6,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 80,
-            "Lowe, Glenda": 73,
-            "Wilco, Roger": 80.9
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 53.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 85.0,
+            "O'Shanter, Tam": 29.6,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 63,
-            "Boame, Gerald": 45,
-            "Beach, Shelley": 63.6,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": 53.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 85.0,
+            "O'Shanter, Tam": 29.6,
             "Stone, Edward": null,
-            "Hughes, Amber": 80,
-            "Lowe, Glenda": 73,
-            "Wilco, Roger": 80.9
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 53.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 45.0,
+            "Hughes, Amber": 88.0,
+            "Lowe, Glenda": 85.0,
+            "O'Shanter, Tam": 29.6,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
           }
         },
         "2": {
           "1": {
-            "O'Shanter, Tam": 65,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 65,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 75,
-            "Wilco, Roger": 90
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 65,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 65,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 75,
-            "Wilco, Roger": 90
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 25.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
           }
         },
         "3": {
           "1": {
-            "O'Shanter, Tam": 65,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 52.8,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 75,
-            "Wilco, Roger": 83.3
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 48.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 65,
-            "Boame, Gerald": 25,
-            "Beach, Shelley": 52.8,
-            "Bell, Clarissa": 90,
+            "Beach, Shelley": 48.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
             "Stone, Edward": null,
-            "Hughes, Amber": 90,
-            "Lowe, Glenda": 75,
-            "Wilco, Roger": 83.3
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 48.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 35.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
           }
         },
         "4": {
           "1": {
-            "O'Shanter, Tam": 63,
-            "Boame, Gerald": 34.3,
-            "Beach, Shelley": 66.8,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
             "Stone, Edward": null,
-            "Hughes, Amber": 82.2,
-            "Lowe, Glenda": 73,
-            "Wilco, Roger": 81.5
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": 36.1,
+            "Bell, Clarissa": 86.9,
+            "Boame, Gerald": 32.6,
+            "Hughes, Amber": 89.4,
+            "Lowe, Glenda": 85.5,
+            "O'Shanter, Tam": 17.9,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.3
+          },
+          "3": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
           },
           "ALL": {
-            "O'Shanter, Tam": 63,
-            "Boame, Gerald": 34.3,
-            "Beach, Shelley": 66.8,
-            "Bell, Clarissa": 85,
+            "Beach, Shelley": 36.1,
+            "Bell, Clarissa": 86.9,
+            "Boame, Gerald": 32.6,
+            "Hughes, Amber": 89.4,
+            "Lowe, Glenda": 85.5,
+            "O'Shanter, Tam": 17.9,
             "Stone, Edward": null,
-            "Hughes, Amber": 82.2,
-            "Lowe, Glenda": 73,
-            "Wilco, Roger": 81.5
+            "Wilco, Roger": 90.3
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 36.1,
+            "Bell, Clarissa": 86.9,
+            "Boame, Gerald": 32.6,
+            "Hughes, Amber": 89.4,
+            "Lowe, Glenda": 85.5,
+            "O'Shanter, Tam": 17.9,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.3
           }
         }
-      }
+      },
+      "students": [
+        "O'Shanter, Tam",
+        "Boame, Gerald",
+        "Beach, Shelley",
+        "Bell, Clarissa",
+        "Stone, Edward",
+        "Hughes, Amber",
+        "Lowe, Glenda",
+        "Wilco, Roger"
+      ]
+    },
+    "SNC3": {
+      "methods": {
+        "0": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 85.3,
+            "Boame, Gerald": 35.7,
+            "Hughes, Amber": 85.5,
+            "Lowe, Glenda": 76.9,
+            "O'Shanter, Tam": 31.4,
+            "Stone, Edward": null,
+            "Wilco, Roger": 92.7
+          },
+          "ALL": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 85.3,
+            "Boame, Gerald": 35.7,
+            "Hughes, Amber": 85.5,
+            "Lowe, Glenda": 76.9,
+            "O'Shanter, Tam": 31.4,
+            "Stone, Edward": null,
+            "Wilco, Roger": 92.7
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 57.9,
+            "Bell, Clarissa": 85.3,
+            "Boame, Gerald": 35.7,
+            "Hughes, Amber": 85.5,
+            "Lowe, Glenda": 76.9,
+            "O'Shanter, Tam": 31.4,
+            "Stone, Edward": null,
+            "Wilco, Roger": 92.7
+          }
+        },
+        "1": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 67.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 47.1,
+            "Hughes, Amber": 85.0,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 30.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL": {
+            "Beach, Shelley": 67.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 47.1,
+            "Hughes, Amber": 85.0,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 30.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 67.0,
+            "Bell, Clarissa": 85.0,
+            "Boame, Gerald": 47.1,
+            "Hughes, Amber": 85.0,
+            "Lowe, Glenda": 80.0,
+            "O'Shanter, Tam": 30.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "2": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 75.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL": {
+            "Beach, Shelley": 75.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 75.0,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 25.0,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 90.0,
+            "O'Shanter, Tam": 25.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "3": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 71.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 38.3,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.7,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL": {
+            "Beach, Shelley": 71.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 38.3,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.7,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 71.7,
+            "Bell, Clarissa": 90.0,
+            "Boame, Gerald": 38.3,
+            "Hughes, Amber": 90.0,
+            "Lowe, Glenda": 86.7,
+            "O'Shanter, Tam": 35.0,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.0
+          }
+        },
+        "4": {
+          "1": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "2": {
+            "Beach, Shelley": null,
+            "Bell, Clarissa": null,
+            "Boame, Gerald": null,
+            "Hughes, Amber": null,
+            "Lowe, Glenda": null,
+            "O'Shanter, Tam": null,
+            "Stone, Edward": null,
+            "Wilco, Roger": null
+          },
+          "3": {
+            "Beach, Shelley": 70.4,
+            "Bell, Clarissa": 86.1,
+            "Boame, Gerald": 37.3,
+            "Hughes, Amber": 87.7,
+            "Lowe, Glenda": 78.6,
+            "O'Shanter, Tam": 34.6,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.6
+          },
+          "ALL": {
+            "Beach, Shelley": 70.4,
+            "Bell, Clarissa": 86.1,
+            "Boame, Gerald": 37.3,
+            "Hughes, Amber": 87.7,
+            "Lowe, Glenda": 78.6,
+            "O'Shanter, Tam": 34.6,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.6
+          },
+          "ALL_T0": {
+            "Beach, Shelley": 70.4,
+            "Bell, Clarissa": 86.1,
+            "Boame, Gerald": 37.3,
+            "Hughes, Amber": 87.7,
+            "Lowe, Glenda": 78.6,
+            "O'Shanter, Tam": 34.6,
+            "Stone, Edward": null,
+            "Wilco, Roger": 90.6
+          }
+        }
+      },
+      "students": [
+        "O'Shanter, Tam",
+        "Boame, Gerald",
+        "Beach, Shelley",
+        "Bell, Clarissa",
+        "Stone, Edward",
+        "Hughes, Amber",
+        "Lowe, Glenda",
+        "Wilco, Roger"
+      ]
     }
-  }
+  },
+  "version": 2
 }

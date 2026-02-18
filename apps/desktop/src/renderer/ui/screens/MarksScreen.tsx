@@ -18,7 +18,8 @@ import {
   GridGetResultSchema,
   GridSetStateResultSchema,
   GridUpdateCellResultSchema,
-  MarkSetOpenResultSchema
+  MarkSetOpenResultSchema,
+  StudentsMembershipGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -102,6 +103,9 @@ export function MarksScreen(props: {
   });
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [scoredInput, setScoredInput] = useState("1");
+
+  const [membershipMaskByStudentId, setMembershipMaskByStudentId] = useState<Record<string, string>>({});
+  const [membershipMarkSetSortById, setMembershipMarkSetSortById] = useState<Record<string, number>>({});
 
   const editorRef = useRef<DataEditorRef | null>(null);
   const [editingCell, setEditingCell] = useState<{
@@ -189,6 +193,25 @@ export function MarksScreen(props: {
     }
   }
 
+  async function refreshMembership() {
+    try {
+      const res = await requestParsed(
+        "students.membership.get",
+        { classId: props.selectedClassId },
+        StudentsMembershipGetResultSchema
+      );
+      setMembershipMaskByStudentId(
+        Object.fromEntries(res.students.map((s) => [s.id, s.mask]))
+      );
+      setMembershipMarkSetSortById(
+        Object.fromEntries(res.markSets.map((ms) => [ms.id, ms.sortOrder]))
+      );
+    } catch {
+      setMembershipMaskByStudentId({});
+      setMembershipMarkSetSortById({});
+    }
+  }
+
   // When type checkboxes change, derive the bitmask expected by the sidecar.
   useEffect(() => {
     const all = typesSelected.every(Boolean);
@@ -208,6 +231,12 @@ export function MarksScreen(props: {
     void refreshCalcViews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcFilters.term, calcFilters.categoryName, calcFilters.typesMask]);
+
+  // Valid-kid visibility: load membership masks for this class.
+  useEffect(() => {
+    void refreshMembership();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.selectedClassId]);
 
   function makeEditFromDisplayValue(row: number, gridCol: number, value: number | null): BulkScoreEdit {
     if (value == null) {
@@ -876,9 +905,24 @@ export function MarksScreen(props: {
             const counts = studentCounts[s.id] ?? { noMark: 0, zero: 0, scored: 0 };
             const final = studentFinalMarks[s.id] ?? null;
             const cats = perStudentCategories[s.id] ?? [];
+            const sortOrder = membershipMarkSetSortById[props.selectedMarkSetId];
+            const mask = membershipMaskByStudentId[s.id];
+            const membershipEnabled =
+              typeof sortOrder === "number" && typeof mask === "string" && sortOrder >= 0
+                ? mask[sortOrder] !== "0"
+                : true;
+            const validKid = s.active && membershipEnabled;
+            const invalidReason = !s.active ? "inactive" : !membershipEnabled ? "excluded from this mark set" : null;
             return (
               <div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{s.displayName}</div>
+                <div style={{ marginBottom: 8, color: validKid ? "#2e7d32" : "#8a1f11" }}>
+                  Valid for this mark set:{" "}
+                  <strong>{validKid ? "yes" : "no"}</strong>
+                  {!validKid && invalidReason ? (
+                    <span style={{ color: "#555" }}> ({invalidReason})</span>
+                  ) : null}
+                </div>
                 <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
                   <div>
                     <div style={{ color: "#666", fontSize: 10 }}>Final</div>
