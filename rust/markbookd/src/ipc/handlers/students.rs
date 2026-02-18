@@ -587,6 +587,197 @@ fn handle_students_delete(state: &mut AppState, req: &Request) -> serde_json::Va
     ok(&req.id, json!({ "ok": true }))
 }
 
+fn normalize_mark_set_mask(raw: Option<String>, mark_set_count: usize) -> String {
+    if mark_set_count == 0 {
+        return "".to_string();
+    }
+    let s = raw.unwrap_or_else(|| "TBA".to_string());
+    let t = s.trim();
+    if t.is_empty() {
+        return "1".repeat(mark_set_count);
+    }
+    if t.eq_ignore_ascii_case("TBA") {
+        return "1".repeat(mark_set_count);
+    }
+    let up = t.to_ascii_uppercase();
+    if !up.chars().all(|ch| ch == '0' || ch == '1') {
+        // Fail-open to match legacy "unknown string" safety.
+        return "1".repeat(mark_set_count);
+    }
+    if up.len() >= mark_set_count {
+        return up[..mark_set_count].to_string();
+    }
+    let mut out = up;
+    out.push_str(&"1".repeat(mark_set_count - out.len()));
+    out
+}
+
+fn handle_students_membership_get(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+
+    let class_exists: Option<i64> = match conn
+        .query_row("SELECT 1 FROM classes WHERE id = ?", [&class_id], |r| r.get(0))
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    if class_exists.is_none() {
+        return err(&req.id, "not_found", "class not found", None);
+    }
+
+    let mut ms_stmt = match conn.prepare(
+        "SELECT id, code, sort_order
+         FROM mark_sets
+         WHERE class_id = ?
+         ORDER BY sort_order",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let mark_sets = match ms_stmt
+        .query_map([&class_id], |r| {
+            let id: String = r.get(0)?;
+            let code: String = r.get(1)?;
+            let sort_order: i64 = r.get(2)?;
+            Ok(json!({ "id": id, "code": code, "sortOrder": sort_order }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mark_set_count = mark_sets.len();
+
+    let mut st_stmt = match conn.prepare(
+        "SELECT id, last_name, first_name, active, sort_order, mark_set_mask
+         FROM students
+         WHERE class_id = ?
+         ORDER BY sort_order",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let students = match st_stmt
+        .query_map([&class_id], |r| {
+            let id: String = r.get(0)?;
+            let last: String = r.get(1)?;
+            let first: String = r.get(2)?;
+            let active: i64 = r.get(3)?;
+            let sort_order: i64 = r.get(4)?;
+            let mask: Option<String> = r.get(5)?;
+            let display_name = format!("{}, {}", last, first);
+            let norm = normalize_mark_set_mask(mask, mark_set_count);
+            Ok(json!({
+                "id": id,
+                "displayName": display_name,
+                "active": active != 0,
+                "sortOrder": sort_order,
+                "mask": norm
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    ok(
+        &req.id,
+        json!({
+            "markSets": mark_sets,
+            "students": students
+        }),
+    )
+}
+
+fn handle_students_membership_set(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let student_id = match req.params.get("studentId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing studentId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let enabled = match req.params.get("enabled").and_then(|v| v.as_bool()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing enabled", None),
+    };
+
+    let (mark_set_sort_order, mark_set_count): (i64, i64) = match conn.query_row(
+        "SELECT sort_order, (SELECT COUNT(*) FROM mark_sets WHERE class_id = ?)
+         FROM mark_sets
+         WHERE id = ? AND class_id = ?",
+        (&class_id, &mark_set_id, &class_id),
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    ) {
+        Ok(v) => v,
+        Err(_) => return err(&req.id, "not_found", "mark set not found", None),
+    };
+
+    let raw_mask: Option<String> = match conn
+        .query_row(
+            "SELECT mark_set_mask FROM students WHERE id = ? AND class_id = ?",
+            (&student_id, &class_id),
+            |r| r.get(0),
+        )
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    if raw_mask.is_none() {
+        return err(&req.id, "not_found", "student not found", None);
+    }
+
+    let Ok(ms_count) = usize::try_from(mark_set_count) else {
+        return err(&req.id, "db_query_failed", "invalid mark set count", None);
+    };
+    let Ok(bit_idx) = usize::try_from(mark_set_sort_order) else {
+        return err(&req.id, "db_query_failed", "invalid mark set sort order", None);
+    };
+
+    let mut norm = normalize_mark_set_mask(raw_mask, ms_count).into_bytes();
+    if bit_idx < norm.len() {
+        norm[bit_idx] = if enabled { b'1' } else { b'0' };
+    }
+    let new_mask = String::from_utf8_lossy(&norm).to_string();
+
+    if let Err(e) = conn.execute(
+        "UPDATE students
+         SET mark_set_mask = ?,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+         WHERE id = ? AND class_id = ?",
+        (&new_mask, &student_id, &class_id),
+    ) {
+        return err(
+            &req.id,
+            "db_update_failed",
+            e.to_string(),
+            Some(json!({ "table": "students" })),
+        );
+    }
+
+    ok(&req.id, json!({ "ok": true, "mask": new_mask }))
+}
+
 fn handle_notes_get(state: &mut AppState, req: &Request) -> serde_json::Value {
     let Some(conn) = state.db.as_ref() else {
         return err(&req.id, "no_workspace", "select a workspace first", None);
@@ -705,6 +896,8 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "students.update" => Some(handle_students_update(state, req)),
         "students.reorder" => Some(handle_students_reorder(state, req)),
         "students.delete" => Some(handle_students_delete(state, req)),
+        "students.membership.get" => Some(handle_students_membership_get(state, req)),
+        "students.membership.set" => Some(handle_students_membership_set(state, req)),
         "notes.get" => Some(handle_notes_get(state, req)),
         "notes.update" => Some(handle_notes_update(state, req)),
         _ => None,

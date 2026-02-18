@@ -198,6 +198,30 @@ export const StudentsDeleteResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const StudentsMembershipGetResultSchema = z.object({
+  markSets: z.array(
+    z.object({
+      id: z.string(),
+      code: z.string(),
+      sortOrder: z.number()
+    })
+  ),
+  students: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      active: z.boolean(),
+      sortOrder: z.number(),
+      mask: z.string()
+    })
+  )
+});
+
+export const StudentsMembershipSetResultSchema = z.object({
+  ok: z.literal(true),
+  mask: z.string()
+});
+
 export const CategoriesListResultSchema = z.object({
   categories: z.array(
     z.object({
@@ -463,6 +487,25 @@ export const CalcMarkSetSummaryResultSchema = z.object({
 });
 
 export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;
+
+export const CalcConfigGetResultSchema = z.object({
+  source: z.object({
+    basePresent: z.boolean(),
+    overridePresent: z.boolean()
+  }),
+  roff: z.boolean(),
+  modeActiveLevels: z.number(),
+  modeVals: z.array(z.number()).length(22),
+  modeSymbols: z.array(z.string()).length(22)
+});
+
+export const CalcConfigUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CalcConfigClearOverrideResultSchema = z.object({
+  ok: z.literal(true)
+});
 
 export const AttendanceMonthOpenResultSchema = z.object({
   schoolYearStartMonth: z.number(),
