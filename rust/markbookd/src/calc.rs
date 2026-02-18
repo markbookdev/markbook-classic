@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use crate::db;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ScoreState {
     NoMark,
@@ -224,8 +226,42 @@ pub struct SummaryModel {
     pub per_category: Vec<CategoryAggregate>,
     #[serde(rename = "perStudent")]
     pub per_student: Vec<StudentFinal>,
+    // Optional diagnostic/UX helpers; older clients ignore unknown keys.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "settingsApplied")]
+    pub settings_applied: Option<SettingsApplied>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "perStudentCategories"
+    )]
+    pub per_student_categories: Option<Vec<StudentCategoryBreakdown>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parity_diagnostics: Option<ParityDiagnostics>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsApplied {
+    pub weight_method_applied: i64,
+    pub calc_method_applied: i64,
+    pub roff_applied: bool,
+    pub mode_active_levels: i64,
+    pub mode_level_vals: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudentCategoryValue {
+    pub name: String,
+    pub value: Option<f64>,
+    pub weight: f64,
+    pub has_data: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudentCategoryBreakdown {
+    pub student_id: String,
+    pub categories: Vec<StudentCategoryValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -255,6 +291,238 @@ struct SummaryAssessment {
     legacy_type: Option<i64>,
     weight: f64,
     out_of: f64,
+}
+
+#[derive(Debug, Clone)]
+struct ModeConfig {
+    active_levels: usize,
+    level_vals: Vec<i64>, // length 22, indices 0..21
+    roff: bool,
+}
+
+fn default_mode_config() -> ModeConfig {
+    let mut vals = vec![0_i64; 22];
+    vals[0] = 0;
+    vals[1] = 50;
+    vals[2] = 60;
+    vals[3] = 70;
+    vals[4] = 80;
+    ModeConfig {
+        active_levels: 4,
+        level_vals: vals,
+        roff: true,
+    }
+}
+
+fn load_mode_config(conn: &Connection) -> Result<ModeConfig, CalcError> {
+    let mut cfg = default_mode_config();
+    let mode = db::settings_get_json(conn, "user_cfg.mode_levels")
+        .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    if let Some(v) = mode {
+        if let Some(obj) = v.as_object() {
+            if let Some(n) = obj.get("activeLevels").and_then(|v| v.as_u64()) {
+                cfg.active_levels = (n as usize).min(21);
+            }
+            if let Some(arr) = obj.get("vals").and_then(|v| v.as_array()) {
+                let mut vals: Vec<i64> = Vec::with_capacity(22);
+                for x in arr.iter().take(22) {
+                    vals.push(x.as_i64().unwrap_or(0));
+                }
+                while vals.len() < 22 {
+                    vals.push(0);
+                }
+                cfg.level_vals = vals;
+            }
+        }
+    }
+    let roff = db::settings_get_json(conn, "user_cfg.roff")
+        .map_err(|e| CalcError::new("db_query_failed", e.to_string()))?;
+    if let Some(v) = roff {
+        if let Some(obj) = v.as_object() {
+            if let Some(b) = obj.get("roff").and_then(|v| v.as_bool()) {
+                cfg.roff = b;
+            }
+        }
+    }
+    Ok(cfg)
+}
+
+fn vb6_level_from_mark(cfg: &ModeConfig, mark_pct: f64) -> usize {
+    let cmp = if cfg.roff {
+        round_off_1_decimal(mark_pct)
+    } else {
+        mark_pct
+    };
+    let max_lvl = cfg.active_levels.min(21);
+    let mut ml = 0usize;
+    for lvl in 0..=max_lvl {
+        if cmp >= cfg.level_vals.get(lvl).copied().unwrap_or(0) as f64 {
+            ml = lvl;
+        }
+    }
+    ml
+}
+
+fn vb6_midrange_mode(cfg: &ModeConfig, lvl: usize) -> f64 {
+    let max_lvl = cfg.active_levels.min(21);
+    let l = cfg.level_vals.get(lvl).copied().unwrap_or(0) as f64;
+    let t = if lvl >= max_lvl {
+        100.0
+    } else {
+        cfg.level_vals.get(lvl + 1).copied().unwrap_or(0) as f64
+    };
+    l + ((t - l) / 2.0)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StudentEntry {
+    pct: f64,
+    entry_wt: f64,
+    cat_idx: usize,
+}
+
+fn vb6_mode_mark(
+    cfg: &ModeConfig,
+    entries: &[StudentEntry],
+    wrk_wt_meth: i64,
+    cat_wt_sum: &[f64],
+    wrk_cat_wt: &[f64],
+    total_wt0: f64,
+    cat_filter: Option<usize>,
+) -> Option<f64> {
+    if entries.is_empty() {
+        return None;
+    }
+    let max_lvl = cfg.active_levels.min(21);
+    let mut level_totals: Vec<f64> = vec![0.0; max_lvl + 1];
+    let mut total = 0.0_f64;
+
+    for e in entries {
+        if let Some(cat) = cat_filter {
+            if e.cat_idx != cat {
+                continue;
+            }
+        }
+        let lvl = vb6_level_from_mark(cfg, e.pct);
+        let cat = e.cat_idx;
+        let mut mode_val = 0.0_f64;
+
+        if wrk_wt_meth == 1 {
+            let denom_cat = cat_wt_sum.get(cat).copied().unwrap_or(0.0);
+            if denom_cat > 0.0 {
+                if let Some(_) = cat_filter {
+                    // EvalOne_ModeCats / MedianCat != 0: no category-weight ratio.
+                    mode_val = 100.0 * (e.entry_wt / denom_cat);
+                } else if total_wt0 > 0.0 {
+                    mode_val =
+                        100.0 * (e.entry_wt / denom_cat) * (wrk_cat_wt.get(cat).copied().unwrap_or(0.0) / total_wt0);
+                }
+            }
+        } else if total_wt0 > 0.0 {
+            // Entry weighting: VB6 uses overall denom (EV_CatWT(k,0)) even for ModeCats.
+            mode_val = 100.0 * (e.entry_wt / total_wt0);
+        }
+
+        if mode_val > 0.0 {
+            if lvl <= max_lvl {
+                level_totals[lvl] += mode_val;
+                total += mode_val;
+            }
+        }
+    }
+
+    if total <= 0.0 {
+        return None;
+    }
+
+    let mut best_lvl = 0usize;
+    let mut best = 0.0_f64;
+    for lvl in 0..=max_lvl {
+        let next_best = round_off_1_decimal(100.0 * level_totals[lvl] / total);
+        if next_best >= best {
+            best = next_best;
+            best_lvl = lvl;
+        }
+    }
+    Some(vb6_midrange_mode(cfg, best_lvl))
+}
+
+fn vb6_median_mark(
+    entries: &[StudentEntry],
+    ev_wt_meth_for_weights: i64,
+    wrk_wt_meth: i64,
+    cat_wt_sum: &[f64],
+    wrk_cat_wt: &[f64],
+    total_wt0: f64,
+    cat_filter: Option<usize>,
+) -> Option<f64> {
+    let mut pts: Vec<StudentEntry> = entries
+        .iter()
+        .copied()
+        .filter(|e| cat_filter.map(|c| e.cat_idx == c).unwrap_or(true))
+        .collect();
+    if pts.is_empty() {
+        return None;
+    }
+    pts.sort_by(|a, b| a.pct.partial_cmp(&b.pct).unwrap_or(Ordering::Equal));
+
+    let n = pts.len();
+    if ev_wt_meth_for_weights == 2 {
+        // Equal weighting: plain median.
+        if n == 1 {
+            return Some(pts[0].pct);
+        }
+        if n % 2 == 1 {
+            return Some(pts[n / 2].pct);
+        }
+        return Some((pts[(n / 2) - 1].pct + pts[n / 2].pct) / 2.0);
+    }
+
+    if n == 2 && (pts[0].entry_wt - pts[1].entry_wt).abs() < 1e-9 {
+        return Some((pts[0].pct + pts[1].pct) / 2.0);
+    }
+
+    let denom_overall = if cat_filter.is_some() {
+        let cat = cat_filter.unwrap();
+        cat_wt_sum.get(cat).copied().unwrap_or(0.0)
+    } else {
+        total_wt0
+    };
+    if denom_overall <= 0.0 {
+        return None;
+    }
+
+    let mut count_to_50 = 0.0_f64;
+    for (idx, e) in pts.iter().enumerate() {
+        let cat = e.cat_idx;
+        let mut jump = 0.0_f64;
+        if wrk_wt_meth == 1 {
+            let denom_cat = cat_wt_sum.get(cat).copied().unwrap_or(0.0);
+            if denom_cat > 0.0 {
+                if let Some(_) = cat_filter {
+                    jump = 100.0 * (e.entry_wt / denom_cat);
+                } else if total_wt0 > 0.0 {
+                    jump = 100.0
+                        * (e.entry_wt / denom_cat)
+                        * (wrk_cat_wt.get(cat).copied().unwrap_or(0.0) / total_wt0);
+                }
+            }
+        } else {
+            jump = 100.0 * (e.entry_wt / denom_overall);
+        }
+
+        count_to_50 += jump;
+        if count_to_50 >= 50.0 {
+            if (count_to_50 - 50.0).abs() < 1e-9 {
+                if let Some(next) = pts.get(idx + 1) {
+                    return Some((e.pct + next.pct) / 2.0);
+                }
+            }
+            return Some(e.pct);
+        }
+    }
+
+    pts.last().map(|e| e.pct)
 }
 
 pub fn parse_summary_filters(raw: Option<&serde_json::Value>) -> Result<SummaryFilters, CalcError> {
@@ -524,6 +792,17 @@ pub fn compute_mark_set_summary(
         return Err(CalcError::new("not_found", "mark set not found"));
     };
 
+    let calc_method_applied = if (0..=4).contains(&calc_method) {
+        calc_method
+    } else {
+        0
+    };
+    let mut filters_applied = filters.clone();
+    if calc_method_applied > 2 {
+        // VB6 EvalOne_Calculate forces category filter to [ALL] for blended methods.
+        filters_applied.category_name = None;
+    }
+
     let mut students_stmt = conn
         .prepare(
             "SELECT id, last_name, first_name, sort_order, active, COALESCE(mark_set_mask, 'TBA')
@@ -595,8 +874,11 @@ pub fn compute_mark_set_summary(
     let selected_assessments: Vec<SummaryAssessment> = all_assessments
         .iter()
         .filter(|a| {
-            let term_ok = filters.term.map(|t| a.term == Some(t)).unwrap_or(true);
-            let cat_ok = filters
+            let term_ok = filters_applied
+                .term
+                .map(|t| a.term == Some(t))
+                .unwrap_or(true);
+            let cat_ok = filters_applied
                 .category_name
                 .as_ref()
                 .map(|cat| {
@@ -606,7 +888,7 @@ pub fn compute_mark_set_summary(
                         .unwrap_or(false)
                 })
                 .unwrap_or(true);
-            let type_ok = matches_types_mask(filters.types_mask, a.legacy_type);
+            let type_ok = matches_types_mask(filters_applied.types_mask, a.legacy_type);
             term_ok && cat_ok && type_ok
         })
         .cloned()
@@ -716,17 +998,16 @@ pub fn compute_mark_set_summary(
     }
 
     // CalcMethod parity: if total category weight excluding BONUS is 0, force entry weighting.
-    let bonus_cat_name = categories
-        .iter()
-        .find(|c| c.name.trim().eq_ignore_ascii_case("BONUS"))
-        .map(|c| c.name.clone());
     let non_bonus_cat_weight_sum: f64 = categories
         .iter()
         .filter(|c| !c.name.trim().eq_ignore_ascii_case("BONUS"))
         .map(|c| c.weight)
         .sum();
 
+    let mode_cfg = load_mode_config(conn)?;
+
     let mut per_student: Vec<StudentFinal> = Vec::new();
+    let mut per_student_categories: Vec<StudentCategoryBreakdown> = Vec::new();
     let mut per_category_totals: HashMap<String, (f64, usize, i64, f64)> = HashMap::new();
     let mut per_category_assessment_counts: HashMap<String, i64> = HashMap::new();
 
@@ -739,16 +1020,43 @@ pub fn compute_mark_set_summary(
     }
 
     let weight_method_setting = weight_method.clamp(0, 2);
-    let weight_method_applied = if weight_method_setting == 1 && non_bonus_cat_weight_sum == 0.0 {
+
+    // VB6: if calc method is blended (3/4), force category weighting and ignore category filter.
+    // We reflect that in calc computations. (Caller-provided filter value is still returned in
+    // `settings`, but `filters` in the response reflects what was actually applied.)
+    let ev_wt_meth_for_weights = if calc_method_applied > 2 { 1 } else { weight_method_setting };
+    let weight_method_applied = if calc_method_applied > 2 {
+        1
+    } else if weight_method_setting == 1 && non_bonus_cat_weight_sum == 0.0 {
         0
     } else {
         weight_method_setting
     };
-    let calc_method_applied = if (0..=4).contains(&calc_method) {
-        calc_method
-    } else {
+    let wrk_wt_meth = if ev_wt_meth_for_weights == 2 {
         0
+    } else if weight_method_applied == 2 {
+        0
+    } else {
+        weight_method_applied
     };
+
+    let mut cat_idx_by_name: HashMap<String, usize> = HashMap::new();
+    for (idx, c) in categories.iter().enumerate() {
+        cat_idx_by_name.insert(c.name.to_ascii_lowercase(), idx);
+    }
+    let bonus_cat_idx: Option<usize> = categories
+        .iter()
+        .position(|c| c.name.trim().eq_ignore_ascii_case("BONUS"));
+    let wrk_cat_wt: Vec<f64> = categories
+        .iter()
+        .map(|c| {
+            if ev_wt_meth_for_weights == 2 {
+                if c.weight > 0.0 { 1.0 } else { 0.0 }
+            } else {
+                c.weight
+            }
+        })
+        .collect();
 
     let mut excluded_by_weight_count = 0usize;
     let mut excluded_by_category_weight_count = 0usize;
@@ -764,7 +1072,7 @@ pub fn compute_mark_set_summary(
             }
 
             // If category weighting is applied, exclude entries in categories with weight 0.
-            if weight_method_applied == 1 {
+            if wrk_wt_meth == 1 {
                 let cat = a
                     .category_name
                     .as_deref()
@@ -775,6 +1083,15 @@ pub fn compute_mark_set_summary(
                     excluded_by_category_weight_count += 1;
                     return false;
                 }
+            }
+            // Parity with VB6: unknown categories are excluded from calculations.
+            let cat = a
+                .category_name
+                .as_deref()
+                .unwrap_or("Uncategorized")
+                .to_ascii_lowercase();
+            if !cat_idx_by_name.contains_key(&cat) {
+                return false;
             }
             true
         })
@@ -793,251 +1110,286 @@ pub fn compute_mark_set_summary(
 
     for s in &students {
         let valid_kid = is_valid_kid(s.active, &s.mark_set_mask, mark_set_sort_order);
-        if !valid_kid {
-            per_student.push(StudentFinal {
-                student_id: s.id.clone(),
-                display_name: s.display_name.clone(),
-                sort_order: s.sort_order,
-                active: s.active,
-                final_mark: None,
-                no_mark_count: 0,
-                zero_count: 0,
-                scored_count: 0,
-            });
-            continue;
-        }
 
         let mut no_mark_count = 0_i64;
         let mut zero_count = 0_i64;
         let mut scored_count = 0_i64;
 
-        // Entry/equal methods.
-        let mut weighted_sum = 0.0_f64;
-        let mut weighted_denom = 0.0_f64;
+        let cat_count = categories.len();
+        let mut cat_sum: Vec<f64> = vec![0.0; cat_count];
+        let mut cat_wsum: Vec<f64> = vec![0.0; cat_count];
+        let mut cat_has_nonzero: Vec<bool> = vec![false; cat_count];
+        let mut entries: Vec<StudentEntry> = Vec::new();
 
-        // Category method.
-        let mut cat_inner: HashMap<String, (f64, f64)> = HashMap::new(); // sum, denom
-        let mut entries_by_cat: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // percent, entry weight
-        let mut bonus_inner: Option<(f64, f64)> = None; // sum, denom
-
-        for a in &selected_assessments_for_calc {
-            let state = score_by_pair
-                .get(&(a.id.clone(), s.id.clone()))
-                .copied()
-                .unwrap_or(ScoreState::NoMark);
-            let percent_opt = match state {
-                ScoreState::NoMark => {
-                    no_mark_count += 1;
-                    None
-                }
-                ScoreState::Zero => {
-                    zero_count += 1;
-                    Some(0.0)
-                }
-                ScoreState::Scored(v) => {
-                    scored_count += 1;
-                    if a.out_of > 0.0 {
-                        Some(100.0 * v / a.out_of)
-                    } else {
-                        Some(0.0)
+        if valid_kid {
+            for a in &selected_assessments_for_calc {
+                let cat_name = a
+                    .category_name
+                    .as_deref()
+                    .unwrap_or("Uncategorized")
+                    .to_ascii_lowercase();
+                let Some(&cat_idx) = cat_idx_by_name.get(&cat_name) else {
+                    continue;
+                };
+                let state = score_by_pair
+                    .get(&(a.id.clone(), s.id.clone()))
+                    .copied()
+                    .unwrap_or(ScoreState::NoMark);
+                let pct_opt = match state {
+                    ScoreState::NoMark => {
+                        no_mark_count += 1;
+                        None
                     }
-                }
-            };
-
-            let Some(percent) = percent_opt else {
-                continue;
-            };
-
-            // VB6 Wrk_EntWT: if equal weighting, included entries have weight 1; else use entry weight.
-            let entry_weight = if weight_method_applied == 2 { 1.0 } else { a.weight };
-
-            let category = a
-                .category_name
-                .clone()
-                .unwrap_or_else(|| "Uncategorized".to_string());
-            let is_bonus = bonus_cat_name
-                .as_deref()
-                .map(|b| b.eq_ignore_ascii_case(&category))
-                .unwrap_or(false);
-
-            // BONUS does not participate in the base denominator; it is added afterward.
-            if !is_bonus {
-                weighted_sum += percent * entry_weight;
-                weighted_denom += entry_weight;
-            }
-
-            if is_bonus {
-                let entry = bonus_inner.get_or_insert((0.0, 0.0));
-                entry.0 += percent * entry_weight;
-                entry.1 += entry_weight;
-            } else {
-                let entry = cat_inner.entry(category.clone()).or_insert((0.0, 0.0));
-                entry.0 += percent * entry_weight;
-                entry.1 += entry_weight;
-                entries_by_cat.entry(category).or_default().push((percent, entry_weight));
+                    ScoreState::Zero => {
+                        zero_count += 1;
+                        Some(0.001)
+                    }
+                    ScoreState::Scored(v) => {
+                        scored_count += 1;
+                        if v > 0.0 {
+                            cat_has_nonzero[cat_idx] = true;
+                        }
+                        if a.out_of > 0.0 {
+                            Some(100.0 * v / a.out_of)
+                        } else {
+                            Some(0.0)
+                        }
+                    }
+                };
+                let Some(pct) = pct_opt else {
+                    continue;
+                };
+                let entry_wt = if ev_wt_meth_for_weights == 2 { 1.0 } else { a.weight };
+                cat_sum[cat_idx] += pct * entry_wt;
+                cat_wsum[cat_idx] += entry_wt;
+                entries.push(StudentEntry {
+                    pct,
+                    entry_wt,
+                    cat_idx,
+                });
             }
         }
 
-        let bonus_avg = bonus_inner.and_then(|(sum, denom)| {
-            if denom > 0.0 {
-                Some(sum / denom)
-            } else {
-                None
-            }
-        });
-        let bonus_weight = bonus_cat_name
-            .as_deref()
-            .map(|b| category_weight_map.get(&b.to_ascii_lowercase()).copied().unwrap_or(0.0))
-            .unwrap_or(0.0);
-        let bonus_add = bonus_avg.unwrap_or(0.0) * (bonus_weight / 100.0);
-
-        let average_mark_base = if weight_method_applied == 1 {
-            // Category weighting: combine category averages by category weights.
-            let mut sum = 0.0_f64;
-            let mut denom = 0.0_f64;
-            for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
-                if *cat_denom <= 0.0 {
+        // VB6 EV_CatWT(k,0): overall denominator excludes BONUS.
+        let mut total_wt0 = 0.0_f64;
+        if valid_kid {
+            for cat in 0..cat_count {
+                if Some(cat) == bonus_cat_idx {
                     continue;
                 }
-                let cat_avg = *cat_sum / *cat_denom;
-                let cat_weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
-                    .copied()
-                    .unwrap_or(0.0);
-                if cat_weight > 0.0 {
-                    sum += cat_avg * cat_weight;
-                    denom += cat_weight;
+                if cat_wsum[cat] <= 0.0 {
+                    continue;
+                }
+                if wrk_wt_meth == 1 {
+                    total_wt0 += wrk_cat_wt.get(cat).copied().unwrap_or(0.0);
+                } else {
+                    total_wt0 += cat_wsum[cat];
                 }
             }
-            if denom > 0.0 { Some(sum / denom) } else { None }
-        } else if weighted_denom > 0.0 {
-            Some(weighted_sum / weighted_denom)
-        } else {
-            None
-        };
+        }
 
-        let build_weighted_values = || -> Vec<(f64, f64)> {
-            if weight_method_applied != 1 {
-                return entries_by_cat
-                    .values()
-                    .flat_map(|vals| {
-                        vals.iter().map(|(pct, entry_wt)| {
-                            (*pct, *entry_wt)
-                        })
-                    })
-                    .collect();
-            }
-
-            let mut has_positive_cat_weight = false;
-            for cat_name in entries_by_cat.keys() {
-                let cat_weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
-                    .copied()
-                    .unwrap_or(0.0);
-                if cat_weight > 0.0 {
-                    has_positive_cat_weight = true;
-                    break;
-                }
-            }
-
-            let mut out: Vec<(f64, f64)> = Vec::new();
-            for (cat_name, vals) in &entries_by_cat {
-                let cat_weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
-                    .copied()
-                    .unwrap_or(0.0);
-                let cat_factor = if has_positive_cat_weight {
-                    if cat_weight > 0.0 {
-                        cat_weight
-                    } else {
-                        0.0
+        let mut cat_avg: Vec<Option<f64>> = vec![None; cat_count];
+        if valid_kid {
+            for cat in 0..cat_count {
+                if cat_wsum[cat] > 0.0 {
+                    let mut v = cat_sum[cat] / cat_wsum[cat];
+                    if !cat_has_nonzero[cat] {
+                        v = 0.001;
                     }
-                } else {
-                    1.0
-                };
-                if cat_factor <= 0.0 {
-                    continue;
-                }
-                let denom: f64 = vals
-                    .iter()
-                    .map(|(_, ew)| if weight_method_applied == 0 { *ew } else { 1.0 })
-                    .sum();
-                if denom <= 0.0 {
-                    continue;
-                }
-                for (pct, ew) in vals {
-                    out.push((*pct, cat_factor * *ew / denom));
+                    cat_avg[cat] = Some(v);
                 }
             }
-            out
-        };
+        }
 
-        let blended_mark = |mode: bool| -> Option<f64> {
-            let mut by_category: Vec<(f64, f64)> = Vec::new();
-            let mut has_positive_cat_weight = false;
-            for (cat_name, vals) in &entries_by_cat {
-                if vals.is_empty() {
-                    continue;
+        // Emit per-student category breakdown for UI/debugging.
+        per_student_categories.push(StudentCategoryBreakdown {
+            student_id: s.id.clone(),
+            categories: categories
+                .iter()
+                .enumerate()
+                .map(|(cat_idx, c)| {
+                    let has_data = valid_kid && cat_wsum[cat_idx] > 0.0;
+                    let value = if has_data {
+                        cat_avg[cat_idx].map(|v| {
+                            if (v - 0.001).abs() < 1e-9 {
+                                0.0
+                            } else {
+                                round_off_1_decimal(v)
+                            }
+                        })
+                    } else {
+                        None
+                    };
+                    StudentCategoryValue {
+                        name: c.name.clone(),
+                        value,
+                        weight: c.weight,
+                        has_data,
+                    }
+                })
+                .collect(),
+        });
+
+        let final_mark_raw = if !valid_kid {
+            None
+        } else if total_wt0 <= 0.0 {
+            None
+        } else if scored_count == 0 && zero_count == 0 {
+            None
+        } else if scored_count == 0 && zero_count > 0 {
+            Some(0.0)
+        } else {
+            match calc_method_applied {
+                1 => vb6_median_mark(
+                    &entries,
+                    ev_wt_meth_for_weights,
+                    wrk_wt_meth,
+                    &cat_wsum,
+                    &wrk_cat_wt,
+                    total_wt0,
+                    None,
+                ),
+                2 => vb6_mode_mark(
+                    &mode_cfg,
+                    &entries,
+                    wrk_wt_meth,
+                    &cat_wsum,
+                    &wrk_cat_wt,
+                    total_wt0,
+                    None,
+                ),
+                3 | 4 => {
+                    // Blended methods: force category weighting and ignore category filter.
+                    let mut total = 0.0_f64;
+                    if total_wt0 <= 0.0 {
+                        None
+                    } else {
+                        for cat in 0..cat_count {
+                            if wrk_cat_wt.get(cat).copied().unwrap_or(0.0) <= 0.0 {
+                                continue;
+                            }
+                            if cat_wsum[cat] <= 0.0 {
+                                continue;
+                            }
+                            let cat_mark = if calc_method_applied == 3 {
+                                // VB6 quirk: ModeCats ignores the types mask. We approximate that by
+                                // using *all* entries for this term/category, but still using
+                                // denominators derived from type-filtered EV_CatWT.
+                                let mut entries_modecats: Vec<StudentEntry> = Vec::new();
+                                for a in &all_assessments {
+                                    // Term filter only.
+                                    if let Some(t) = filters_applied.term {
+                                        if a.term != Some(t) {
+                                            continue;
+                                        }
+                                    }
+                                    if a.weight <= 0.0 {
+                                        continue;
+                                    }
+                                    let cat_name = a
+                                        .category_name
+                                        .as_deref()
+                                        .unwrap_or("Uncategorized")
+                                        .to_ascii_lowercase();
+                                    let Some(&cat_idx2) = cat_idx_by_name.get(&cat_name) else {
+                                        continue;
+                                    };
+                                    if cat_idx2 != cat {
+                                        continue;
+                                    }
+                                    if wrk_wt_meth == 1 {
+                                        let cat_weight = category_weight_map
+                                            .get(&cat_name)
+                                            .copied()
+                                            .unwrap_or(0.0);
+                                        if cat_weight <= 0.0 {
+                                            continue;
+                                        }
+                                    }
+
+                                    let state = score_by_pair
+                                        .get(&(a.id.clone(), s.id.clone()))
+                                        .copied()
+                                        .unwrap_or(ScoreState::NoMark);
+                                    let pct_opt = match state {
+                                        ScoreState::NoMark => None,
+                                        ScoreState::Zero => Some(0.001),
+                                        ScoreState::Scored(v) => {
+                                            if a.out_of > 0.0 {
+                                                Some(100.0 * v / a.out_of)
+                                            } else {
+                                                Some(0.0)
+                                            }
+                                        }
+                                    };
+                                    let Some(pct) = pct_opt else { continue };
+                                    let entry_wt =
+                                        if ev_wt_meth_for_weights == 2 { 1.0 } else { a.weight };
+                                    entries_modecats.push(StudentEntry {
+                                        pct,
+                                        entry_wt,
+                                        cat_idx: cat,
+                                    });
+                                }
+                                vb6_mode_mark(
+                                    &mode_cfg,
+                                    &entries_modecats,
+                                    wrk_wt_meth,
+                                    &cat_wsum,
+                                    &wrk_cat_wt,
+                                    total_wt0,
+                                    Some(cat),
+                                )
+                            } else {
+                                vb6_median_mark(
+                                    &entries,
+                                    ev_wt_meth_for_weights,
+                                    wrk_wt_meth,
+                                    &cat_wsum,
+                                    &wrk_cat_wt,
+                                    total_wt0,
+                                    Some(cat),
+                                )
+                            };
+                            let Some(cat_mark) = cat_mark else {
+                                continue;
+                            };
+                            if cat_mark <= 0.0 {
+                                continue;
+                            }
+                            total += cat_mark * (wrk_cat_wt.get(cat).copied().unwrap_or(0.0) / total_wt0);
+                        }
+                        Some(total)
+                    }
                 }
-                let cat_vals: Vec<(f64, f64)> = vals
-                    .iter()
-                    .map(|(pct, ew)| {
-                        (*pct, *ew)
-                    })
-                    .collect();
-                let cat_value = if mode {
-                    weighted_mode(&cat_vals)
-                } else {
-                    weighted_median(&cat_vals)
-                };
-                let Some(cat_value) = cat_value else {
-                    continue;
-                };
-
-                let cat_weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
-                    .copied()
-                    .unwrap_or(0.0);
-                if cat_weight > 0.0 {
-                    has_positive_cat_weight = true;
+                _ => {
+                    // Average with BONUS add-on outside denominator.
+                    let mut base = 0.0_f64;
+                    for cat in 0..cat_count {
+                        if Some(cat) == bonus_cat_idx {
+                            continue;
+                        }
+                        let Some(v) = cat_avg[cat] else { continue };
+                        if cat_wsum[cat] <= 0.0 {
+                            continue;
+                        }
+                        if wrk_wt_meth == 1 {
+                            base += v * (wrk_cat_wt.get(cat).copied().unwrap_or(0.0) / total_wt0);
+                        } else {
+                            base += v * (cat_wsum[cat] / total_wt0);
+                        }
+                    }
+                    if let Some(b) = bonus_cat_idx {
+                        if let Some(bavg) = cat_avg[b] {
+                            // VB6: bonus adds: kid_bonus_avg * bonus_weight / 100.
+                            base += bavg * (wrk_cat_wt.get(b).copied().unwrap_or(0.0) / 100.0);
+                        }
+                    }
+                    Some(base)
                 }
-                by_category.push((cat_value, cat_weight));
-            }
-
-            if by_category.is_empty() {
-                return None;
-            }
-            if has_positive_cat_weight {
-                weighted_average(
-                    &by_category
-                        .iter()
-                        .copied()
-                        .filter(|(_, w)| *w > 0.0)
-                        .collect::<Vec<_>>(),
-                )
-            } else {
-                weighted_average(
-                    &by_category
-                        .iter()
-                        .map(|(v, _)| (*v, 1.0))
-                        .collect::<Vec<_>>(),
-                )
             }
         };
 
-        let final_mark_raw_base = match calc_method_applied {
-            1 => weighted_median(&build_weighted_values()),
-            2 => weighted_mode(&build_weighted_values()),
-            3 => blended_mark(true),
-            4 => blended_mark(false),
-            _ => average_mark_base,
-        };
-
-        let final_mark_raw = match final_mark_raw_base {
-            Some(v) => Some(v + bonus_add),
-            None if bonus_avg.is_some() => Some(bonus_add),
-            None => None,
-        };
         let final_mark = final_mark_raw.map(round_off_1_decimal);
         per_student.push(StudentFinal {
             student_id: s.id.clone(),
@@ -1052,29 +1404,20 @@ pub fn compute_mark_set_summary(
 
         // Build class-level per-category averages across valid kids for this mark set.
         if valid_kid {
-            for (cat_name, (cat_sum, cat_denom)) in &cat_inner {
-                if *cat_denom <= 0.0 {
+            for (cat_idx, c) in categories.iter().enumerate() {
+                let Some(v) = cat_avg[cat_idx] else {
                     continue;
-                }
-                let cat_avg = *cat_sum / *cat_denom;
+                };
                 let weight = category_weight_map
-                    .get(&cat_name.to_ascii_lowercase())
+                    .get(&c.name.to_ascii_lowercase())
                     .copied()
                     .unwrap_or(0.0);
-                let entry = per_category_totals.entry(cat_name.clone()).or_insert((
-                    0.0,
-                    0,
-                    i64::MAX,
-                    weight,
-                ));
-                entry.0 += cat_avg;
+                let entry = per_category_totals
+                    .entry(c.name.clone())
+                    .or_insert((0.0, 0, i64::MAX, weight));
+                entry.0 += v;
                 entry.1 += 1;
-                let cat_sort = categories
-                    .iter()
-                    .find(|c| c.name.eq_ignore_ascii_case(cat_name))
-                    .map(|c| c.sort_order)
-                    .unwrap_or(i64::MAX);
-                entry.2 = entry.2.min(cat_sort);
+                entry.2 = entry.2.min(c.sort_order);
             }
         }
     }
@@ -1155,12 +1498,20 @@ pub fn compute_mark_set_summary(
             weight_method,
             calc_method,
         },
-        filters: filters.clone(),
+        filters: filters_applied.clone(),
         categories: categories_out,
         assessments,
         per_assessment,
         per_category,
         per_student,
+        settings_applied: Some(SettingsApplied {
+            weight_method_applied,
+            calc_method_applied,
+            roff_applied: mode_cfg.roff,
+            mode_active_levels: mode_cfg.active_levels as i64,
+            mode_level_vals: mode_cfg.level_vals.clone(),
+        }),
+        per_student_categories: Some(per_student_categories),
         parity_diagnostics: if cfg!(debug_assertions) {
             Some(ParityDiagnostics {
                 calc_method_applied,
