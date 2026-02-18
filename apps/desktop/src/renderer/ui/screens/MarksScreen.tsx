@@ -55,6 +55,9 @@ export function MarksScreen(props: {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
   const [cells, setCells] = useState<Array<Array<number | null>>>([]);
+  const [calcCategories, setCalcCategories] = useState<Array<{ name: string; weight: number }>>(
+    []
+  );
   const [assessmentStats, setAssessmentStats] = useState<
     Array<{
       assessmentId: string;
@@ -69,6 +72,29 @@ export function MarksScreen(props: {
     }>
   >([]);
   const [studentFinalMarks, setStudentFinalMarks] = useState<Record<string, number | null>>({});
+  const [studentCounts, setStudentCounts] = useState<
+    Record<string, { noMark: number; zero: number; scored: number }>
+  >({});
+  const [settingsApplied, setSettingsApplied] = useState<{
+    weightMethodApplied: number;
+    calcMethodApplied: number;
+    roffApplied: boolean;
+    modeActiveLevels: number;
+  } | null>(null);
+  const [perStudentCategories, setPerStudentCategories] = useState<
+    Record<
+      string,
+      Array<{ name: string; value: number | null; weight: number; hasData: boolean }>
+    >
+  >({});
+  const [calcFilters, setCalcFilters] = useState<{
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  }>({ term: null, categoryName: null, typesMask: null });
+  const [typesSelected, setTypesSelected] = useState<[boolean, boolean, boolean, boolean, boolean]>(
+    [true, true, true, true, true]
+  );
   const [gridSelection, setGridSelection] = useState<GridSelection>({
     current: undefined,
     rows: CompactSelection.empty(),
@@ -85,17 +111,31 @@ export function MarksScreen(props: {
   } | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Avoid stale filter closures in async calc refreshes.
+  const calcFiltersRef = useRef(calcFilters);
+  useEffect(() => {
+    calcFiltersRef.current = calcFilters;
+  }, [calcFilters]);
+
   async function refreshCalcViews() {
     try {
       const [stats, summary] = await Promise.all([
         requestParsed(
           "calc.assessmentStats",
-          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId,
+            filters: calcFiltersRef.current
+          },
           CalcAssessmentStatsResultSchema
         ),
         requestParsed(
           "calc.markSetSummary",
-          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId,
+            filters: calcFiltersRef.current
+          },
           CalcMarkSetSummaryResultSchema
         )
       ]);
@@ -117,10 +157,57 @@ export function MarksScreen(props: {
           summary.perStudent.map((s) => [s.studentId, s.finalMark ?? null])
         )
       );
+      setStudentCounts(
+        Object.fromEntries(
+          summary.perStudent.map((s) => [
+            s.studentId,
+            { noMark: s.noMarkCount, zero: s.zeroCount, scored: s.scoredCount }
+          ])
+        )
+      );
+      setCalcCategories(summary.categories.map((c) => ({ name: c.name, weight: c.weight })));
+      setSettingsApplied(
+        summary.settingsApplied
+          ? {
+              weightMethodApplied: summary.settingsApplied.weightMethodApplied,
+              calcMethodApplied: summary.settingsApplied.calcMethodApplied,
+              roffApplied: summary.settingsApplied.roffApplied,
+              modeActiveLevels: summary.settingsApplied.modeActiveLevels
+            }
+          : null
+      );
+      setPerStudentCategories(
+        Object.fromEntries(
+          (summary.perStudentCategories ?? []).map((row) => [
+            row.studentId,
+            row.categories
+          ])
+        )
+      );
     } catch {
       // Keep existing values if calc endpoints fail.
     }
   }
+
+  // When type checkboxes change, derive the bitmask expected by the sidecar.
+  useEffect(() => {
+    const all = typesSelected.every(Boolean);
+    if (all) {
+      setCalcFilters((cur) => ({ ...cur, typesMask: null }));
+      return;
+    }
+    let mask = 0;
+    for (let i = 0; i < typesSelected.length; i += 1) {
+      if (typesSelected[i]) mask |= 1 << i;
+    }
+    setCalcFilters((cur) => ({ ...cur, typesMask: mask }));
+  }, [typesSelected]);
+
+  // Recompute calc views when filters change.
+  useEffect(() => {
+    void refreshCalcViews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcFilters.term, calcFilters.categoryName, calcFilters.typesMask]);
 
   function makeEditFromDisplayValue(row: number, gridCol: number, value: number | null): BulkScoreEdit {
     if (value == null) {
@@ -341,6 +428,15 @@ export function MarksScreen(props: {
         if (cancelled) return;
         setStudents(open.students);
         setAssessments(open.assessments);
+        // Default to showing results for a student immediately (and keep selection in range
+        // across mark-set changes). This also stabilizes E2E by ensuring the results panel
+        // always has a deterministic selected row once data is loaded.
+        setSelectedCell((cur) => {
+          if (open.students.length === 0) return null;
+          const row = cur?.row != null ? Math.min(Math.max(cur.row, 0), open.students.length - 1) : 0;
+          const col = cur?.col != null ? cur.col : 0;
+          return { row, col };
+        });
 
         const grid = await requestParsed(
           "grid.get",
@@ -367,6 +463,10 @@ export function MarksScreen(props: {
         setCells([]);
         setAssessmentStats([]);
         setStudentFinalMarks({});
+        setStudentCounts({});
+        setSettingsApplied(null);
+        setPerStudentCategories({});
+        setCalcCategories([]);
       }
     }
     run();
@@ -668,7 +768,7 @@ export function MarksScreen(props: {
           .map((a) => `${a.title}: ${a.avgRaw.toFixed(1)}`)
           .join(" | ")}
       >
-        Avg Raw (active):{" "}
+        Avg Raw:{" "}
         {assessmentStats.length === 0
           ? "—"
           : assessmentStats
@@ -676,6 +776,154 @@ export function MarksScreen(props: {
               .map((a) => `${a.title}: ${a.avgRaw.toFixed(1)}`)
               .join(" | ")}
         {assessmentStats.length > 4 ? " | ..." : ""}
+      </div>
+
+      <div
+        data-testid="marks-results-panel"
+        style={{
+          position: "absolute",
+          right: 12,
+          top: 52,
+          zIndex: 5,
+          width: 340,
+          background: "rgba(255,255,255,0.96)",
+          border: "1px solid #ddd",
+          borderRadius: 10,
+          padding: "10px 10px",
+          fontSize: 12,
+          color: "#222",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.08)"
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Results</div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Term
+            <select
+              data-testid="marks-filter-term"
+              value={calcFilters.term == null ? "ALL" : String(calcFilters.term)}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                setCalcFilters((cur) => ({
+                  ...cur,
+                  term: v === "ALL" ? null : Number(v)
+                }));
+              }}
+            >
+              <option value="ALL">ALL</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Category
+            <select
+              data-testid="marks-filter-category"
+              value={calcFilters.categoryName ?? "ALL"}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                setCalcFilters((cur) => ({
+                  ...cur,
+                  categoryName: v === "ALL" ? null : v
+                }));
+              }}
+            >
+              <option value="ALL">ALL</option>
+              {calcCategories.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          {[
+            ["Summ", 0],
+            ["Form", 1],
+            ["Diag", 2],
+            ["Self", 3],
+            ["Peer", 4]
+          ].map(([label, idx]) => (
+            <label key={String(idx)} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                data-testid={`marks-filter-type-${idx}`}
+                type="checkbox"
+                checked={typesSelected[idx as number]}
+                onChange={(e) => {
+                  const checked = e.currentTarget.checked;
+                  setTypesSelected((cur) => {
+                    const next = [...cur] as any;
+                    next[idx as number] = checked;
+                    return next;
+                  });
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+
+        {selectedCell && selectedCell.row >= 0 && selectedCell.row < students.length ? (
+          (() => {
+            const s = students[selectedCell.row];
+            const counts = studentCounts[s.id] ?? { noMark: 0, zero: 0, scored: 0 };
+            const final = studentFinalMarks[s.id] ?? null;
+            const cats = perStudentCategories[s.id] ?? [];
+            return (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{s.displayName}</div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ color: "#666", fontSize: 10 }}>Final</div>
+                    <div data-testid="marks-results-final" style={{ fontSize: 16, fontWeight: 700 }}>
+                      {final == null ? "—" : final.toFixed(1)}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: "#666", fontSize: 10 }}>Counts</div>
+                    <div data-testid="marks-results-counts">
+                      scored {counts.scored}, zero {counts.zero}, no-mark {counts.noMark}
+                    </div>
+                  </div>
+                </div>
+
+                {settingsApplied ? (
+                  <div style={{ marginBottom: 8, color: "#555" }}>
+                    Method: calc {settingsApplied.calcMethodApplied}, wt {settingsApplied.weightMethodApplied},{" "}
+                    roff {settingsApplied.roffApplied ? "on" : "off"}, levels {settingsApplied.modeActiveLevels}
+                  </div>
+                ) : null}
+
+                <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid #eee", paddingTop: 8 }}>
+                  <div style={{ color: "#666", fontSize: 10, marginBottom: 4 }}>Categories</div>
+                  {cats.length === 0 ? (
+                    <div style={{ color: "#888" }}>—</div>
+                  ) : (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <tbody>
+                        {cats.map((c) => (
+                          <tr key={c.name}>
+                            <td style={{ padding: "2px 0", whiteSpace: "nowrap" }}>{c.name}</td>
+                            <td style={{ padding: "2px 0", textAlign: "right" }}>
+                              {c.value == null ? "" : c.value.toFixed(1)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          <div style={{ color: "#777" }}>Click a student row to see results.</div>
+        )}
       </div>
 
       <DataEditor
