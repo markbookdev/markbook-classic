@@ -364,6 +364,8 @@ export function MarksScreen(props: {
     if (!w.__markbookTest) w.__markbookTest = {};
     w.__markbookTest.getMarksCellBounds = (col: number, row: number) => {
       try {
+        // Bounds can be null for virtualized rows until scrolled into view.
+        editorRef.current?.scrollTo(col, row);
         return editorRef.current?.getBounds(col, row) ?? null;
       } catch {
         return null;
