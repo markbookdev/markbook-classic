@@ -9,6 +9,12 @@ import {
   CategoriesDeleteResultSchema,
   CategoriesListResultSchema,
   CategoriesUpdateResultSchema,
+  MarkSetsCloneResultSchema,
+  MarkSetsCreateResultSchema,
+  MarkSetsDeleteResultSchema,
+  MarkSetsListResultSchema,
+  MarkSetsSetDefaultResultSchema,
+  MarkSetsUndeleteResultSchema,
   MarkSetSettingsGetResultSchema,
   MarkSetSettingsUpdateResultSchema
 } from "@markbook/schema";
@@ -34,6 +40,15 @@ type AssessmentRow = {
   outOf: number | null;
 };
 
+type MarkSetManagerRow = {
+  id: string;
+  code: string;
+  description: string;
+  sortOrder: number;
+  isDefault?: boolean;
+  deletedAt?: string | null;
+};
+
 function parseNullableNumber(s: string): number | null {
   const t = s.trim();
   if (!t) return null;
@@ -50,11 +65,23 @@ function parseNullableInt(s: string): number | null {
   return Math.trunc(n);
 }
 
+function suggestCloneCode(code: string): string {
+  const trimmed = code.trim();
+  const match = trimmed.match(/^(.*?)(\d+)$/);
+  if (!match) return `${trimmed}C`.slice(0, 15);
+  const prefix = match[1];
+  const suffix = match[2];
+  const width = suffix.length;
+  const next = String(Number(suffix) + 1).padStart(width, "0");
+  return `${prefix}${next}`.slice(0, 15);
+}
+
 export function MarkSetSetupScreen(props: {
   selectedClassId: string;
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
   onChanged?: () => void | Promise<void>;
+  onSelectMarkSet?: (markSetId: string) => void;
 }) {
   const [tab, setTab] = useState<"setup" | "comments">("setup");
   const [loading, setLoading] = useState(false);
@@ -66,6 +93,13 @@ export function MarkSetSetupScreen(props: {
   const [period, setPeriod] = useState("");
   const [weightMethod, setWeightMethod] = useState("1");
   const [calcMethod, setCalcMethod] = useState("0");
+  const [blockTitle, setBlockTitle] = useState("");
+  const [markSetRows, setMarkSetRows] = useState<MarkSetManagerRow[]>([]);
+  const [newMarkSetCode, setNewMarkSetCode] = useState("");
+  const [newMarkSetDescription, setNewMarkSetDescription] = useState("");
+  const [newMarkSetBlockTitle, setNewMarkSetBlockTitle] = useState("");
+  const [newMarkSetWeightMethod, setNewMarkSetWeightMethod] = useState("1");
+  const [newMarkSetCalcMethod, setNewMarkSetCalcMethod] = useState("0");
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryWeight, setNewCategoryWeight] = useState("20");
@@ -79,12 +113,31 @@ export function MarkSetSetupScreen(props: {
 
   const canAddCategory = useMemo(() => newCategoryName.trim().length > 0, [newCategoryName]);
   const canAddAssessment = useMemo(() => newTitle.trim().length > 0, [newTitle]);
+  const canCreateMarkSet = useMemo(
+    () => newMarkSetCode.trim().length > 0 && newMarkSetDescription.trim().length > 0,
+    [newMarkSetCode, newMarkSetDescription]
+  );
+
+  async function loadMarkSetManager() {
+    props.onError(null);
+    try {
+      const list = await requestParsed(
+        "marksets.list",
+        { classId: props.selectedClassId, includeDeleted: true },
+        MarkSetsListResultSchema
+      );
+      setMarkSetRows(list.markSets as any);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+      setMarkSetRows([]);
+    }
+  }
 
   async function loadAll() {
     setLoading(true);
     props.onError(null);
     try {
-      const [cats, asmt, settings] = await Promise.all([
+      const [cats, asmt, settings, list] = await Promise.all([
         requestParsed(
           "categories.list",
           { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
@@ -99,14 +152,21 @@ export function MarkSetSetupScreen(props: {
           "markset.settings.get",
           { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
           MarkSetSettingsGetResultSchema
+        ),
+        requestParsed(
+          "marksets.list",
+          { classId: props.selectedClassId, includeDeleted: true },
+          MarkSetsListResultSchema
         )
       ]);
       setCategories(cats.categories);
       setAssessments(asmt.assessments);
+      setMarkSetRows(list.markSets as any);
       setFullCode(settings.markSet.fullCode ?? "");
       setRoom(settings.markSet.room ?? "");
       setDay(settings.markSet.day ?? "");
       setPeriod(settings.markSet.period ?? "");
+      setBlockTitle(settings.markSet.blockTitle ?? "");
       setWeightMethod(String(settings.markSet.weightMethod ?? 1));
       setCalcMethod(String(settings.markSet.calcMethod ?? 0));
     } catch (e: any) {
@@ -117,6 +177,7 @@ export function MarkSetSetupScreen(props: {
       setRoom("");
       setDay("");
       setPeriod("");
+      setBlockTitle("");
       setWeightMethod("1");
       setCalcMethod("0");
     } finally {
@@ -142,6 +203,7 @@ export function MarkSetSetupScreen(props: {
             room: room.trim() || null,
             day: day.trim() || null,
             period: period.trim() || null,
+            blockTitle: blockTitle.trim() || null,
             weightMethod: parseNullableInt(weightMethod) ?? 1,
             calcMethod: parseNullableInt(calcMethod) ?? 0
           }
@@ -288,6 +350,108 @@ export function MarkSetSetupScreen(props: {
     }
   }
 
+  async function createMarkSet() {
+    if (!canCreateMarkSet) return;
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "marksets.create",
+        {
+          classId: props.selectedClassId,
+          code: newMarkSetCode.trim(),
+          description: newMarkSetDescription.trim(),
+          blockTitle: newMarkSetBlockTitle.trim() || null,
+          weightMethod: parseNullableInt(newMarkSetWeightMethod) ?? 1,
+          calcMethod: parseNullableInt(newMarkSetCalcMethod) ?? 0,
+          starterCategories: [{ name: "Category 1", weight: 100 }]
+        },
+        MarkSetsCreateResultSchema
+      );
+      setNewMarkSetCode("");
+      setNewMarkSetDescription("");
+      setNewMarkSetBlockTitle("");
+      setNewMarkSetWeightMethod("1");
+      setNewMarkSetCalcMethod("0");
+      props.onSelectMarkSet?.(res.markSetId);
+      await loadAll();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function deleteMarkSet(markSetId: string) {
+    const ok = confirm("Delete this mark set? It will be soft-deleted and can be undeleted later.");
+    if (!ok) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "marksets.delete",
+        { classId: props.selectedClassId, markSetId },
+        MarkSetsDeleteResultSchema
+      );
+      await loadMarkSetManager();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function undeleteMarkSet(markSetId: string) {
+    props.onError(null);
+    try {
+      await requestParsed(
+        "marksets.undelete",
+        { classId: props.selectedClassId, markSetId },
+        MarkSetsUndeleteResultSchema
+      );
+      props.onSelectMarkSet?.(markSetId);
+      await loadAll();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function setDefaultMarkSet(markSetId: string) {
+    props.onError(null);
+    try {
+      await requestParsed(
+        "marksets.setDefault",
+        { classId: props.selectedClassId, markSetId },
+        MarkSetsSetDefaultResultSchema
+      );
+      await loadMarkSetManager();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function cloneMarkSet(markSet: MarkSetManagerRow) {
+    const nextCode = suggestCloneCode(markSet.code);
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "marksets.clone",
+        {
+          classId: props.selectedClassId,
+          markSetId: markSet.id,
+          code: nextCode,
+          description: `${markSet.description} (Copy)`,
+          cloneAssessments: true,
+          cloneScores: false
+        },
+        MarkSetsCloneResultSchema
+      );
+      props.onSelectMarkSet?.(res.markSetId);
+      await loadAll();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   async function deleteAssessment(assessmentId: string) {
     const ok = confirm("Delete this assessment? All related marks will be removed.");
     if (!ok) return;
@@ -381,6 +545,140 @@ export function MarkSetSetupScreen(props: {
       </div>
 
       <div
+        data-testid="markset-manager-panel"
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 10,
+          padding: 16,
+          marginBottom: 16
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Mark Set Manager</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <input
+            data-testid="markset-manager-new-code"
+            value={newMarkSetCode}
+            onChange={(e) => setNewMarkSetCode(e.currentTarget.value)}
+            placeholder="Short code"
+            style={{ ...inputStyle, width: 130 }}
+          />
+          <input
+            data-testid="markset-manager-new-description"
+            value={newMarkSetDescription}
+            onChange={(e) => setNewMarkSetDescription(e.currentTarget.value)}
+            placeholder="Description"
+            style={{ ...inputStyle, flex: "1 1 220px" }}
+          />
+          <input
+            data-testid="markset-manager-new-block-title"
+            value={newMarkSetBlockTitle}
+            onChange={(e) => setNewMarkSetBlockTitle(e.currentTarget.value)}
+            placeholder="Block title"
+            style={{ ...inputStyle, width: 140 }}
+          />
+          <select
+            data-testid="markset-manager-new-weight-method"
+            value={newMarkSetWeightMethod}
+            onChange={(e) => setNewMarkSetWeightMethod(e.currentTarget.value)}
+            style={{ ...inputStyle, width: 140 }}
+          >
+            <option value="0">Entry</option>
+            <option value="1">Category</option>
+            <option value="2">Equal</option>
+          </select>
+          <select
+            data-testid="markset-manager-new-calc-method"
+            value={newMarkSetCalcMethod}
+            onChange={(e) => setNewMarkSetCalcMethod(e.currentTarget.value)}
+            style={{ ...inputStyle, width: 140 }}
+          >
+            <option value="0">Average</option>
+            <option value="1">Median</option>
+            <option value="2">Mode</option>
+            <option value="3">Blend Mode</option>
+            <option value="4">Blend Median</option>
+          </select>
+          <button
+            data-testid="markset-manager-create-btn"
+            disabled={!canCreateMarkSet}
+            onClick={() => void createMarkSet()}
+          >
+            Create Mark Set
+          </button>
+        </div>
+        <div
+          data-testid="markset-manager-table-wrap"
+          style={{ border: "1px solid #eee", borderRadius: 8, overflow: "auto" }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#fafafa", borderBottom: "1px solid #eee" }}>
+                <th style={{ textAlign: "left", padding: 8, width: 90 }}>Code</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Description</th>
+                <th style={{ textAlign: "left", padding: 8, width: 110 }}>Status</th>
+                <th style={{ textAlign: "left", padding: 8, width: 320 }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {markSetRows.map((ms) => {
+                const deleted = Boolean(ms.deletedAt);
+                return (
+                  <tr key={ms.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                    <td style={{ padding: 8 }}>{ms.code}</td>
+                    <td style={{ padding: 8 }}>{ms.description}</td>
+                    <td style={{ padding: 8, color: deleted ? "#8a1f11" : "#2e7d32" }}>
+                      {deleted ? "Deleted" : ms.isDefault ? "Default" : "Active"}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          data-testid={`markset-manager-open-${ms.id}`}
+                          disabled={deleted}
+                          onClick={() => props.onSelectMarkSet?.(ms.id)}
+                        >
+                          Open
+                        </button>
+                        <button
+                          data-testid={`markset-manager-clone-${ms.id}`}
+                          disabled={deleted}
+                          onClick={() => void cloneMarkSet(ms)}
+                        >
+                          Clone
+                        </button>
+                        <button
+                          data-testid={`markset-manager-default-${ms.id}`}
+                          disabled={deleted || Boolean(ms.isDefault)}
+                          onClick={() => void setDefaultMarkSet(ms.id)}
+                        >
+                          Set Default
+                        </button>
+                        {deleted ? (
+                          <button
+                            data-testid={`markset-manager-undelete-${ms.id}`}
+                            onClick={() => void undeleteMarkSet(ms.id)}
+                          >
+                            Undelete
+                          </button>
+                        ) : (
+                          <button
+                            data-testid={`markset-manager-delete-${ms.id}`}
+                            style={{ color: "#b00020" }}
+                            onClick={() => void deleteMarkSet(ms.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div
         style={{
           border: "1px solid #ddd",
           borderRadius: 10,
@@ -417,6 +715,13 @@ export function MarkSetSetupScreen(props: {
             onChange={(e) => setPeriod(e.currentTarget.value)}
             placeholder="Period"
             style={{ ...inputStyle, flex: "1 1 120px" }}
+          />
+          <input
+            data-testid="markset-blocktitle-input"
+            value={blockTitle}
+            onChange={(e) => setBlockTitle(e.currentTarget.value)}
+            placeholder="Block title"
+            style={{ ...inputStyle, flex: "1 1 180px" }}
           />
           <select
             data-testid="markset-weightmethod-select"

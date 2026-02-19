@@ -636,7 +636,7 @@ fn handle_students_membership_get(state: &mut AppState, req: &Request) -> serde_
     let mut ms_stmt = match conn.prepare(
         "SELECT id, code, sort_order
          FROM mark_sets
-         WHERE class_id = ?
+         WHERE class_id = ? AND deleted_at IS NULL
          ORDER BY sort_order",
     ) {
         Ok(s) => s,
@@ -655,7 +655,15 @@ fn handle_students_membership_get(state: &mut AppState, req: &Request) -> serde_
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
 
-    let mark_set_count = mark_sets.len();
+    let mark_set_count: usize = match conn.query_row(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM mark_sets WHERE class_id = ?",
+        [&class_id],
+        |r| r.get::<_, i64>(0),
+    ) {
+        Ok(v) if v > 0 => v as usize,
+        Ok(_) => 0usize,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
 
     let mut st_stmt = match conn.prepare(
         "SELECT id, last_name, first_name, active, sort_order, mark_set_mask
@@ -722,9 +730,11 @@ fn handle_students_membership_set(state: &mut AppState, req: &Request) -> serde_
     };
 
     let (mark_set_sort_order, mark_set_count): (i64, i64) = match conn.query_row(
-        "SELECT sort_order, (SELECT COUNT(*) FROM mark_sets WHERE class_id = ?)
+        "SELECT
+            sort_order,
+            COALESCE((SELECT MAX(sort_order) + 1 FROM mark_sets WHERE class_id = ?), 0)
          FROM mark_sets
-         WHERE id = ? AND class_id = ?",
+         WHERE id = ? AND class_id = ? AND deleted_at IS NULL",
         (&class_id, &mark_set_id, &class_id),
         |r| Ok((r.get(0)?, r.get(1)?)),
     ) {
@@ -796,9 +806,11 @@ fn handle_students_membership_bulk_set(state: &mut AppState, req: &Request) -> s
     };
 
     let (mark_set_sort_order, mark_set_count): (i64, i64) = match conn.query_row(
-        "SELECT sort_order, (SELECT COUNT(*) FROM mark_sets WHERE class_id = ?)
+        "SELECT
+            sort_order,
+            COALESCE((SELECT MAX(sort_order) + 1 FROM mark_sets WHERE class_id = ?), 0)
          FROM mark_sets
-         WHERE id = ? AND class_id = ?",
+         WHERE id = ? AND class_id = ? AND deleted_at IS NULL",
         (&class_id, &mark_set_id, &class_id),
         |r| Ok((r.get(0)?, r.get(1)?)),
     ) {

@@ -20,6 +20,7 @@ export function DashboardScreen(props: {
   onDeleteClass: (classId: string) => Promise<void>;
   onImportLegacyClassFolder: () => Promise<void>;
   onNavigate: (screen: string) => void;
+  onOpenClassWizard: () => void;
 }) {
   const [newClassName, setNewClassName] = useState("");
 
@@ -138,6 +139,9 @@ export function DashboardScreen(props: {
           <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 12 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Create Class</div>
             <div style={{ display: "flex", gap: 8 }}>
+              <button data-testid="dashboard-open-class-wizard-btn" onClick={() => props.onOpenClassWizard()}>
+                New Class Wizard
+              </button>
               <input
                 value={newClassName}
                 onChange={(e) => setNewClassName(e.currentTarget.value)}
@@ -164,4 +168,3 @@ export function DashboardScreen(props: {
     </div>
   );
 }
-

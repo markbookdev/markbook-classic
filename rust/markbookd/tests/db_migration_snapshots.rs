@@ -3,7 +3,10 @@ use serde_json::json;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn fixture_path(rel: &str) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -11,13 +14,17 @@ fn fixture_path(rel: &str) -> PathBuf {
 }
 
 fn temp_dir(prefix: &str) -> PathBuf {
+    let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
     let p = std::env::temp_dir().join(format!(
-        "{}-{}",
+        "{}-{}-{}-{}",
         prefix,
+        pid,
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
-            .as_nanos()
+            .as_nanos(),
+        seq
     ));
     std::fs::create_dir_all(&p).expect("create temp dir");
     p
@@ -198,12 +205,16 @@ fn v0_snapshot_migrates_and_supports_legacy_import() {
 
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
     assert!(table_exists(&conn, "workspace_settings"));
+    assert!(table_exists(&conn, "class_meta"));
     assert!(table_has_column(&conn, "students", "sort_order"));
     assert!(table_has_column(&conn, "students", "updated_at"));
     assert!(table_has_column(&conn, "students", "mark_set_mask"));
     assert!(table_has_column(&conn, "scores", "remark"));
     assert!(table_has_column(&conn, "assessments", "legacy_type"));
     assert!(table_has_column(&conn, "mark_sets", "calc_method"));
+    assert!(table_has_column(&conn, "mark_sets", "is_default"));
+    assert!(table_has_column(&conn, "mark_sets", "deleted_at"));
+    assert!(table_has_column(&conn, "mark_sets", "block_title"));
 
     let imported = request_ok(
         &mut stdin,
@@ -310,9 +321,13 @@ fn v2_snapshot_migrates_and_preserves_core_reads_writes() {
 
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
     assert!(table_exists(&conn, "workspace_settings"));
+    assert!(table_exists(&conn, "class_meta"));
     assert!(table_has_column(&conn, "students", "mark_set_mask"));
     assert!(table_has_column(&conn, "scores", "remark"));
     assert!(table_has_column(&conn, "assessments", "legacy_type"));
+    assert!(table_has_column(&conn, "mark_sets", "is_default"));
+    assert!(table_has_column(&conn, "mark_sets", "deleted_at"));
+    assert!(table_has_column(&conn, "mark_sets", "block_title"));
 
     let migrated_missing: String = conn
         .query_row(

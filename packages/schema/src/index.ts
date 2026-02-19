@@ -42,6 +42,46 @@ export const ClassesCreateResultSchema = z.object({
   name: z.string()
 });
 
+export const ClassesWizardDefaultsResultSchema = z.object({
+  defaults: z.object({
+    name: z.string(),
+    classCode: z.string(),
+    schoolYear: z.string(),
+    schoolName: z.string(),
+    teacherName: z.string(),
+    calcMethodDefault: z.number(),
+    weightMethodDefault: z.number(),
+    schoolYearStartMonth: z.number()
+  })
+});
+
+export const ClassesCreateFromWizardResultSchema = z.object({
+  classId: z.string(),
+  name: z.string(),
+  classCode: z.string()
+});
+
+export const ClassesMetaGetResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  meta: z.object({
+    classCode: z.string().nullable(),
+    schoolYear: z.string().nullable(),
+    schoolName: z.string().nullable(),
+    teacherName: z.string().nullable(),
+    calcMethodDefault: z.number().nullable(),
+    weightMethodDefault: z.number().nullable(),
+    schoolYearStartMonth: z.number().nullable(),
+    createdFromWizard: z.boolean()
+  })
+});
+
+export const ClassesMetaUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
 export const ClassesDeleteResultSchema = z.object({
   ok: z.literal(true)
 });
@@ -67,9 +107,31 @@ export const MarkSetsListResultSchema = z.object({
       id: z.string(),
       code: z.string(),
       description: z.string(),
-      sortOrder: z.number()
+      sortOrder: z.number(),
+      isDefault: z.boolean().optional(),
+      deletedAt: z.string().nullable().optional()
     })
   )
+});
+
+export const MarkSetsCreateResultSchema = z.object({
+  markSetId: z.string()
+});
+
+export const MarkSetsDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const MarkSetsUndeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const MarkSetsSetDefaultResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const MarkSetsCloneResultSchema = z.object({
+  markSetId: z.string()
 });
 
 export const MarkSetOpenResultSchema = z.object({
@@ -299,8 +361,30 @@ export const AssessmentsCreateResultSchema = z.object({
   assessmentId: z.string()
 });
 
+export const AssessmentsBulkCreateResultSchema = z.object({
+  ok: z.literal(true),
+  created: z.number(),
+  assessmentIds: z.array(z.string())
+});
+
 export const AssessmentsUpdateResultSchema = z.object({
   ok: z.literal(true)
+});
+
+export const AssessmentsBulkUpdateResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number(),
+  rejected: z.number(),
+  errors: z
+    .array(
+      z.object({
+        index: z.number(),
+        assessmentId: z.string().optional(),
+        code: z.string(),
+        message: z.string()
+      })
+    )
+    .optional()
 });
 
 export const AssessmentsDeleteResultSchema = z.object({
@@ -395,7 +479,10 @@ export const MarkSetSettingsGetResultSchema = z.object({
     day: z.string().nullable(),
     period: z.string().nullable(),
     weightMethod: z.number(),
-    calcMethod: z.number()
+    calcMethod: z.number(),
+    isDefault: z.boolean().optional(),
+    deletedAt: z.string().nullable().optional(),
+    blockTitle: z.string().nullable().optional()
   })
 });
 

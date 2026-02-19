@@ -1501,8 +1501,18 @@ fn handle_marksets_list(state: &mut AppState, req: Request) -> serde_json::Value
         }
     };
 
+    let include_deleted = req
+        .params
+        .get("includeDeleted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let mut stmt = match conn.prepare(
-        "SELECT id, code, description, sort_order FROM mark_sets WHERE class_id = ? ORDER BY sort_order",
+        "SELECT id, code, description, sort_order, is_default, deleted_at
+         FROM mark_sets
+         WHERE class_id = ?
+           AND (? OR deleted_at IS NULL)
+         ORDER BY sort_order",
     ) {
         Ok(s) => s,
         Err(e) => {
@@ -1519,12 +1529,21 @@ fn handle_marksets_list(state: &mut AppState, req: Request) -> serde_json::Value
     };
 
     let rows = stmt
-        .query_map([&class_id], |row| {
+        .query_map((&class_id, include_deleted), |row| {
             let id: String = row.get(0)?;
             let code: String = row.get(1)?;
             let description: String = row.get(2)?;
             let sort_order: i64 = row.get(3)?;
-            Ok(json!({ "id": id, "code": code, "description": description, "sortOrder": sort_order }))
+            let is_default: i64 = row.get(4)?;
+            let deleted_at: Option<String> = row.get(5)?;
+            Ok(json!({
+                "id": id,
+                "code": code,
+                "description": description,
+                "sortOrder": sort_order,
+                "isDefault": is_default != 0,
+                "deletedAt": deleted_at
+            }))
         })
         .and_then(|it| it.collect::<Result<Vec<_>, _>>());
 
@@ -1589,7 +1608,9 @@ fn handle_markset_open(state: &mut AppState, req: Request) -> serde_json::Value 
 
     let ms_row: Option<(String, String, String)> = match conn
         .query_row(
-            "SELECT id, code, description FROM mark_sets WHERE id = ? AND class_id = ?",
+            "SELECT id, code, description
+             FROM mark_sets
+             WHERE id = ? AND class_id = ? AND deleted_at IS NULL",
             (&mark_set_id, &class_id),
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )

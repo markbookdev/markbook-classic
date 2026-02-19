@@ -12,6 +12,10 @@ import {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {
+  AssessmentsBulkCreateResultSchema,
+  AssessmentsBulkUpdateResultSchema,
+  AssessmentsCreateResultSchema,
+  AssessmentsUpdateResultSchema,
   CalcAssessmentStatsResultSchema,
   CalcMarkSetSummaryResultSchema,
   CommentsBanksListResultSchema,
@@ -88,6 +92,7 @@ export function MarksScreen(props: {
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
   onGridEvent?: (msg: string) => void;
+  onOpenMarkSetSetup?: () => void;
 }) {
   const GRID_TILE_ROWS = 40;
   const GRID_TILE_COLS = 8;
@@ -686,6 +691,146 @@ export function MarksScreen(props: {
     await applyBulkEdits(edits);
   }
 
+  function selectedAssessmentIndexes(): number[] {
+    const out: number[] = [];
+    const r = gridSelection.current?.range;
+    if (r) {
+      for (let cc = 0; cc < r.width; cc += 1) {
+        const col = r.x + cc;
+        if (col <= 0 || col > assessments.length) continue;
+        out.push(col - 1);
+      }
+    } else if (selectedCell && selectedCell.col > 0 && selectedCell.col <= assessments.length) {
+      out.push(selectedCell.col - 1);
+    }
+    const uniq = [...new Set(out)].sort((a, b) => a - b);
+    if (uniq.length > 0) return uniq;
+    // Legacy quick actions should still work when no column is actively selected.
+    return assessments.length > 0 ? [0] : [];
+  }
+
+  async function quickNewEntry() {
+    const title = `New Entry ${assessments.length + 1}`;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "assessments.create",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          title,
+          term: calcFilters.term ?? null,
+          weight: 1,
+          outOf: 10
+        },
+        AssessmentsCreateResultSchema
+      );
+      await loadMarkSet();
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function quickMultipleNewEntries() {
+    const count = 2;
+    if (!Number.isFinite(count) || count <= 0 || count > 25) {
+      props.onError("Enter a count between 1 and 25.");
+      return;
+    }
+    const prefix = "Entry";
+    const entries = Array.from({ length: Math.trunc(count) }).map((_, i) => ({
+      title: `${prefix} ${i + 1}`,
+      term: calcFilters.term ?? null,
+      weight: 1,
+      outOf: 10
+    }));
+    props.onError(null);
+    try {
+      await requestParsed(
+        "assessments.bulkCreate",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          entries
+        },
+        AssessmentsBulkCreateResultSchema
+      );
+      await loadMarkSet();
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function quickEntryHeading() {
+    const selected = selectedAssessmentIndexes();
+    if (selected.length === 0) {
+      props.onError("Select an entry column first.");
+      return;
+    }
+    const assessment = assessments[selected[0]];
+    const nextTitle = `${assessment.title} (Updated)`;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "assessments.update",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          assessmentId: assessment.id,
+          patch: { title: nextTitle }
+        },
+        AssessmentsUpdateResultSchema
+      );
+      setAssessments((prev) =>
+        prev.map((a) => (a.id === assessment.id ? { ...a, title: nextTitle } : a))
+      );
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function quickMultipleUpdate() {
+    const selected = selectedAssessmentIndexes();
+    if (selected.length === 0) {
+      props.onError("Select one or more entry columns first.");
+      return;
+    }
+    const weight = 2;
+    if (!Number.isFinite(weight) || weight < 0) {
+      props.onError("Weight must be a non-negative number.");
+      return;
+    }
+    const updates = selected.map((idx) => ({
+      assessmentId: assessments[idx]?.id,
+      patch: { weight }
+    }));
+    props.onError(null);
+    try {
+      const result = await requestParsed(
+        "assessments.bulkUpdate",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          updates
+        },
+        AssessmentsBulkUpdateResultSchema
+      );
+      if ((result.rejected ?? 0) > 0) {
+        const first = result.errors?.[0];
+        props.onError(
+          `Entry update rejected ${result.rejected}. ${first ? first.message : "Check selected columns."}`
+        );
+      }
+      await loadMarkSet();
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   function applySelectedBankEntry() {
     if (!selectedBankEntry) return;
     const bankText = selectedBankEntry.text?.trim();
@@ -1158,6 +1303,46 @@ export function MarksScreen(props: {
           gap: 6
         }}
       >
+        <button
+          data-testid="marks-action-open-markset-btn"
+          onClick={() => props.onError("Select a mark set from the Mark Sets list in the sidebar.")}
+        >
+          Open Mark Set
+        </button>
+        <button data-testid="marks-action-new-entry-btn" onClick={() => void quickNewEntry()}>
+          New Entry
+        </button>
+        <button
+          data-testid="marks-action-multiple-new-btn"
+          onClick={() => void quickMultipleNewEntries()}
+        >
+          Multiple New
+        </button>
+        <button
+          data-testid="marks-action-entry-update-btn"
+          onClick={() => void quickEntryHeading()}
+        >
+          Entry Update
+        </button>
+        <button
+          data-testid="marks-action-entry-heading-btn"
+          onClick={() => props.onOpenMarkSetSetup?.()}
+        >
+          Entry Heading
+        </button>
+        <button
+          data-testid="marks-action-weight-btn"
+          onClick={() => props.onOpenMarkSetSetup?.()}
+        >
+          Weight
+        </button>
+        <button
+          data-testid="marks-action-multiple-update-btn"
+          onClick={() => void quickMultipleUpdate()}
+        >
+          Multiple Update
+        </button>
+        <span style={{ width: 1, height: 20, background: "#ddd", margin: "0 2px" }} />
         <button data-testid="marks-set-no-mark-btn" onClick={() => void setSelectedCellsState("no_mark", null)}>
           Set No Mark
         </button>

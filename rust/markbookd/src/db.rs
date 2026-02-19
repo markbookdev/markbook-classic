@@ -18,6 +18,21 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
         )",
         [],
     )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS class_meta(
+            class_id TEXT PRIMARY KEY,
+            class_code TEXT,
+            school_year TEXT,
+            school_name TEXT,
+            teacher_name TEXT,
+            calc_method_default INTEGER,
+            weight_method_default INTEGER,
+            school_year_start_month INTEGER,
+            created_from_wizard INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS students(
@@ -234,6 +249,9 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
             period TEXT,
             weight_method INTEGER NOT NULL DEFAULT 1,
             calc_method INTEGER NOT NULL DEFAULT 0,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            deleted_at TEXT,
+            block_title TEXT,
             FOREIGN KEY(class_id) REFERENCES classes(id)
         )",
         [],
@@ -573,6 +591,18 @@ fn ensure_mark_sets_settings_columns(conn: &Connection) -> anyhow::Result<()> {
             "ALTER TABLE mark_sets ADD COLUMN calc_method INTEGER NOT NULL DEFAULT 0",
             [],
         )?;
+    }
+    if !table_has_column(conn, "mark_sets", "is_default")? {
+        conn.execute(
+            "ALTER TABLE mark_sets ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+    if !table_has_column(conn, "mark_sets", "deleted_at")? {
+        conn.execute("ALTER TABLE mark_sets ADD COLUMN deleted_at TEXT", [])?;
+    }
+    if !table_has_column(conn, "mark_sets", "block_title")? {
+        conn.execute("ALTER TABLE mark_sets ADD COLUMN block_title TEXT", [])?;
     }
     Ok(())
 }

@@ -22,10 +22,12 @@ import { ExchangeScreen } from "../screens/ExchangeScreen";
 import { LoanedItemsScreen } from "../screens/LoanedItemsScreen";
 import { DeviceMappingsScreen } from "../screens/DeviceMappingsScreen";
 import { CalcSettingsScreen } from "../screens/CalcSettingsScreen";
+import { ClassWizardScreen } from "../screens/ClassWizardScreen";
 
 type Screen =
   | "dashboard"
   | "marks"
+  | "class_wizard"
   | "reports"
   | "students"
   | "markset_setup"
@@ -385,6 +387,12 @@ export function AppShell() {
               <button data-testid="nav-dashboard" onClick={() => setScreen("dashboard")}>
                 Dashboard
               </button>
+              <button
+                data-testid="nav-class-wizard"
+                onClick={() => setScreen("class_wizard")}
+              >
+                New Class Wizard
+              </button>
               <button data-testid="nav-marks" onClick={() => setScreen("marks")}>
                 Marks
               </button>
@@ -446,6 +454,46 @@ export function AppShell() {
             </div>
           )}
 
+          <div style={{ fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
+            Legacy Menus
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+            <details>
+              <summary>File</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("class_wizard")}>Make a New Class</button>
+                <button onClick={() => setScreen("dashboard")}>Open a Class</button>
+                <button onClick={() => setScreen("backup")}>BackUp</button>
+                <button onClick={() => setScreen("exchange")}>Exports</button>
+                <button disabled title="Not implemented yet">
+                  Select Printer
+                </button>
+              </div>
+            </details>
+            <details>
+              <summary>Mark Sets</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("markset_setup")}>Make a New Mark Set</button>
+                <button onClick={() => setScreen("marks")}>Open a Mark Set</button>
+                <button onClick={() => setScreen("markset_setup")}>Edit Heading and Categories</button>
+                <button disabled title="Not implemented yet">
+                  Undelete a Mark Set
+                </button>
+              </div>
+            </details>
+            <details>
+              <summary>Working On</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("markset_setup")}>Entry Heading</button>
+                <button onClick={() => setScreen("marks")}>Edit Marks</button>
+                <button onClick={() => setScreen("reports")}>Display/Print</button>
+                <button disabled title="Not implemented yet">
+                  Clone Entry
+                </button>
+              </div>
+            </details>
+          </div>
+
           <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
             Grid and reports are backed by SQLite via sidecar IPC.
           </div>
@@ -465,6 +513,17 @@ export function AppShell() {
               onDeleteClass={deleteClass}
               onImportLegacyClassFolder={importLegacyClassFolder}
               onNavigate={(s) => setScreen(s as Screen)}
+              onOpenClassWizard={() => setScreen("class_wizard")}
+            />
+          ) : screen === "class_wizard" ? (
+            <ClassWizardScreen
+              onError={setSidecarError}
+              onCancel={() => setScreen("dashboard")}
+              onCreated={async (classId) => {
+                setSelectedClassId(classId);
+                setScreen("students");
+                await refresh();
+              }}
             />
           ) : !selectedClassId ? (
             <div style={{ padding: 24, color: "#666" }}>Select a class.</div>
@@ -477,6 +536,7 @@ export function AppShell() {
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
               onGridEvent={(msg) => setLastGridEvent(msg)}
+              onOpenMarkSetSetup={() => setScreen("markset_setup")}
             />
           ) : screen === "reports" ? (
             <ReportsScreen
@@ -496,6 +556,7 @@ export function AppShell() {
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
               onChanged={refresh}
+              onSelectMarkSet={(markSetId) => setSelectedMarkSetId(markSetId)}
             />
           ) : screen === "attendance" ? (
             <AttendanceScreen selectedClassId={selectedClassId} onError={setSidecarError} />

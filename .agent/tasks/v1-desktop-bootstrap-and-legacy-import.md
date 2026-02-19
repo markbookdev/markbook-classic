@@ -24,7 +24,7 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Mark Set Setup: DONE (categories + assessments CRUD/reorder + mark set settings)
 - Companion import fidelity: IN PROGRESS (`.RMK/.TYP/.IDX/.R*` + `ALL!*.IDX` + `.TBK` + `.ICC` shipped)
 - Calc endpoints: IN PROGRESS (`calc.assessmentStats`, `calc.markSetSummary` shipped; calc-method routing now in `calc.rs`, golden set expanded to MAT2/SNC2)
-- Playwright harness: DONE (24 specs green + 1 packaged smoke intentionally opt-in)
+- Playwright harness: DONE (30 specs green + 1 packaged smoke intentionally opt-in)
 - IPC router de-monolith: DONE (`rust/markbookd/src/ipc/router.rs` is dispatch-only; no legacy fallback)
 - Packaging hardening: IN PROGRESS (sidecar staging + packaged smoke + CI matrix added)
 
@@ -149,3 +149,36 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - ICC (`*.ICC`) is a `(students+1) x (subjects+1)` matrix (row 0 defaults + per-student rows).
 - Combined comment sets from `ALL!<class>.IDX` can overlap set numbers with mark-set IDX files; importer remaps to the next free set number per mark set to preserve both.
 - Legacy export helper files (`*.13`, `*.15`, `*.32`, `*.40`, `*.5`, `*.6`, `*.7`) may contain either 27 or 28 value rows per block for a 27-student class; parser must tolerate both.
+
+### Legacy Screen Parity Deep-Scrub Snapshot (2026-02-19)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports tests: `bun run test:reports` => PASS
+- Desktop E2E regression: `bun run test:e2e` => PASS (30 passed, 1 skipped packaged smoke)
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Packaging smoke: `bun run test:packaging` => PASS
+- Packaged launch smoke: `bun run test:e2e:packaged` => PASS
+- Implemented in this slice:
+  - Added canonical parity backlog matrix: `.agent/tasks/legacy-desktop-parity-matrix.md`.
+  - Added class wizard backend + persistence:
+    - `class_meta` table/migration.
+    - IPC: `classes.wizardDefaults`, `classes.createFromWizard`, `classes.meta.get`, `classes.meta.update`.
+    - Class delete flow now removes `class_meta` rows.
+  - Added class wizard UI screen:
+    - `apps/desktop/src/renderer/ui/screens/ClassWizardScreen.tsx`.
+    - App shell + dashboard navigation entry points.
+  - Added mark set lifecycle backend support:
+    - `mark_sets` columns: `is_default`, `deleted_at`, `block_title`.
+    - IPC: `marksets.create`, `marksets.delete`, `marksets.undelete`, `marksets.setDefault`, `marksets.clone`.
+    - `marksets.list` now supports `includeDeleted` and returns lifecycle metadata.
+    - `markset.open` now guards against deleted mark sets.
+  - Added mark set lifecycle UI:
+    - Mark Set Manager panel (create/open/clone/default/delete/undelete) in `MarkSetSetupScreen`.
+    - Block title editing in mark set settings.
+  - Added legacy-style marks action strip functionality:
+    - New Entry, Multiple New, Entry Update, Entry Heading, Weight, Multiple Update, Open Mark Set.
+    - Backed by `assessments.create/update` and new `assessments.bulkCreate/bulkUpdate`.
+  - Added legacy menu discoverability groupings in app shell (File/Mark Sets/Working On) with implemented vs pending actions.
+  - Added/extended tests:
+    - Rust: `class_wizard_meta.rs`, `markset_lifecycle.rs`.
+    - Rust migration snapshot coverage expanded for new schema columns.
+    - Playwright: `class-wizard.e2e.spec.cjs`, `markset-lifecycle.e2e.spec.cjs`, `marks-action-strip.e2e.spec.cjs`.
