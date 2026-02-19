@@ -21,6 +21,7 @@ export function DashboardScreen(props: {
   onImportLegacyClassFolder: () => Promise<void>;
   onNavigate: (screen: string) => void;
   onOpenClassWizard: () => void;
+  onOpenClassProfile: (classId: string) => void;
 }) {
   const [newClassName, setNewClassName] = useState("");
 
@@ -120,6 +121,12 @@ export function DashboardScreen(props: {
                     <button onClick={() => props.onNavigate("students")}>Students</button>
                     <button onClick={() => props.onNavigate("markset_setup")}>Mark Set Setup</button>
                     <button onClick={() => props.onNavigate("reports")}>Reports</button>
+                    <button
+                      data-testid="dashboard-open-class-profile-btn"
+                      onClick={() => props.onOpenClassProfile(selectedClass.id)}
+                    >
+                      Class Profile
+                    </button>
                   </div>
                   <div style={{ marginTop: 10 }}>
                     <button

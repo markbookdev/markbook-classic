@@ -95,11 +95,24 @@ export function MarkSetSetupScreen(props: {
   const [calcMethod, setCalcMethod] = useState("0");
   const [blockTitle, setBlockTitle] = useState("");
   const [markSetRows, setMarkSetRows] = useState<MarkSetManagerRow[]>([]);
+  const [managerIncludeDeleted, setManagerIncludeDeleted] = useState(true);
+  const [managerSearch, setManagerSearch] = useState("");
+  const [managerStatusFilter, setManagerStatusFilter] = useState<"all" | "active" | "deleted">(
+    "all"
+  );
+  const [managerSort, setManagerSort] = useState<"sort" | "code" | "description">("sort");
   const [newMarkSetCode, setNewMarkSetCode] = useState("");
   const [newMarkSetDescription, setNewMarkSetDescription] = useState("");
   const [newMarkSetBlockTitle, setNewMarkSetBlockTitle] = useState("");
   const [newMarkSetWeightMethod, setNewMarkSetWeightMethod] = useState("1");
   const [newMarkSetCalcMethod, setNewMarkSetCalcMethod] = useState("0");
+  const [cloneModal, setCloneModal] = useState<{
+    source: MarkSetManagerRow;
+    code: string;
+    description: string;
+    cloneAssessments: boolean;
+    cloneScores: boolean;
+  } | null>(null);
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryWeight, setNewCategoryWeight] = useState("20");
@@ -123,7 +136,7 @@ export function MarkSetSetupScreen(props: {
     try {
       const list = await requestParsed(
         "marksets.list",
-        { classId: props.selectedClassId, includeDeleted: true },
+        { classId: props.selectedClassId, includeDeleted: managerIncludeDeleted },
         MarkSetsListResultSchema
       );
       setMarkSetRows(list.markSets as any);
@@ -155,7 +168,7 @@ export function MarkSetSetupScreen(props: {
         ),
         requestParsed(
           "marksets.list",
-          { classId: props.selectedClassId, includeDeleted: true },
+          { classId: props.selectedClassId, includeDeleted: managerIncludeDeleted },
           MarkSetsListResultSchema
         )
       ]);
@@ -188,7 +201,7 @@ export function MarkSetSetupScreen(props: {
   useEffect(() => {
     void loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.selectedClassId, props.selectedMarkSetId]);
+  }, [props.selectedClassId, props.selectedMarkSetId, managerIncludeDeleted]);
 
   async function saveMarkSetSettings() {
     props.onError(null);
@@ -428,22 +441,34 @@ export function MarkSetSetupScreen(props: {
     }
   }
 
-  async function cloneMarkSet(markSet: MarkSetManagerRow) {
+  function openCloneMarkSet(markSet: MarkSetManagerRow) {
     const nextCode = suggestCloneCode(markSet.code);
+    setCloneModal({
+      source: markSet,
+      code: nextCode,
+      description: `${markSet.description} (Copy)`,
+      cloneAssessments: true,
+      cloneScores: false
+    });
+  }
+
+  async function submitCloneMarkSet() {
+    if (!cloneModal) return;
     props.onError(null);
     try {
       const res = await requestParsed(
         "marksets.clone",
         {
           classId: props.selectedClassId,
-          markSetId: markSet.id,
-          code: nextCode,
-          description: `${markSet.description} (Copy)`,
-          cloneAssessments: true,
-          cloneScores: false
+          markSetId: cloneModal.source.id,
+          code: cloneModal.code.trim(),
+          description: cloneModal.description.trim(),
+          cloneAssessments: cloneModal.cloneAssessments,
+          cloneScores: cloneModal.cloneScores
         },
         MarkSetsCloneResultSchema
       );
+      setCloneModal(null);
       props.onSelectMarkSet?.(res.markSetId);
       await loadAll();
       await props.onChanged?.();
@@ -451,6 +476,27 @@ export function MarkSetSetupScreen(props: {
       props.onError(e?.message ?? String(e));
     }
   }
+
+  const visibleMarkSets = useMemo(() => {
+    const needle = managerSearch.trim().toLowerCase();
+    const rows = markSetRows.filter((row) => {
+      const deleted = Boolean(row.deletedAt);
+      if (managerStatusFilter === "active" && deleted) return false;
+      if (managerStatusFilter === "deleted" && !deleted) return false;
+      if (!needle) return true;
+      return (
+        row.code.toLowerCase().includes(needle) ||
+        row.description.toLowerCase().includes(needle)
+      );
+    });
+    const out = rows.slice();
+    out.sort((a, b) => {
+      if (managerSort === "code") return a.code.localeCompare(b.code);
+      if (managerSort === "description") return a.description.localeCompare(b.description);
+      return a.sortOrder - b.sortOrder;
+    });
+    return out;
+  }, [markSetRows, managerSearch, managerSort, managerStatusFilter]);
 
   async function deleteAssessment(assessmentId: string) {
     const ok = confirm("Delete this assessment? All related marks will be removed.");
@@ -554,6 +600,58 @@ export function MarkSetSetupScreen(props: {
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Mark Set Manager</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#444"
+            }}
+          >
+            <input
+              data-testid="markset-manager-include-deleted"
+              type="checkbox"
+              checked={managerIncludeDeleted}
+              onChange={(e) => setManagerIncludeDeleted(e.currentTarget.checked)}
+            />
+            Show deleted
+          </label>
+          <input
+            data-testid="markset-manager-search"
+            value={managerSearch}
+            onChange={(e) => setManagerSearch(e.currentTarget.value)}
+            placeholder="Search code or description"
+            style={{ ...inputStyle, width: 220 }}
+          />
+          <select
+            data-testid="markset-manager-status-filter"
+            value={managerStatusFilter}
+            onChange={(e) =>
+              setManagerStatusFilter((e.currentTarget.value as any) || "all")
+            }
+            style={{ ...inputStyle, width: 140 }}
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="deleted">Deleted only</option>
+          </select>
+          <select
+            data-testid="markset-manager-sort"
+            value={managerSort}
+            onChange={(e) => setManagerSort((e.currentTarget.value as any) || "sort")}
+            style={{ ...inputStyle, width: 150 }}
+          >
+            <option value="sort">Sort: legacy order</option>
+            <option value="code">Sort: code</option>
+            <option value="description">Sort: description</option>
+          </select>
+          <div style={{ color: "#666", fontSize: 12, alignSelf: "center" }}>
+            {visibleMarkSets.length} shown / {markSetRows.length} total
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
           <input
             data-testid="markset-manager-new-code"
@@ -620,7 +718,7 @@ export function MarkSetSetupScreen(props: {
               </tr>
             </thead>
             <tbody>
-              {markSetRows.map((ms) => {
+              {visibleMarkSets.map((ms) => {
                 const deleted = Boolean(ms.deletedAt);
                 return (
                   <tr key={ms.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
@@ -641,7 +739,7 @@ export function MarkSetSetupScreen(props: {
                         <button
                           data-testid={`markset-manager-clone-${ms.id}`}
                           disabled={deleted}
-                          onClick={() => void cloneMarkSet(ms)}
+                          onClick={() => openCloneMarkSet(ms)}
                         >
                           Clone
                         </button>
@@ -677,6 +775,111 @@ export function MarkSetSetupScreen(props: {
           </table>
         </div>
       </div>
+
+      {cloneModal ? (
+        <div
+          data-testid="markset-clone-modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50
+          }}
+        >
+          <div
+            style={{
+              width: 520,
+              background: "#fff",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              padding: 16
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Clone Mark Set</div>
+            <div style={{ color: "#555", marginBottom: 10, fontSize: 13 }}>
+              Source: {cloneModal.source.code} - {cloneModal.source.description}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                New code
+                <input
+                  data-testid="markset-clone-code"
+                  value={cloneModal.code}
+                  onChange={(e) =>
+                    setCloneModal((cur) => (cur ? { ...cur, code: e.currentTarget.value } : cur))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                Description
+                <input
+                  data-testid="markset-clone-description"
+                  value={cloneModal.description}
+                  onChange={(e) =>
+                    setCloneModal((cur) =>
+                      cur ? { ...cur, description: e.currentTarget.value } : cur
+                    )
+                  }
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  data-testid="markset-clone-with-assessments"
+                  type="checkbox"
+                  checked={cloneModal.cloneAssessments}
+                  onChange={(e) =>
+                    setCloneModal((cur) =>
+                      cur
+                        ? {
+                            ...cur,
+                            cloneAssessments: e.currentTarget.checked,
+                            cloneScores: e.currentTarget.checked ? cur.cloneScores : false
+                          }
+                        : cur
+                    )
+                  }
+                />
+                Clone assessments
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  data-testid="markset-clone-with-scores"
+                  type="checkbox"
+                  checked={cloneModal.cloneScores}
+                  disabled={!cloneModal.cloneAssessments}
+                  onChange={(e) =>
+                    setCloneModal((cur) =>
+                      cur ? { ...cur, cloneScores: e.currentTarget.checked } : cur
+                    )
+                  }
+                />
+                Clone scores
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                data-testid="markset-clone-confirm-btn"
+                onClick={() => void submitCloneMarkSet()}
+              >
+                Clone
+              </button>
+              <button
+                data-testid="markset-clone-cancel-btn"
+                onClick={() => setCloneModal(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{

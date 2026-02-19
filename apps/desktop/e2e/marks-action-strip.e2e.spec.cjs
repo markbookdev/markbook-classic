@@ -52,8 +52,12 @@ test("marks action strip supports legacy quick actions", async () => {
     await page.keyboard.press("Escape");
 
     await page.getByTestId("marks-action-entry-update-btn").click();
+    await expect(page.getByTestId("marks-assessment-update-modal")).toBeVisible();
+    await page.getByTestId("marks-assessment-update-cancel-btn").click();
 
     await page.getByTestId("marks-action-multiple-update-btn").click();
+    await expect(page.getByTestId("marks-assessment-update-modal")).toBeVisible();
+    await page.getByTestId("marks-assessment-update-apply-btn").click();
 
     let firstWeight = null;
     for (let i = 0; i < 25; i += 1) {

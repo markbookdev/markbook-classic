@@ -92,7 +92,6 @@ export function MarksScreen(props: {
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
   onGridEvent?: (msg: string) => void;
-  onOpenMarkSetSetup?: () => void;
 }) {
   const GRID_TILE_ROWS = 40;
   const GRID_TILE_COLS = 8;
@@ -149,6 +148,23 @@ export function MarksScreen(props: {
   });
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [scoredInput, setScoredInput] = useState("1");
+  const [assessmentUpdateModal, setAssessmentUpdateModal] = useState<{
+    open: boolean;
+    mode: "heading" | "weight" | "entry_update" | "multiple_update";
+    scope: "single" | "multiple";
+    applyTitle: boolean;
+    title: string;
+    applyWeight: boolean;
+    weight: string;
+  }>({
+    open: false,
+    mode: "entry_update",
+    scope: "single",
+    applyTitle: true,
+    title: "",
+    applyWeight: false,
+    weight: "1"
+  });
 
   const [membershipMaskByStudentId, setMembershipMaskByStudentId] = useState<Record<string, string>>({});
   const [membershipMarkSetSortById, setMembershipMarkSetSortById] = useState<Record<string, number>>({});
@@ -763,67 +779,118 @@ export function MarksScreen(props: {
     }
   }
 
-  async function quickEntryHeading() {
+  function openAssessmentUpdateModal(mode: "heading" | "weight" | "entry_update" | "multiple_update") {
     const selected = selectedAssessmentIndexes();
     if (selected.length === 0) {
       props.onError("Select an entry column first.");
       return;
     }
     const assessment = assessments[selected[0]];
-    const nextTitle = `${assessment.title} (Updated)`;
-    props.onError(null);
-    try {
-      await requestParsed(
-        "assessments.update",
-        {
-          classId: props.selectedClassId,
-          markSetId: props.selectedMarkSetId,
-          assessmentId: assessment.id,
-          patch: { title: nextTitle }
-        },
-        AssessmentsUpdateResultSchema
-      );
-      setAssessments((prev) =>
-        prev.map((a) => (a.id === assessment.id ? { ...a, title: nextTitle } : a))
-      );
-      await refreshCalcViews();
-    } catch (e: any) {
-      props.onError(e?.message ?? String(e));
-    }
+    const initialWeight =
+      assessment.weight == null || !Number.isFinite(assessment.weight)
+        ? "1"
+        : String(assessment.weight);
+    setAssessmentUpdateModal({
+      open: true,
+      mode,
+      scope: mode === "multiple_update" ? "multiple" : "single",
+      applyTitle: mode === "heading" || mode === "entry_update",
+      title: mode === "entry_update" ? `${assessment.title} (Updated)` : assessment.title,
+      applyWeight: mode === "weight" || mode === "multiple_update",
+      weight: mode === "multiple_update" ? "2" : initialWeight
+    });
   }
 
-  async function quickMultipleUpdate() {
+  async function applyAssessmentUpdateModal() {
+    if (!assessmentUpdateModal.open) return;
     const selected = selectedAssessmentIndexes();
     if (selected.length === 0) {
       props.onError("Select one or more entry columns first.");
       return;
     }
-    const weight = 2;
-    if (!Number.isFinite(weight) || weight < 0) {
-      props.onError("Weight must be a non-negative number.");
+
+    const title = assessmentUpdateModal.title.trim();
+    let weight: number | null = null;
+    if (assessmentUpdateModal.applyWeight) {
+      const n = Number(assessmentUpdateModal.weight.trim());
+      if (!Number.isFinite(n) || n < 0) {
+        props.onError("Weight must be a non-negative number.");
+        return;
+      }
+      weight = n;
+    }
+
+    if (!assessmentUpdateModal.applyTitle && !assessmentUpdateModal.applyWeight) {
+      props.onError("Choose at least one update field.");
       return;
     }
-    const updates = selected.map((idx) => ({
-      assessmentId: assessments[idx]?.id,
-      patch: { weight }
-    }));
+    if (assessmentUpdateModal.applyTitle && title.length === 0) {
+      props.onError("Heading must not be empty.");
+      return;
+    }
+
     props.onError(null);
     try {
-      const result = await requestParsed(
-        "assessments.bulkUpdate",
-        {
-          classId: props.selectedClassId,
-          markSetId: props.selectedMarkSetId,
-          updates
-        },
-        AssessmentsBulkUpdateResultSchema
-      );
-      if ((result.rejected ?? 0) > 0) {
-        const first = result.errors?.[0];
-        props.onError(
-          `Entry update rejected ${result.rejected}. ${first ? first.message : "Check selected columns."}`
+      if (assessmentUpdateModal.scope === "single") {
+        const idx = selected[0];
+        const assessment = assessments[idx];
+        if (!assessment) {
+          props.onError("Selected entry was not found.");
+          return;
+        }
+        const patch: Record<string, unknown> = {};
+        if (assessmentUpdateModal.applyTitle) {
+          patch.title = title;
+        }
+        if (assessmentUpdateModal.applyWeight) {
+          patch.weight = weight;
+        }
+        await requestParsed(
+          "assessments.update",
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId,
+            assessmentId: assessment.id,
+            patch
+          },
+          AssessmentsUpdateResultSchema
         );
+      } else {
+        const updates = selected
+          .map((idx, i) => {
+            const assessment = assessments[idx];
+            if (!assessment) return null;
+            const patch: Record<string, unknown> = {};
+            if (assessmentUpdateModal.applyTitle) {
+              patch.title = selected.length > 1 ? `${title} ${i + 1}` : title;
+            }
+            if (assessmentUpdateModal.applyWeight) {
+              patch.weight = weight;
+            }
+            return {
+              assessmentId: assessment.id,
+              patch
+            };
+          })
+          .filter(Boolean);
+        const result = await requestParsed(
+          "assessments.bulkUpdate",
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId,
+            updates
+          },
+          AssessmentsBulkUpdateResultSchema
+        );
+        if ((result.rejected ?? 0) > 0) {
+          const first = result.errors?.[0];
+          props.onError(
+            `Entry update rejected ${result.rejected}. ${first ? first.message : "Check selected columns."}`
+          );
+        }
       }
+
+      setAssessmentUpdateModal((cur) => ({ ...cur, open: false }));
       await loadMarkSet();
       await refreshCalcViews();
     } catch (e: any) {
@@ -1320,25 +1387,25 @@ export function MarksScreen(props: {
         </button>
         <button
           data-testid="marks-action-entry-update-btn"
-          onClick={() => void quickEntryHeading()}
+          onClick={() => openAssessmentUpdateModal("entry_update")}
         >
           Entry Update
         </button>
         <button
           data-testid="marks-action-entry-heading-btn"
-          onClick={() => props.onOpenMarkSetSetup?.()}
+          onClick={() => openAssessmentUpdateModal("heading")}
         >
           Entry Heading
         </button>
         <button
           data-testid="marks-action-weight-btn"
-          onClick={() => props.onOpenMarkSetSetup?.()}
+          onClick={() => openAssessmentUpdateModal("weight")}
         >
           Weight
         </button>
         <button
           data-testid="marks-action-multiple-update-btn"
-          onClick={() => void quickMultipleUpdate()}
+          onClick={() => openAssessmentUpdateModal("multiple_update")}
         >
           Multiple Update
         </button>
@@ -1706,6 +1773,120 @@ export function MarksScreen(props: {
           <div style={{ color: "#777" }}>Click a student row to see results.</div>
         )}
       </div>
+
+      {assessmentUpdateModal.open ? (
+        <div
+          data-testid="marks-assessment-update-modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.2)",
+            zIndex: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <div
+            style={{
+              width: 520,
+              background: "#fff",
+              border: "1px solid #ddd",
+              borderRadius: 10,
+              padding: 14
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>
+              {assessmentUpdateModal.mode === "multiple_update"
+                ? "Update Multiple Entries"
+                : assessmentUpdateModal.mode === "weight"
+                  ? "Update Entry Weight"
+                  : assessmentUpdateModal.mode === "heading"
+                    ? "Update Entry Heading"
+                    : "Entry Update"}
+            </div>
+            <div style={{ color: "#555", fontSize: 13, marginBottom: 10 }}>
+              Scope: {assessmentUpdateModal.scope === "multiple" ? "selected entries" : "selected entry"}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  data-testid="marks-assessment-update-apply-title"
+                  type="checkbox"
+                  checked={assessmentUpdateModal.applyTitle}
+                  onChange={(e) =>
+                    setAssessmentUpdateModal((cur) => ({
+                      ...cur,
+                      applyTitle: e.currentTarget.checked
+                    }))
+                  }
+                />
+                Apply heading
+              </label>
+              <input
+                data-testid="marks-assessment-update-title"
+                value={assessmentUpdateModal.title}
+                disabled={!assessmentUpdateModal.applyTitle}
+                onChange={(e) =>
+                  setAssessmentUpdateModal((cur) => ({ ...cur, title: e.currentTarget.value }))
+                }
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6 }}
+                placeholder={
+                  assessmentUpdateModal.scope === "multiple"
+                    ? "Base heading (numbered for each selected entry)"
+                    : "Heading"
+                }
+              />
+
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  data-testid="marks-assessment-update-apply-weight"
+                  type="checkbox"
+                  checked={assessmentUpdateModal.applyWeight}
+                  onChange={(e) =>
+                    setAssessmentUpdateModal((cur) => ({
+                      ...cur,
+                      applyWeight: e.currentTarget.checked
+                    }))
+                  }
+                />
+                Apply weight
+              </label>
+              <input
+                data-testid="marks-assessment-update-weight"
+                value={assessmentUpdateModal.weight}
+                disabled={!assessmentUpdateModal.applyWeight}
+                onChange={(e) =>
+                  setAssessmentUpdateModal((cur) => ({ ...cur, weight: e.currentTarget.value }))
+                }
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6 }}
+                placeholder="Weight"
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                data-testid="marks-assessment-update-apply-btn"
+                onClick={() => void applyAssessmentUpdateModal()}
+              >
+                Apply
+              </button>
+              <button
+                data-testid="marks-assessment-update-cancel-btn"
+                onClick={() =>
+                  setAssessmentUpdateModal((cur) => ({
+                    ...cur,
+                    open: false
+                  }))
+                }
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <DataEditor
         ref={editorRef}

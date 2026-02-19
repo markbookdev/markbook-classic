@@ -65,6 +65,7 @@ export function AppShell() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
 
   const [screen, setScreen] = useState<Screen>("dashboard");
+  const [classWizardMode, setClassWizardMode] = useState<"create" | "edit">("create");
   const [sidecarError, setSidecarError] = useState<string | null>(null);
   const [lastGridEvent, setLastGridEvent] = useState<string | null>(null);
 
@@ -389,9 +390,23 @@ export function AppShell() {
               </button>
               <button
                 data-testid="nav-class-wizard"
-                onClick={() => setScreen("class_wizard")}
+                onClick={() => {
+                  setClassWizardMode("create");
+                  setScreen("class_wizard");
+                }}
               >
                 New Class Wizard
+              </button>
+              <button
+                data-testid="nav-class-profile"
+                disabled={!selectedClassId}
+                onClick={() => {
+                  if (!selectedClassId) return;
+                  setClassWizardMode("edit");
+                  setScreen("class_wizard");
+                }}
+              >
+                Class Profile
               </button>
               <button data-testid="nav-marks" onClick={() => setScreen("marks")}>
                 Marks
@@ -461,7 +476,24 @@ export function AppShell() {
             <details>
               <summary>File</summary>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("class_wizard")}>Make a New Class</button>
+                <button
+                  onClick={() => {
+                    setClassWizardMode("create");
+                    setScreen("class_wizard");
+                  }}
+                >
+                  Make a New Class
+                </button>
+                <button
+                  onClick={() => {
+                    if (!selectedClassId) return;
+                    setClassWizardMode("edit");
+                    setScreen("class_wizard");
+                  }}
+                  disabled={!selectedClassId}
+                >
+                  Edit Class Profile
+                </button>
                 <button onClick={() => setScreen("dashboard")}>Open a Class</button>
                 <button onClick={() => setScreen("backup")}>BackUp</button>
                 <button onClick={() => setScreen("exchange")}>Exports</button>
@@ -513,15 +545,29 @@ export function AppShell() {
               onDeleteClass={deleteClass}
               onImportLegacyClassFolder={importLegacyClassFolder}
               onNavigate={(s) => setScreen(s as Screen)}
-              onOpenClassWizard={() => setScreen("class_wizard")}
+              onOpenClassWizard={() => {
+                setClassWizardMode("create");
+                setScreen("class_wizard");
+              }}
+              onOpenClassProfile={(classId) => {
+                setSelectedClassId(classId);
+                setClassWizardMode("edit");
+                setScreen("class_wizard");
+              }}
             />
           ) : screen === "class_wizard" ? (
             <ClassWizardScreen
               onError={setSidecarError}
               onCancel={() => setScreen("dashboard")}
+              mode={classWizardMode}
+              selectedClassId={selectedClassId}
               onCreated={async (classId) => {
                 setSelectedClassId(classId);
                 setScreen("students");
+                await refresh();
+              }}
+              onMetaSaved={async (classId) => {
+                setSelectedClassId(classId);
                 await refresh();
               }}
             />
@@ -536,7 +582,6 @@ export function AppShell() {
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
               onGridEvent={(msg) => setLastGridEvent(msg)}
-              onOpenMarkSetSetup={() => setScreen("markset_setup")}
             />
           ) : screen === "reports" ? (
             <ReportsScreen

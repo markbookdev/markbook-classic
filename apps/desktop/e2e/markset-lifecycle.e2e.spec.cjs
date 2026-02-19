@@ -35,6 +35,8 @@ test("mark set manager create/clone/delete/undelete/default lifecycle", async ()
     const countAfterCreate = listAfterCreate.markSets.length;
 
     await page.getByTestId(`markset-manager-clone-${created.id}`).click();
+    await expect(page.getByTestId("markset-clone-modal")).toBeVisible();
+    await page.getByTestId("markset-clone-confirm-btn").click();
 
     let cloned = null;
     let listAfterClone = null;
