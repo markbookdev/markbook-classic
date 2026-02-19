@@ -53,6 +53,7 @@ test("marks grid fetches windows on demand and persists edits in fetched tiles",
     });
     const before = await page.evaluate(() => window.__markbookTest.getMarksGridDebug());
     expect(before.gridGetRequests).toBeGreaterThanOrEqual(1);
+    expect(before.tileRequests).toBeGreaterThanOrEqual(1);
 
     const opened = await page.evaluate(({ col }) => {
       return window.__markbookTest?.openMarksCellEditor?.(col, 0) ?? false;
@@ -64,6 +65,21 @@ test("marks grid fetches windows on demand and persists edits in fetched tiles",
       const d = window.__markbookTest?.getMarksGridDebug?.();
       return !!d && d.gridGetRequests > beforeCount;
     }, before.gridGetRequests);
+
+    const afterFarCol = await page.evaluate(() => window.__markbookTest.getMarksGridDebug());
+    expect(afterFarCol.tileCacheMisses).toBeGreaterThan(before.tileCacheMisses);
+    expect(afterFarCol.inflightMax).toBeGreaterThanOrEqual(1);
+
+    // Opening the same far cell again should hit cache (no extra network request).
+    await page.evaluate(({ col }) => {
+      return window.__markbookTest?.openMarksCellEditor?.(col, 0) ?? false;
+    }, { col: prep.targetCol });
+    await page.waitForFunction((beforeHits) => {
+      const d = window.__markbookTest?.getMarksGridDebug?.();
+      return !!d && d.tileCacheHits > beforeHits;
+    }, afterFarCol.tileCacheHits);
+    const afterSameCell = await page.evaluate(() => window.__markbookTest.getMarksGridDebug());
+    expect(afterSameCell.gridGetRequests).toBe(afterFarCol.gridGetRequests);
 
     await page.evaluate(async ({ classId, markSetId, col }) => {
       await window.markbook.request("grid.updateCell", {

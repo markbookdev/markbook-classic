@@ -7,6 +7,7 @@
       "final-marks.json"
     ],
     "strict": [
+      "fresh-final-marks.json",
       "fresh-markfiles/MB8D25/MAT18D.Y25",
       "fresh-markfiles/MB8D25/MAT28D.Y25",
       "fresh-markfiles/MB8D25/MAT38D.Y25",
@@ -16,4 +17,3 @@
     ]
   }
 }
-

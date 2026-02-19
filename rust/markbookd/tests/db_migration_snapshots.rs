@@ -95,6 +95,81 @@ fn table_has_column(conn: &Connection, table: &str, column: &str) -> bool {
     false
 }
 
+fn table_exists(conn: &Connection, table: &str) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+        [table],
+        |_r| Ok(()),
+    )
+    .is_ok()
+}
+
+fn first_mark_set_id_for_class(
+    stdin: &mut ChildStdin,
+    reader: &mut BufReader<ChildStdout>,
+    req_id: &str,
+    class_id: &str,
+) -> String {
+    let marksets = request_ok(
+        stdin,
+        reader,
+        req_id,
+        "marksets.list",
+        json!({ "classId": class_id }),
+    );
+    marksets
+        .get("markSets")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.get("id"))
+        .and_then(|v| v.as_str())
+        .expect("markSetId")
+        .to_string()
+}
+
+fn assert_core_read_paths(
+    stdin: &mut ChildStdin,
+    reader: &mut BufReader<ChildStdout>,
+    id_prefix: &str,
+    class_id: &str,
+    mark_set_id: &str,
+) {
+    let grid = request_ok(
+        stdin,
+        reader,
+        &format!("{}-grid", id_prefix),
+        "grid.get",
+        json!({
+            "classId": class_id,
+            "markSetId": mark_set_id,
+            "rowStart": 0,
+            "rowCount": 2,
+            "colStart": 0,
+            "colCount": 2
+        }),
+    );
+    assert!(grid.get("rowCount").and_then(|v| v.as_i64()).unwrap_or(0) >= 1);
+    assert!(grid.get("colCount").and_then(|v| v.as_i64()).unwrap_or(0) >= 1);
+
+    let summary = request_ok(
+        stdin,
+        reader,
+        &format!("{}-calc", id_prefix),
+        "calc.markSetSummary",
+        json!({ "classId": class_id, "markSetId": mark_set_id }),
+    );
+    assert!(summary.get("perStudent").and_then(|v| v.as_array()).is_some());
+
+    let report = request_ok(
+        stdin,
+        reader,
+        &format!("{}-report", id_prefix),
+        "reports.markSetSummaryModel",
+        json!({ "classId": class_id, "markSetId": mark_set_id }),
+    );
+    assert!(report.get("perStudent").and_then(|v| v.as_array()).is_some());
+}
+
 #[test]
 fn v0_snapshot_migrates_and_supports_legacy_import() {
     let snapshot_db = fixture_path("rust/markbookd/tests/fixtures/db/v0/markbook.sqlite3");
@@ -122,6 +197,7 @@ fn v0_snapshot_migrates_and_supports_legacy_import() {
     );
 
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
+    assert!(table_exists(&conn, "workspace_settings"));
     assert!(table_has_column(&conn, "students", "sort_order"));
     assert!(table_has_column(&conn, "students", "updated_at"));
     assert!(table_has_column(&conn, "students", "mark_set_mask"));
@@ -136,7 +212,13 @@ fn v0_snapshot_migrates_and_supports_legacy_import() {
         "class.importLegacy",
         json!({ "legacyClassFolderPath": fixture_folder.to_string_lossy() }),
     );
-    assert!(imported.get("classId").and_then(|v| v.as_str()).is_some());
+    let class_id = imported
+        .get("classId")
+        .and_then(|v| v.as_str())
+        .expect("classId")
+        .to_string();
+    let mark_set_id = first_mark_set_id_for_class(&mut stdin, &mut reader, "4", &class_id);
+    assert_core_read_paths(&mut stdin, &mut reader, "5", &class_id, &mark_set_id);
 }
 
 #[test]
@@ -166,31 +248,7 @@ fn v1_snapshot_migrates_statuses_and_keeps_core_reads_working() {
         "expected legacy class from v1 snapshot"
     );
 
-    let grid = request_ok(
-        &mut stdin,
-        &mut reader,
-        "3",
-        "grid.get",
-        json!({
-            "classId": "c_old_v1",
-            "markSetId": "ms_old_v1",
-            "rowStart": 0,
-            "rowCount": 2,
-            "colStart": 0,
-            "colCount": 1
-        }),
-    );
-    assert_eq!(grid.get("rowCount").and_then(|v| v.as_i64()), Some(2));
-    assert_eq!(grid.get("colCount").and_then(|v| v.as_i64()), Some(1));
-
-    let summary = request_ok(
-        &mut stdin,
-        &mut reader,
-        "4",
-        "calc.markSetSummary",
-        json!({ "classId": "c_old_v1", "markSetId": "ms_old_v1" }),
-    );
-    assert!(summary.get("perStudent").and_then(|v| v.as_array()).is_some());
+    assert_core_read_paths(&mut stdin, &mut reader, "3", "c_old_v1", "ms_old_v1");
 
     // Migration should convert old score statuses.
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
@@ -215,7 +273,60 @@ fn v1_snapshot_migrates_statuses_and_keeps_core_reads_working() {
     let imported = request_ok(
         &mut stdin,
         &mut reader,
-        "5",
+        "4",
+        "class.importLegacy",
+        json!({ "legacyClassFolderPath": fixture_folder.to_string_lossy() }),
+    );
+    assert!(imported.get("classId").and_then(|v| v.as_str()).is_some());
+}
+
+#[test]
+fn v2_snapshot_migrates_and_preserves_core_reads_writes() {
+    let snapshot_db = fixture_path("rust/markbookd/tests/fixtures/db/v2/markbook.sqlite3");
+    let workspace = copy_snapshot_to_workspace(&snapshot_db);
+    let fixture_folder = fixture_path("fixtures/legacy/Sample25/MB8D25");
+
+    let (_child, mut stdin, mut reader) = spawn_sidecar();
+
+    let _ = request_ok(
+        &mut stdin,
+        &mut reader,
+        "1",
+        "workspace.select",
+        json!({ "path": workspace.to_string_lossy() }),
+    );
+
+    let classes = request_ok(&mut stdin, &mut reader, "2", "classes.list", json!({}));
+    assert!(
+        classes
+            .get("classes")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().any(|c| c.get("id").and_then(|v| v.as_str()) == Some("c_old_v2")))
+            .unwrap_or(false),
+        "expected legacy class from v2 snapshot"
+    );
+
+    assert_core_read_paths(&mut stdin, &mut reader, "3", "c_old_v2", "ms_old_v2");
+
+    let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
+    assert!(table_exists(&conn, "workspace_settings"));
+    assert!(table_has_column(&conn, "students", "mark_set_mask"));
+    assert!(table_has_column(&conn, "scores", "remark"));
+    assert!(table_has_column(&conn, "assessments", "legacy_type"));
+
+    let migrated_missing: String = conn
+        .query_row(
+            "SELECT status FROM scores WHERE id = 'sc_old_v2_2'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("read migrated score state");
+    assert_eq!(migrated_missing, "zero");
+
+    let imported = request_ok(
+        &mut stdin,
+        &mut reader,
+        "4",
         "class.importLegacy",
         json!({ "legacyClassFolderPath": fixture_folder.to_string_lossy() }),
     );

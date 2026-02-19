@@ -170,6 +170,10 @@ export function MarksScreen(props: {
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const loadedTileKeysRef = useRef<Set<string>>(new Set());
   const inflightTileKeysRef = useRef<Set<string>>(new Set());
+  const gridTileCacheHitsRef = useRef(0);
+  const gridTileCacheMissesRef = useRef(0);
+  const gridTileRequestsRef = useRef(0);
+  const gridInflightMaxRef = useRef(0);
   const requestEpochRef = useRef(0);
   const [gridGetRequests, setGridGetRequests] = useState(0);
 
@@ -191,6 +195,10 @@ export function MarksScreen(props: {
   function resetGridCache() {
     loadedTileKeysRef.current = new Set();
     inflightTileKeysRef.current = new Set();
+    gridTileCacheHitsRef.current = 0;
+    gridTileCacheMissesRef.current = 0;
+    gridTileRequestsRef.current = 0;
+    gridInflightMaxRef.current = 0;
     setGridGetRequests(0);
   }
 
@@ -225,6 +233,10 @@ export function MarksScreen(props: {
     if (inflightTileKeysRef.current.has(tile.key)) return;
 
     inflightTileKeysRef.current.add(tile.key);
+    gridTileRequestsRef.current += 1;
+    if (inflightTileKeysRef.current.size > gridInflightMaxRef.current) {
+      gridInflightMaxRef.current = inflightTileKeysRef.current.size;
+    }
     props.onGridEvent?.(
       `grid.get r${tile.rowStart}+${tile.rowCount} c${tile.colStart}+${tile.colCount}`
     );
@@ -284,8 +296,11 @@ export function MarksScreen(props: {
     );
     const epoch = requestEpochRef.current;
     for (const tile of tiles) {
-      if (loadedTileKeysRef.current.has(tile.key)) continue;
-      if (inflightTileKeysRef.current.has(tile.key)) continue;
+      if (loadedTileKeysRef.current.has(tile.key) || inflightTileKeysRef.current.has(tile.key)) {
+        gridTileCacheHitsRef.current += 1;
+        continue;
+      }
+      gridTileCacheMissesRef.current += 1;
       void fetchGridTile(tile, epoch);
     }
   }
@@ -777,7 +792,11 @@ export function MarksScreen(props: {
     w.__markbookTest.getMarksGridDebug = () => ({
       gridGetRequests,
       loadedTiles: loadedTileKeysRef.current.size,
-      inflightTiles: inflightTileKeysRef.current.size
+      inflightTiles: inflightTileKeysRef.current.size,
+      tileCacheHits: gridTileCacheHitsRef.current,
+      tileCacheMisses: gridTileCacheMissesRef.current,
+      tileRequests: gridTileRequestsRef.current,
+      inflightMax: gridInflightMaxRef.current
     });
     return () => {
       if (w.__markbookTest?.openMarksCellEditor) delete w.__markbookTest.openMarksCellEditor;

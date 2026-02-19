@@ -47,3 +47,40 @@ test("grid.bulkUpdate persists multi-cell edits", async () => {
     await app.close();
   }
 });
+
+test("grid.bulkUpdate returns deterministic diagnostics when payload exceeds limit", async () => {
+  const { app, page, repoRoot } = await launchElectronApp();
+  try {
+    const { classId, markSetId } = await importLegacyFixture(
+      page,
+      repoRoot,
+      path.join("fixtures", "legacy", "Sample25", "MB8D25")
+    );
+    expect(classId).toBeTruthy();
+    expect(markSetId).toBeTruthy();
+
+    const res = await page.evaluate(async ({ classId, markSetId }) => {
+      const edits = Array.from({ length: 5001 }, () => ({
+        row: 0,
+        col: 0,
+        state: "scored",
+        value: 1
+      }));
+      return await window.markbook.request("grid.bulkUpdate", {
+        classId,
+        markSetId,
+        edits
+      });
+    }, { classId, markSetId });
+
+    expect(res.ok).toBe(true);
+    expect(res.updated).toBe(0);
+    expect(res.rejected).toBe(5001);
+    expect(res.limitExceeded).toBe(true);
+    expect(Array.isArray(res.errors)).toBeTruthy();
+    expect(res.errors.length).toBe(1);
+    expect(res.errors[0].code).toBe("too_many_edits");
+  } finally {
+    await app.close();
+  }
+});

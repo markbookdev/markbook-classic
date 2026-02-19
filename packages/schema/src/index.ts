@@ -121,6 +121,7 @@ export const GridBulkUpdateResultSchema = z.object({
   ok: z.literal(true),
   updated: z.number(),
   rejected: z.number().optional(),
+  limitExceeded: z.boolean().optional(),
   errors: z
     .array(
       z.object({

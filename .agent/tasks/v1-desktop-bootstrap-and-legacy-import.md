@@ -102,6 +102,26 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
     - `apps/desktop/e2e/reports-filters-alignment.e2e.spec.cjs`
   - CI packaged smoke workflow now uploads diagnostics artifacts on failure (`test-results`, `playwright-report`, `apps/desktop/out`).
 
+### Release Hardening Snapshot (2026-02-19, dual parity lane + packaged launch gate)
+- Rust sidecar tests: `cargo test --all-targets` => PASS
+- Reports tests: `bun run test:reports` => PASS
+- Parity status lane: `bun run test:parity:status` => PASS (`regression` ready, `strict` pending expected fresh files)
+- Parity regression lane: `bun run test:parity:regression` => PASS
+- Desktop E2E regression: `bun run test:e2e` => PASS (27 passed, 1 skipped packaged smoke)
+- Packaging smoke (bundle presence): `bun run test:packaging` => PASS
+- Packaging smoke (real packaged launch): `bun run test:packaging:launch` => PASS
+- Packaged E2E smoke: `bun run test:e2e:packaged` => PASS
+- Implemented in this slice:
+  - Added packaged launch smoke script: `apps/desktop/scripts/smoke-packaged-launch.cjs` and root script `test:packaging:launch`.
+  - Added parity readiness helper script: `apps/desktop/scripts/parity-status.cjs` and root scripts `test:parity:status` + `test:parity:truth`.
+  - Added strict-lane conditional test: `rust/markbookd/tests/final_marks_vs_fresh_legacy_exports.rs`.
+  - Extended strict parity manifest requirements with fresh final marks file.
+  - Added bulk update payload limit handling in sidecar (`grid.bulkUpdate` now returns optional `limitExceeded` diagnostics when oversized).
+  - Added Rust load/limit lock test: `rust/markbookd/tests/grid_bulk_update_limits.rs`.
+  - Expanded marks windowing E2E debug assertions (`tileCacheHits`, `tileCacheMisses`, `tileRequests`, `inflightMax`).
+  - Added DB snapshot `v2` fixture and expanded migration integration coverage (`reports.markSetSummaryModel` read path + legacy import after migration).
+  - Added CI workflow `quality-gates.yml` (Rust all-target, reports, parity regression, desktop E2E) and upgraded `packaged-smoke.yml` to run packaged launch smoke on both macOS and Windows.
+
 ### Router/Report Extraction Notes
 - All `reports.*Model` methods are now handled directly in `rust/markbookd/src/ipc/handlers/reports.rs` (no legacy router fallback).
 - Added Rust integration smoke test: `rust/markbookd/tests/reports_models_smoke.rs`.

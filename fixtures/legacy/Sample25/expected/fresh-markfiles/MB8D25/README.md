@@ -28,3 +28,14 @@ anchor, we need "fresh" mark files saved after a Calculate/Recalculate run in th
 After committing those files, enable/adjust the strict parity test:
 `rust/markbookd/tests/assessment_stats_vs_fresh_legacy_summaries.rs`.
 
+## Optional Strict Final-Mark Lock
+
+To enable strict final-mark parity as well, export/transcribe the fresh legacy final marks into:
+
+- `fixtures/legacy/Sample25/expected/fresh-final-marks.json`
+
+using the same shape as `fixtures/legacy/Sample25/expected/final-marks.json`.
+
+That file is consumed by:
+
+- `rust/markbookd/tests/final_marks_vs_fresh_legacy_exports.rs`

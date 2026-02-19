@@ -11,11 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            packaged_e2e: "1"
-          - os: windows-latest
-            packaged_e2e: "0"
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Checkout
@@ -30,19 +26,10 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Install Playwright Chromium
-        if: matrix.packaged_e2e == '1'
-        run: bun x playwright install chromium
-
-      - name: Packaged E2E smoke (macOS)
-        if: matrix.packaged_e2e == '1'
+      - name: Packaged launch smoke
         env:
-          MARKBOOK_E2E_READY_FILE: ${{ github.workspace }}/test-results/packaged-ready.json
-        run: bun run test:e2e:packaged
-
-      - name: Packaging smoke (Windows)
-        if: matrix.packaged_e2e == '0'
-        run: bun run test:packaging
+          MARKBOOK_E2E_READY_FILE: ${{ github.workspace }}/test-results/packaged-ready-${{ runner.os }}.json
+        run: bun run test:packaging:launch
 
       - name: Upload packaged smoke diagnostics
         if: failure()

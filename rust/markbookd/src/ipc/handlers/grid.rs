@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 const GRID_GET_MAX_ROWS: i64 = 2000;
 const GRID_GET_MAX_COLS: i64 = 256;
+const GRID_BULK_UPDATE_MAX_EDITS: usize = 5000;
 
 struct HandlerErr {
     code: &'static str,
@@ -438,6 +439,28 @@ fn handle_grid_bulk_update(state: &mut AppState, req: &Request) -> serde_json::V
     let Some(edits_arr) = req.params.get("edits").and_then(|v| v.as_array()) else {
         return err(&req.id, "bad_params", "missing edits[]", None);
     };
+
+    if edits_arr.len() > GRID_BULK_UPDATE_MAX_EDITS {
+        let rejected = edits_arr.len();
+        return ok(
+            &req.id,
+            json!({
+                "ok": true,
+                "updated": 0,
+                "rejected": rejected,
+                "limitExceeded": true,
+                "errors": [{
+                    "row": -1,
+                    "col": -1,
+                    "code": "too_many_edits",
+                    "message": format!(
+                        "bulk payload exceeds max edits: {} > {}",
+                        rejected, GRID_BULK_UPDATE_MAX_EDITS
+                    )
+                }]
+            }),
+        );
+    }
 
     let mut updated: usize = 0;
     let mut errors: Vec<serde_json::Value> = Vec::new();
