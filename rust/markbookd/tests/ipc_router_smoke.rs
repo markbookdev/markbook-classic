@@ -81,6 +81,7 @@ fn router_dispatch_smoke_covers_handler_families() {
         "workspace.select",
         json!({ "path": workspace.to_string_lossy() }),
     );
+    let _ = request(&mut stdin, &mut reader, "2a", "setup.get", json!({}));
     let created = request(
         &mut stdin,
         &mut reader,

@@ -9,6 +9,9 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
     if let Some(resp) = handlers::core::try_handle(state, &req) {
         return resp;
     }
+    if let Some(resp) = handlers::setup::try_handle(state, &req) {
+        return resp;
+    }
     if let Some(resp) = handlers::classes::try_handle(state, &req) {
         return resp;
     }

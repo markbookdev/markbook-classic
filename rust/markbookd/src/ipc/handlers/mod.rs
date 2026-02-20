@@ -10,4 +10,5 @@ pub mod import_legacy;
 pub mod markset_setup;
 pub mod reports;
 pub mod seating;
+pub mod setup;
 pub mod students;

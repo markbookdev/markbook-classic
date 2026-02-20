@@ -28,6 +28,7 @@ import { ClassWizardScreen } from "../screens/ClassWizardScreen";
 import { ClassAnalyticsScreen } from "../screens/ClassAnalyticsScreen";
 import { StudentAnalyticsScreen } from "../screens/StudentAnalyticsScreen";
 import { CombinedAnalyticsScreen } from "../screens/CombinedAnalyticsScreen";
+import { SetupAdminScreen } from "../screens/SetupAdminScreen";
 
 type Screen =
   | "dashboard"
@@ -46,6 +47,7 @@ type Screen =
   | "loaned_items"
   | "device_mappings"
   | "calc_settings"
+  | "setup_admin"
   | "backup"
   | "exchange";
 
@@ -530,6 +532,12 @@ export function AppShell() {
               >
                 Calc Settings
               </button>
+              <button
+                data-testid="nav-setup-admin"
+                onClick={() => setScreen("setup_admin")}
+              >
+                Setup & Admin
+              </button>
               <button data-testid="nav-backup" onClick={() => setScreen("backup")}>
                 Backup
               </button>
@@ -620,6 +628,16 @@ export function AppShell() {
                 <button disabled title="Not implemented yet">
                   Clone Entry
                 </button>
+              </div>
+            </details>
+            <details>
+              <summary>Setup</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("setup_admin")}>Analysis/Report Options</button>
+                <button onClick={() => setScreen("calc_settings")}>Calculation Setup</button>
+                <button onClick={() => setScreen("setup_admin")}>Comments Setup</button>
+                <button onClick={() => setScreen("setup_admin")}>Printer Options</button>
+                <button onClick={() => setScreen("setup_admin")}>Password + Email Setup</button>
               </div>
             </details>
           </div>
@@ -776,6 +794,8 @@ export function AppShell() {
             <LearningSkillsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "calc_settings" ? (
             <CalcSettingsScreen onError={setSidecarError} />
+          ) : screen === "setup_admin" ? (
+            <SetupAdminScreen onError={setSidecarError} />
           ) : screen === "loaned_items" ? (
             <LoanedItemsScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "device_mappings" ? (

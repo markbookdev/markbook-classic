@@ -988,6 +988,49 @@ export const CalcConfigClearOverrideResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const SetupGetResultSchema = z.object({
+  analysis: z.object({
+    defaultStudentScope: z.enum(["all", "active", "valid"]),
+    showInactiveStudents: z.boolean(),
+    showDeletedEntries: z.boolean(),
+    histogramBins: z.number()
+  }),
+  attendance: z.object({
+    schoolYearStartMonth: z.number(),
+    presentCode: z.string(),
+    absentCode: z.string(),
+    lateCode: z.string(),
+    excusedCode: z.string()
+  }),
+  comments: z.object({
+    defaultTransferPolicy: z.enum(["replace", "append", "fill_blank", "source_if_longer"]),
+    appendSeparator: z.string(),
+    enforceFit: z.boolean(),
+    enforceMaxChars: z.boolean()
+  }),
+  printer: z.object({
+    fontScale: z.number(),
+    landscapeWideTables: z.boolean(),
+    repeatHeaders: z.boolean(),
+    showGeneratedAt: z.boolean()
+  }),
+  security: z.object({
+    passwordEnabled: z.boolean(),
+    passwordHint: z.string().nullable(),
+    confirmDeletes: z.boolean()
+  }),
+  email: z.object({
+    enabled: z.boolean(),
+    fromName: z.string(),
+    replyTo: z.string(),
+    subjectPrefix: z.string()
+  })
+});
+
+export const SetupUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
 export const AttendanceMonthOpenResultSchema = z.object({
   schoolYearStartMonth: z.number(),
   month: z.string(),
