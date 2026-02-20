@@ -182,3 +182,30 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
     - Rust: `class_wizard_meta.rs`, `markset_lifecycle.rs`.
     - Rust migration snapshot coverage expanded for new schema columns.
     - Playwright: `class-wizard.e2e.spec.cjs`, `markset-lifecycle.e2e.spec.cjs`, `marks-action-strip.e2e.spec.cjs`.
+
+### Legacy-Parity Specset Snapshot (2026-02-20)
+- Completed deep-scrub documentation pack based on `docs/MarkBook_Reference.pdf` + VB6 project/menu surfaces.
+- Added full specset under:
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/00-source-index.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/01-reference-taxonomy-by-chapter.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/02-legacy-forms-and-menu-catalog.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/03-legacy-screen-contracts.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/04-legacy-file-and-data-semantics.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/05-vb6-calc-and-report-semantics.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/06-current-desktop-capability-map.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/07-gap-assessment-matrix.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/08-prd-classroom-core.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/09-prd-analytics-and-reports.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/10-prd-planner-and-publishing.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/11-prd-integrations-and-admin.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/12-nfr-release-and-operability.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/13-master-implementation-roadmap.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/14-chunked-backlog.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/.agent/product/parity-specset/15-traceability-matrix.md`
+- Added curated parity summaries under:
+  - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/README.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/gap-summary.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/feature-status-dashboard.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/legacy-truth-evidence-lane.md`
+  - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/implementation-roadmap-summary.md`
+- Validation: all required files from the parity specset plan exist and were cross-checked.
