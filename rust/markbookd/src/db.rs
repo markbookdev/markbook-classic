@@ -29,10 +29,15 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
             weight_method_default INTEGER,
             school_year_start_month INTEGER,
             created_from_wizard INTEGER NOT NULL DEFAULT 0,
+            legacy_folder_path TEXT,
+            legacy_cl_file TEXT,
+            legacy_year_token TEXT,
+            last_imported_at TEXT,
             FOREIGN KEY(class_id) REFERENCES classes(id)
         )",
         [],
     )?;
+    ensure_class_meta_import_columns(&conn)?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS students(
@@ -529,9 +534,7 @@ fn ensure_students_mark_set_mask(conn: &Connection) -> anyhow::Result<()> {
 
         let raw_norm = extract_mark_set_mask_from_raw_line(&raw_line);
 
-        let desired = existing_norm
-            .or(raw_norm)
-            .unwrap_or_else(|| "TBA".into());
+        let desired = existing_norm.or(raw_norm).unwrap_or_else(|| "TBA".into());
 
         if existing.map(|s| s.trim().to_ascii_uppercase()) != Some(desired.clone()) {
             conn.execute(
@@ -603,6 +606,31 @@ fn ensure_mark_sets_settings_columns(conn: &Connection) -> anyhow::Result<()> {
     }
     if !table_has_column(conn, "mark_sets", "block_title")? {
         conn.execute("ALTER TABLE mark_sets ADD COLUMN block_title TEXT", [])?;
+    }
+    Ok(())
+}
+
+fn ensure_class_meta_import_columns(conn: &Connection) -> anyhow::Result<()> {
+    if !table_has_column(conn, "class_meta", "legacy_folder_path")? {
+        conn.execute(
+            "ALTER TABLE class_meta ADD COLUMN legacy_folder_path TEXT",
+            [],
+        )?;
+    }
+    if !table_has_column(conn, "class_meta", "legacy_cl_file")? {
+        conn.execute("ALTER TABLE class_meta ADD COLUMN legacy_cl_file TEXT", [])?;
+    }
+    if !table_has_column(conn, "class_meta", "legacy_year_token")? {
+        conn.execute(
+            "ALTER TABLE class_meta ADD COLUMN legacy_year_token TEXT",
+            [],
+        )?;
+    }
+    if !table_has_column(conn, "class_meta", "last_imported_at")? {
+        conn.execute(
+            "ALTER TABLE class_meta ADD COLUMN last_imported_at TEXT",
+            [],
+        )?;
     }
     Ok(())
 }

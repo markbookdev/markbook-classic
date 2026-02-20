@@ -1,3 +1,4 @@
+use crate::db;
 use crate::ipc::error::{err, ok};
 use crate::ipc::types::{AppState, Request};
 use rusqlite::types::Value;
@@ -147,15 +148,36 @@ fn handle_classes_create_from_wizard(state: &mut AppState, req: &Request) -> ser
 
     let school_year = match normalize_opt_string(payload.get("schoolYear")) {
         Ok(v) => v,
-        Err(_) => return err(&req.id, "bad_params", "schoolYear must be string or null", None),
+        Err(_) => {
+            return err(
+                &req.id,
+                "bad_params",
+                "schoolYear must be string or null",
+                None,
+            )
+        }
     };
     let school_name = match normalize_opt_string(payload.get("schoolName")) {
         Ok(v) => v,
-        Err(_) => return err(&req.id, "bad_params", "schoolName must be string or null", None),
+        Err(_) => {
+            return err(
+                &req.id,
+                "bad_params",
+                "schoolName must be string or null",
+                None,
+            )
+        }
     };
     let teacher_name = match normalize_opt_string(payload.get("teacherName")) {
         Ok(v) => v,
-        Err(_) => return err(&req.id, "bad_params", "teacherName must be string or null", None),
+        Err(_) => {
+            return err(
+                &req.id,
+                "bad_params",
+                "teacherName must be string or null",
+                None,
+            )
+        }
     };
 
     let calc_method_default = payload
@@ -201,7 +223,10 @@ fn handle_classes_create_from_wizard(state: &mut AppState, req: &Request) -> ser
         Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
     };
 
-    if let Err(e) = tx.execute("INSERT INTO classes(id, name) VALUES(?, ?)", (&class_id, &name)) {
+    if let Err(e) = tx.execute(
+        "INSERT INTO classes(id, name) VALUES(?, ?)",
+        (&class_id, &name),
+    ) {
         let _ = tx.rollback();
         return err(
             &req.id,
@@ -281,6 +306,21 @@ fn handle_classes_meta_get(state: &mut AppState, req: &Request) -> serde_json::V
         return err(&req.id, "not_found", "class not found", None);
     };
 
+    let warnings_key = format!("classes.lastImportWarnings.{class_id}");
+    let warnings_count = match db::settings_get_json(conn, &warnings_key) {
+        Ok(Some(v)) => v
+            .as_array()
+            .map(|arr| arr.len() as i64)
+            .or_else(|| {
+                v.get("warnings")
+                    .and_then(|w| w.as_array())
+                    .map(|arr| arr.len() as i64)
+            })
+            .unwrap_or(0),
+        Ok(None) => 0,
+        Err(_) => 0,
+    };
+
     let meta = conn
         .query_row(
             "SELECT
@@ -291,7 +331,11 @@ fn handle_classes_meta_get(state: &mut AppState, req: &Request) -> serde_json::V
                 calc_method_default,
                 weight_method_default,
                 school_year_start_month,
-                created_from_wizard
+                created_from_wizard,
+                legacy_folder_path,
+                legacy_cl_file,
+                legacy_year_token,
+                last_imported_at
              FROM class_meta
              WHERE class_id = ?",
             [&class_id],
@@ -304,7 +348,12 @@ fn handle_classes_meta_get(state: &mut AppState, req: &Request) -> serde_json::V
                     "calcMethodDefault": r.get::<_, Option<i64>>(4)?,
                     "weightMethodDefault": r.get::<_, Option<i64>>(5)?,
                     "schoolYearStartMonth": r.get::<_, Option<i64>>(6)?,
-                    "createdFromWizard": r.get::<_, i64>(7)? != 0
+                    "createdFromWizard": r.get::<_, i64>(7)? != 0,
+                    "legacyFolderPath": r.get::<_, Option<String>>(8)?,
+                    "legacyClFile": r.get::<_, Option<String>>(9)?,
+                    "legacyYearToken": r.get::<_, Option<String>>(10)?,
+                    "lastImportedAt": r.get::<_, Option<String>>(11)?,
+                    "lastImportWarningsCount": warnings_count
                 }))
             },
         )
@@ -320,7 +369,12 @@ fn handle_classes_meta_get(state: &mut AppState, req: &Request) -> serde_json::V
             "calcMethodDefault": null,
             "weightMethodDefault": null,
             "schoolYearStartMonth": null,
-            "createdFromWizard": false
+            "createdFromWizard": false,
+            "legacyFolderPath": null,
+            "legacyClFile": null,
+            "legacyYearToken": null,
+            "lastImportedAt": null,
+            "lastImportWarningsCount": warnings_count
         }),
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
@@ -347,7 +401,9 @@ fn handle_classes_meta_update(state: &mut AppState, req: &Request) -> serde_json
     };
 
     let exists: Option<i64> = match conn
-        .query_row("SELECT 1 FROM classes WHERE id = ?", [&class_id], |r| r.get(0))
+        .query_row("SELECT 1 FROM classes WHERE id = ?", [&class_id], |r| {
+            r.get(0)
+        })
         .optional()
     {
         Ok(v) => v,
@@ -372,7 +428,10 @@ fn handle_classes_meta_update(state: &mut AppState, req: &Request) -> serde_json
             let _ = tx.rollback();
             return err(&req.id, "bad_params", "patch.name must not be empty", None);
         }
-        if let Err(e) = tx.execute("UPDATE classes SET name = ? WHERE id = ?", (&name, &class_id)) {
+        if let Err(e) = tx.execute(
+            "UPDATE classes SET name = ? WHERE id = ?",
+            (&name, &class_id),
+        ) {
             let _ = tx.rollback();
             return err(
                 &req.id,

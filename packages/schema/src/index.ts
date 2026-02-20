@@ -74,7 +74,12 @@ export const ClassesMetaGetResultSchema = z.object({
     calcMethodDefault: z.number().nullable(),
     weightMethodDefault: z.number().nullable(),
     schoolYearStartMonth: z.number().nullable(),
-    createdFromWizard: z.boolean()
+    createdFromWizard: z.boolean(),
+    legacyFolderPath: z.string().nullable().optional(),
+    legacyClFile: z.string().nullable().optional(),
+    legacyYearToken: z.string().nullable().optional(),
+    lastImportedAt: z.string().nullable().optional(),
+    lastImportWarningsCount: z.number().optional()
   })
 });
 
@@ -99,6 +104,62 @@ export const ClassImportLegacyResultSchema = z.object({
   loanedItemsImported: z.number().optional(),
   deviceMappingsImported: z.number().optional(),
   combinedCommentSetsImported: z.number().optional()
+});
+
+export const ClassesLegacyPreviewResultSchema = z.object({
+  sourceClFile: z.string(),
+  className: z.string(),
+  classCode: z.string().nullable().optional(),
+  markSetDefs: z.array(
+    z.object({
+      filePrefix: z.string(),
+      code: z.string(),
+      description: z.string(),
+      weight: z.number(),
+      sortOrder: z.number()
+    })
+  ),
+  students: z.object({
+    incoming: z.number(),
+    matched: z.number(),
+    new: z.number(),
+    ambiguous: z.number(),
+    localOnly: z.number()
+  }),
+  markSets: z.object({
+    incoming: z.number(),
+    matched: z.number(),
+    new: z.number()
+  }),
+  warnings: z.array(z.record(z.string(), z.unknown())).optional()
+});
+
+export const ClassesUpdateFromLegacyResultSchema = z.object({
+  ok: z.literal(true),
+  classId: z.string(),
+  students: z.object({
+    matched: z.number(),
+    created: z.number(),
+    updated: z.number(),
+    localOnly: z.number(),
+    ambiguousSkipped: z.number()
+  }),
+  markSets: z.object({
+    matched: z.number(),
+    created: z.number(),
+    undeleted: z.number()
+  }),
+  assessments: z.object({
+    matched: z.number(),
+    created: z.number(),
+    updated: z.number()
+  }),
+  scores: z.object({
+    upserted: z.number()
+  }),
+  warnings: z.array(z.record(z.string(), z.unknown())).optional(),
+  sourceClFile: z.string(),
+  importedMarkFiles: z.array(z.string()).optional()
 });
 
 export const MarkSetsListResultSchema = z.object({
@@ -132,6 +193,41 @@ export const MarkSetsSetDefaultResultSchema = z.object({
 
 export const MarkSetsCloneResultSchema = z.object({
   markSetId: z.string()
+});
+
+export const MarkSetsTransferPreviewResultSchema = z.object({
+  sourceAssessmentCount: z.number(),
+  candidateCount: z.number(),
+  collisions: z.array(
+    z.object({
+      sourceAssessmentId: z.string(),
+      sourceIdx: z.number(),
+      sourceTitle: z.string(),
+      targetAssessmentId: z.string(),
+      targetIdx: z.number(),
+      key: z.string()
+    })
+  ),
+  studentAlignment: z.object({
+    sourceRows: z.number(),
+    targetRows: z.number(),
+    alignedRows: z.number()
+  })
+});
+
+export const MarkSetsTransferApplyResultSchema = z.object({
+  ok: z.literal(true),
+  assessments: z.object({
+    created: z.number(),
+    merged: z.number()
+  }),
+  scores: z.object({
+    upserted: z.number()
+  }),
+  remarks: z.object({
+    upserted: z.number()
+  }),
+  warnings: z.array(z.record(z.string(), z.unknown())).optional()
 });
 
 export const MarkSetOpenResultSchema = z.object({

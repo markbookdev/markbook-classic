@@ -69,7 +69,30 @@ fn normalized_opt_str(
         });
     };
     let t = s.trim().to_string();
-    if t.is_empty() { Ok(None) } else { Ok(Some(t)) }
+    if t.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(t))
+    }
+}
+
+fn normalized_key(s: &str) -> String {
+    s.trim().to_ascii_lowercase()
+}
+
+fn assessment_transfer_key(
+    date: Option<&str>,
+    category_name: Option<&str>,
+    title: &str,
+    term: Option<i64>,
+) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        normalized_key(date.unwrap_or("")),
+        normalized_key(category_name.unwrap_or("")),
+        normalized_key(title),
+        term.unwrap_or(0)
+    )
 }
 
 fn hide_deleted_pref_key(class_id: &str, mark_set_id: &str) -> String {
@@ -1305,7 +1328,10 @@ fn handle_entries_clone_apply(state: &mut AppState, req: &Request) -> serde_json
         }
     };
 
-    let assessment = payload.get("assessment").cloned().unwrap_or_else(|| json!({}));
+    let assessment = payload
+        .get("assessment")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let source_title = assessment
         .get("title")
         .and_then(|v| v.as_str())
@@ -1325,7 +1351,10 @@ fn handle_entries_clone_apply(state: &mut AppState, req: &Request) -> serde_json
         .map(|s| s.to_string());
     let term = assessment.get("term").and_then(|v| v.as_i64());
     let legacy_type = assessment.get("legacyType").and_then(|v| v.as_i64());
-    let weight = assessment.get("weight").and_then(|v| v.as_f64()).or(Some(1.0));
+    let weight = assessment
+        .get("weight")
+        .and_then(|v| v.as_f64())
+        .or(Some(1.0));
     let out_of = assessment.get("outOf").and_then(|v| v.as_f64());
 
     let mut scores_by_sort_order: HashMap<i64, (String, Option<f64>, Option<String>)> =
@@ -1360,7 +1389,9 @@ fn handle_entries_clone_apply(state: &mut AppState, req: &Request) -> serde_json
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
-    let insert_idx = insert_at_idx.unwrap_or(assessment_count).clamp(0, assessment_count);
+    let insert_idx = insert_at_idx
+        .unwrap_or(assessment_count)
+        .clamp(0, assessment_count);
 
     let mut shift_stmt = match tx.prepare(
         "SELECT id, idx FROM assessments WHERE mark_set_id = ? AND idx >= ? ORDER BY idx DESC",
@@ -1427,9 +1458,9 @@ fn handle_entries_clone_apply(state: &mut AppState, req: &Request) -> serde_json
         );
     }
 
-    let mut students_stmt = match tx.prepare(
-        "SELECT id, sort_order FROM students WHERE class_id = ? ORDER BY sort_order",
-    ) {
+    let mut students_stmt = match tx
+        .prepare("SELECT id, sort_order FROM students WHERE class_id = ? ORDER BY sort_order")
+    {
         Ok(s) => s,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
@@ -1985,7 +2016,12 @@ fn handle_marksets_create(state: &mut AppState, req: &Request) -> serde_json::Va
         return err(&req.id, "bad_params", "code must not be empty", None);
     }
     if code.len() > 15 {
-        return err(&req.id, "bad_params", "code must be 15 chars or fewer", None);
+        return err(
+            &req.id,
+            "bad_params",
+            "code must be 15 chars or fewer",
+            None,
+        );
     }
     let description = match req.params.get("description").and_then(|v| v.as_str()) {
         Some(v) => v.trim().to_string(),
@@ -2035,7 +2071,12 @@ fn handle_marksets_create(state: &mut AppState, req: &Request) -> serde_json::Va
         .and_then(|v| v.as_i64())
         .unwrap_or(1);
     if !(0..=2).contains(&weight_method) {
-        return err(&req.id, "bad_params", "weightMethod must be 0, 1, or 2", None);
+        return err(
+            &req.id,
+            "bad_params",
+            "weightMethod must be 0, 1, or 2",
+            None,
+        );
     }
     let calc_method = req
         .params
@@ -2241,7 +2282,10 @@ fn handle_marksets_delete(state: &mut AppState, req: &Request) -> serde_json::Va
         }
     };
     if let Some(next_id) = next_default {
-        if let Err(e) = tx.execute("UPDATE mark_sets SET is_default = 1 WHERE id = ?", [&next_id]) {
+        if let Err(e) = tx.execute(
+            "UPDATE mark_sets SET is_default = 1 WHERE id = ?",
+            [&next_id],
+        ) {
             let _ = tx.rollback();
             return err(
                 &req.id,
@@ -2324,7 +2368,10 @@ fn handle_marksets_set_default(state: &mut AppState, req: &Request) -> serde_jso
         Ok(t) => t,
         Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
     };
-    if let Err(e) = tx.execute("UPDATE mark_sets SET is_default = 0 WHERE class_id = ?", [&class_id]) {
+    if let Err(e) = tx.execute(
+        "UPDATE mark_sets SET is_default = 0 WHERE class_id = ?",
+        [&class_id],
+    ) {
         let _ = tx.rollback();
         return err(
             &req.id,
@@ -2333,7 +2380,10 @@ fn handle_marksets_set_default(state: &mut AppState, req: &Request) -> serde_jso
             Some(json!({ "table": "mark_sets" })),
         );
     }
-    if let Err(e) = tx.execute("UPDATE mark_sets SET is_default = 1 WHERE id = ?", [&mark_set_id]) {
+    if let Err(e) = tx.execute(
+        "UPDATE mark_sets SET is_default = 1 WHERE id = ?",
+        [&mark_set_id],
+    ) {
         let _ = tx.rollback();
         return err(
             &req.id,
@@ -2432,7 +2482,12 @@ fn handle_marksets_clone(state: &mut AppState, req: &Request) -> serde_json::Val
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| format!("{}C", source_file_prefix));
     if code.len() > 15 {
-        return err(&req.id, "bad_params", "code must be 15 chars or fewer", None);
+        return err(
+            &req.id,
+            "bad_params",
+            "code must be 15 chars or fewer",
+            None,
+        );
     }
     if let Err(e) = ensure_mark_set_code_unique(conn, &class_id, &code, None) {
         return e.response(&req.id);
@@ -2471,7 +2526,9 @@ fn handle_marksets_clone(state: &mut AppState, req: &Request) -> serde_json::Val
          ORDER BY sort_order",
     ) {
         Ok(mut stmt) => match stmt
-            .query_map([&source_mark_set_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .query_map([&source_mark_set_id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
             .and_then(|it| it.collect::<Result<Vec<_>, _>>())
         {
             Ok(v) => v,
@@ -2522,16 +2579,17 @@ fn handle_marksets_clone(state: &mut AppState, req: &Request) -> serde_json::Val
         Vec::new()
     };
 
-    let mut scores_by_assessment: HashMap<String, Vec<(String, Option<f64>, String, Option<String>)>> =
-        HashMap::new();
+    let mut scores_by_assessment: HashMap<
+        String,
+        Vec<(String, Option<f64>, String, Option<String>)>,
+    > = HashMap::new();
     if clone_assessments && clone_scores {
         for (source_assessment_id, ..) in &assessments {
-            let score_rows: Vec<(String, Option<f64>, String, Option<String>)> = match conn
-                .prepare(
-                    "SELECT student_id, raw_value, status, remark
+            let score_rows: Vec<(String, Option<f64>, String, Option<String>)> = match conn.prepare(
+                "SELECT student_id, raw_value, status, remark
                      FROM scores
                      WHERE assessment_id = ?",
-                ) {
+            ) {
                 Ok(mut stmt) => match stmt
                     .query_map([source_assessment_id], |r| {
                         Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
@@ -2704,6 +2762,671 @@ fn handle_marksets_clone(state: &mut AppState, req: &Request) -> serde_json::Val
     }
 
     ok(&req.id, json!({ "markSetId": new_mark_set_id }))
+}
+
+fn handle_marksets_transfer_preview(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let source_class_id = match req.params.get("sourceClassId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing sourceClassId", None),
+    };
+    let source_mark_set_id = match req.params.get("sourceMarkSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing sourceMarkSetId", None),
+    };
+    let target_class_id = match req.params.get("targetClassId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing targetClassId", None),
+    };
+    let target_mark_set_id = match req.params.get("targetMarkSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing targetMarkSetId", None),
+    };
+
+    match class_exists(conn, &source_class_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "source class not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match class_exists(conn, &target_class_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "target class not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match mark_set_exists(conn, &source_class_id, &source_mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "source mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match mark_set_exists(conn, &target_class_id, &target_mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "target mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let selected_assessment_ids: Option<HashSet<String>> = match req.params.get("assessmentIds") {
+        Some(v) => {
+            let Some(arr) = v.as_array() else {
+                return err(
+                    &req.id,
+                    "bad_params",
+                    "assessmentIds must be an array of strings",
+                    None,
+                );
+            };
+            Some(
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect::<HashSet<_>>(),
+            )
+        }
+        None => None,
+    };
+
+    let source_assessments_all: Vec<(
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+    )> = match conn.prepare(
+        "SELECT id, idx, date, category_name, title, term
+             FROM assessments
+             WHERE mark_set_id = ?
+             ORDER BY idx",
+    ) {
+        Ok(mut stmt) => match stmt
+            .query_map([&source_mark_set_id], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let source_assessments: Vec<(
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+    )> = source_assessments_all
+        .into_iter()
+        .filter(|(id, ..)| {
+            selected_assessment_ids
+                .as_ref()
+                .map(|set| set.contains(id))
+                .unwrap_or(true)
+        })
+        .collect();
+
+    let target_assessments: Vec<(
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+    )> = match conn.prepare(
+        "SELECT id, idx, date, category_name, title, term
+             FROM assessments
+             WHERE mark_set_id = ?
+             ORDER BY idx",
+    ) {
+        Ok(mut stmt) => match stmt
+            .query_map([&target_mark_set_id], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mut target_by_key: HashMap<String, (String, i64)> = HashMap::new();
+    for (target_assessment_id, target_idx, date, category_name, title, term) in target_assessments {
+        let key = assessment_transfer_key(date.as_deref(), category_name.as_deref(), &title, term);
+        target_by_key
+            .entry(key)
+            .or_insert((target_assessment_id, target_idx));
+    }
+
+    let collisions = source_assessments
+        .iter()
+        .filter_map(
+            |(source_assessment_id, source_idx, date, category_name, title, term)| {
+                let key = assessment_transfer_key(
+                    date.as_deref(),
+                    category_name.as_deref(),
+                    title,
+                    *term,
+                );
+                target_by_key
+                    .get(&key)
+                    .map(|(target_assessment_id, target_idx)| {
+                        json!({
+                            "sourceAssessmentId": source_assessment_id,
+                            "sourceIdx": source_idx,
+                            "sourceTitle": title,
+                            "targetAssessmentId": target_assessment_id,
+                            "targetIdx": target_idx,
+                            "key": key
+                        })
+                    })
+            },
+        )
+        .collect::<Vec<_>>();
+
+    let source_rows: i64 = match conn.query_row(
+        "SELECT COUNT(*) FROM students WHERE class_id = ?",
+        [&source_class_id],
+        |r| r.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let target_rows: i64 = match conn.query_row(
+        "SELECT COUNT(*) FROM students WHERE class_id = ?",
+        [&target_class_id],
+        |r| r.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    ok(
+        &req.id,
+        json!({
+            "sourceAssessmentCount": source_assessments.len(),
+            "candidateCount": source_assessments.len(),
+            "collisions": collisions,
+            "studentAlignment": {
+                "sourceRows": source_rows,
+                "targetRows": target_rows,
+                "alignedRows": std::cmp::min(source_rows, target_rows)
+            }
+        }),
+    )
+}
+
+fn handle_marksets_transfer_apply(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let source_class_id = match req.params.get("sourceClassId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing sourceClassId", None),
+    };
+    let source_mark_set_id = match req.params.get("sourceMarkSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing sourceMarkSetId", None),
+    };
+    let target_class_id = match req.params.get("targetClassId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing targetClassId", None),
+    };
+    let target_mark_set_id = match req.params.get("targetMarkSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing targetMarkSetId", None),
+    };
+    let collision_policy = match req.params.get("collisionPolicy").and_then(|v| v.as_str()) {
+        Some("merge_existing") => "merge_existing",
+        Some("append_new") => "append_new",
+        Some("stop_on_collision") => "stop_on_collision",
+        Some(_) => return err(&req.id, "bad_params", "invalid collisionPolicy", None),
+        None => "merge_existing",
+    };
+    let title_mode = match req.params.get("titleMode").and_then(|v| v.as_str()) {
+        Some("same") => "same",
+        Some("appendTransfer") => "appendTransfer",
+        Some(_) => return err(&req.id, "bad_params", "invalid titleMode", None),
+        None => "same",
+    };
+
+    let selected_assessment_ids: Option<HashSet<String>> = match req.params.get("assessmentIds") {
+        Some(v) => {
+            let Some(arr) = v.as_array() else {
+                return err(
+                    &req.id,
+                    "bad_params",
+                    "assessmentIds must be an array of strings",
+                    None,
+                );
+            };
+            Some(
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect::<HashSet<_>>(),
+            )
+        }
+        None => None,
+    };
+
+    match class_exists(conn, &source_class_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "source class not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match class_exists(conn, &target_class_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "target class not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match mark_set_exists(conn, &source_class_id, &source_mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "source mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+    match mark_set_exists(conn, &target_class_id, &target_mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "target mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+
+    let source_students: Vec<(String, i64)> = match tx
+        .prepare("SELECT id, sort_order FROM students WHERE class_id = ? ORDER BY sort_order")
+    {
+        Ok(mut stmt) => match stmt
+            .query_map([&source_class_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let target_students: Vec<(String, i64)> = match tx
+        .prepare("SELECT id, sort_order FROM students WHERE class_id = ? ORDER BY sort_order")
+    {
+        Ok(mut stmt) => match stmt
+            .query_map([&target_class_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mut target_student_by_sort: HashMap<i64, String> = HashMap::new();
+    for (student_id, sort_order) in target_students {
+        target_student_by_sort.insert(sort_order, student_id);
+    }
+    let mut source_student_sort: HashMap<String, i64> = HashMap::new();
+    for (student_id, sort_order) in source_students {
+        source_student_sort.insert(student_id, sort_order);
+    }
+
+    let source_assessments_all: Vec<(
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+    )> = match tx.prepare(
+        "SELECT
+            id,
+            idx,
+            date,
+            category_name,
+            title,
+            term,
+            legacy_kind,
+            legacy_type,
+            weight,
+            out_of,
+            avg_percent,
+            avg_raw
+         FROM assessments
+         WHERE mark_set_id = ?
+         ORDER BY idx",
+    ) {
+        Ok(mut stmt) => match stmt
+            .query_map([&source_mark_set_id], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                    r.get(9)?,
+                    r.get(10)?,
+                    r.get(11)?,
+                ))
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let source_assessments = source_assessments_all
+        .into_iter()
+        .filter(|(assessment_id, ..)| {
+            selected_assessment_ids
+                .as_ref()
+                .map(|set| set.contains(assessment_id))
+                .unwrap_or(true)
+        })
+        .collect::<Vec<_>>();
+
+    let target_assessments: Vec<(
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+    )> = match tx.prepare(
+        "SELECT id, idx, date, category_name, title, term
+             FROM assessments
+             WHERE mark_set_id = ?
+             ORDER BY idx",
+    ) {
+        Ok(mut stmt) => match stmt
+            .query_map([&target_mark_set_id], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mut target_by_key: HashMap<String, Vec<String>> = HashMap::new();
+    let mut next_target_idx = target_assessments
+        .iter()
+        .map(|(_, idx, _, _, _, _)| *idx)
+        .max()
+        .unwrap_or(-1)
+        + 1;
+    for (target_assessment_id, _idx, date, category_name, title, term) in target_assessments {
+        let key = assessment_transfer_key(date.as_deref(), category_name.as_deref(), &title, term);
+        target_by_key
+            .entry(key)
+            .or_default()
+            .push(target_assessment_id);
+    }
+
+    let mut assessments_created = 0usize;
+    let mut assessments_merged = 0usize;
+    let mut scores_upserted = 0usize;
+    let mut remarks_upserted = 0usize;
+    let mut warnings: Vec<serde_json::Value> = Vec::new();
+
+    for source_assessment in source_assessments {
+        let (
+            source_assessment_id,
+            _source_idx,
+            source_date,
+            source_category_name,
+            source_title,
+            source_term,
+            source_legacy_kind,
+            source_legacy_type,
+            source_weight,
+            source_out_of,
+            source_avg_percent,
+            source_avg_raw,
+        ) = source_assessment;
+        let key = assessment_transfer_key(
+            source_date.as_deref(),
+            source_category_name.as_deref(),
+            &source_title,
+            source_term,
+        );
+
+        let mut matched_target_assessment: Option<String> = None;
+        if collision_policy != "append_new" {
+            if let Some(candidates) = target_by_key.get_mut(&key) {
+                if let Some(candidate) = candidates.first().cloned() {
+                    if collision_policy == "stop_on_collision" {
+                        return err(
+                            &req.id,
+                            "collision_conflict",
+                            "assessment collision detected",
+                            Some(json!({
+                                "sourceAssessmentId": source_assessment_id,
+                                "sourceTitle": source_title,
+                                "targetAssessmentId": candidate,
+                                "collisionKey": key
+                            })),
+                        );
+                    }
+                    matched_target_assessment = Some(candidate);
+                    candidates.remove(0);
+                }
+            }
+        }
+
+        let target_assessment_id = if let Some(existing_assessment_id) = matched_target_assessment {
+            if let Err(e) = tx.execute(
+                "UPDATE assessments
+                 SET date = ?,
+                     category_name = ?,
+                     title = ?,
+                     term = ?,
+                     legacy_kind = ?,
+                     legacy_type = ?,
+                     weight = ?,
+                     out_of = ?,
+                     avg_percent = ?,
+                     avg_raw = ?
+                 WHERE id = ?",
+                (
+                    source_date.as_deref(),
+                    source_category_name.as_deref(),
+                    &source_title,
+                    source_term,
+                    source_legacy_kind,
+                    source_legacy_type,
+                    source_weight,
+                    source_out_of,
+                    source_avg_percent,
+                    source_avg_raw,
+                    &existing_assessment_id,
+                ),
+            ) {
+                return err(
+                    &req.id,
+                    "db_update_failed",
+                    e.to_string(),
+                    Some(json!({ "table": "assessments" })),
+                );
+            }
+            assessments_merged += 1;
+            existing_assessment_id
+        } else {
+            let new_assessment_id = Uuid::new_v4().to_string();
+            let title = if title_mode == "appendTransfer" {
+                format!("{source_title} (Transfer)")
+            } else {
+                source_title.clone()
+            };
+            if let Err(e) = tx.execute(
+                "INSERT INTO assessments(
+                    id,
+                    mark_set_id,
+                    idx,
+                    date,
+                    category_name,
+                    title,
+                    term,
+                    legacy_kind,
+                    legacy_type,
+                    weight,
+                    out_of,
+                    avg_percent,
+                    avg_raw
+                 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    &new_assessment_id,
+                    &target_mark_set_id,
+                    next_target_idx,
+                    source_date.as_deref(),
+                    source_category_name.as_deref(),
+                    &title,
+                    source_term,
+                    source_legacy_kind,
+                    source_legacy_type,
+                    source_weight,
+                    source_out_of,
+                    source_avg_percent,
+                    source_avg_raw,
+                ),
+            ) {
+                return err(
+                    &req.id,
+                    "db_insert_failed",
+                    e.to_string(),
+                    Some(json!({ "table": "assessments" })),
+                );
+            }
+            next_target_idx += 1;
+            assessments_created += 1;
+            new_assessment_id
+        };
+
+        let source_scores: Vec<(String, Option<f64>, String, Option<String>)> = match tx.prepare(
+            "SELECT student_id, raw_value, status, remark
+             FROM scores
+             WHERE assessment_id = ?",
+        ) {
+            Ok(mut stmt) => match stmt
+                .query_map([&source_assessment_id], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })
+                .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            {
+                Ok(v) => v,
+                Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+            },
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+
+        for (source_student_id, raw_value, status, remark) in source_scores {
+            let Some(sort_order) = source_student_sort.get(&source_student_id).copied() else {
+                warnings.push(json!({
+                    "code": "missing_source_student_sort_order",
+                    "sourceStudentId": source_student_id
+                }));
+                continue;
+            };
+            let Some(target_student_id) = target_student_by_sort.get(&sort_order) else {
+                warnings.push(json!({
+                    "code": "missing_target_student_for_sort_order",
+                    "sortOrder": sort_order
+                }));
+                continue;
+            };
+            let score_id = Uuid::new_v4().to_string();
+            if let Err(e) = tx.execute(
+                "INSERT INTO scores(id, assessment_id, student_id, raw_value, status, remark)
+                 VALUES(?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(assessment_id, student_id) DO UPDATE SET
+                   raw_value = excluded.raw_value,
+                   status = excluded.status,
+                   remark = excluded.remark",
+                (
+                    &score_id,
+                    &target_assessment_id,
+                    target_student_id,
+                    raw_value,
+                    &status,
+                    remark.as_deref(),
+                ),
+            ) {
+                return err(
+                    &req.id,
+                    "db_insert_failed",
+                    e.to_string(),
+                    Some(json!({ "table": "scores" })),
+                );
+            }
+            scores_upserted += 1;
+            if remark
+                .as_deref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+            {
+                remarks_upserted += 1;
+            }
+        }
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "assessments": {
+                "created": assessments_created,
+                "merged": assessments_merged
+            },
+            "scores": {
+                "upserted": scores_upserted
+            },
+            "remarks": {
+                "upserted": remarks_upserted
+            },
+            "warnings": warnings
+        }),
+    )
 }
 
 fn handle_assessments_bulk_create(state: &mut AppState, req: &Request) -> serde_json::Value {
@@ -3103,6 +3826,8 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "marksets.undelete" => Some(handle_marksets_undelete(state, req)),
         "marksets.setDefault" => Some(handle_marksets_set_default(state, req)),
         "marksets.clone" => Some(handle_marksets_clone(state, req)),
+        "marksets.transfer.preview" => Some(handle_marksets_transfer_preview(state, req)),
+        "marksets.transfer.apply" => Some(handle_marksets_transfer_apply(state, req)),
         "categories.list" => Some(handle_categories_list(state, req)),
         "categories.create" => Some(handle_categories_create(state, req)),
         "categories.update" => Some(handle_categories_update(state, req)),
