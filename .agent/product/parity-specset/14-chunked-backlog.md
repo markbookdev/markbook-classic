@@ -106,6 +106,8 @@ Execution-ready chunk list for iterative delivery.
   - `planner.publish.*`, `courseDescription.*`
 
 ## EPIC-SETUP-01: Setup subdomain surfaces
+- Status:
+  - IN PROGRESS (2026-02-20): workspace Setup/Admin screen shipped with additive `setup.get` + `setup.update` IPC for analysis/attendance/comments/printer/security/email defaults.
 - Objective:
   - expose calc/comments/attendance/printer/email/password options.
 - API changes:

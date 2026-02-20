@@ -358,3 +358,32 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:e2e` => PASS (`42 passed`, `1 skipped packaged smoke`)
   - `bun run test:parity:regression` => PASS
   - `bun run test:packaging` => PASS
+
+### EPIC-SETUP-01 Snapshot (2026-02-20, setup/admin defaults surface)
+- Backend shipped:
+  - new additive IPC endpoints:
+    - `setup.get`
+    - `setup.update`
+  - new setup sections persisted via `workspace_settings`:
+    - analysis, attendance, comments, printer, security, email
+  - strict update validation added (typed fields, bounds, and allowed enum values).
+- Renderer shipped:
+  - new screen:
+    - `apps/desktop/src/renderer/ui/screens/SetupAdminScreen.tsx`
+  - app shell navigation wired:
+    - `nav-setup-admin`
+    - legacy Setup menu shortcuts now route to setup/calc settings surfaces.
+- Schema/tests/contracts shipped:
+  - added `SetupGetResultSchema` and `SetupUpdateResultSchema` in `packages/schema/src/index.ts`.
+  - added Rust test:
+    - `rust/markbookd/tests/setup_admin_ipc.rs`
+  - added Playwright test:
+    - `apps/desktop/e2e/setup-admin.e2e.spec.cjs`
+  - router smoke coverage extended for `setup.get`.
+- Validation:
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`43 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
+  - `bun run test:e2e:packaged` => PASS

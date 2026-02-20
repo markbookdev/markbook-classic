@@ -31,7 +31,7 @@ Status rules:
 | GAP-005 | Comments transfer-mode UX parity | Implemented (core) | 1 | 1 | 1 | 2 | 5 | 2 | 3 | 11 | Compare/import/flood-fill transfer flows shipped with fit/max-length enforcement and diagnostics. |
 | GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |
 | GAP-007 | Class update-from-file/SIS deep parity | Partial (core shipped) | 1 | 1 | 2 | 1 | 4 | 2 | 2 | 10 | `classes.legacyPreview`, `classes.updateFromLegacy`, and mark set transfer shipped; SIS/attach nuances remain. |
-| GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial | 4 | 3 | 2 | 4 | 3 | 3 | 4 | 12 | scattered settings not fully exposed. |
+| GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial | 3 | 3 | 2 | 3 | 3 | 3 | 4 | 11 | core setup screen shipped (`setup.get/update` + calc config); legacy setup breadth still pending. |
 | GAP-009 | Bulk email workflow | Missing | 4 | 3 | 2 | 1 | 2 | 3 | 3 | 9 | deferred until core parity closure. |
 | GAP-010 | Chapter 13 external adapters breadth | Partial | 4 | 3 | 3 | 1 | 2 | 3 | 5 | 7 | focus on SIS/class exchange first. |
 | GAP-011 | Visual/menu discoverability parity | Partial | 3 | 4 | 0 | 0 | 3 | 2 | 2 | 9 | final wave after functional closure. |

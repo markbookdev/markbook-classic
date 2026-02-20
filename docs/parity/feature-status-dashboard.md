@@ -2,7 +2,7 @@
 
 | Domain | Status | Notes |
 | --- | --- | --- |
-| Class lifecycle | Partial | wizard/profile implemented, some legacy workflow depth pending |
+| Class lifecycle | Partial | wizard/profile/update-from-legacy implemented, some legacy workflow depth pending |
 | Students | Implemented | CRUD/reorder/active/membership complete |
 | Mark sets | Partial | lifecycle strong; transfer/aux actions still incomplete |
 | Marks workflow | Partial | fast editing present; Working On parity needs closure |
@@ -14,6 +14,7 @@
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
 | Analytics screens | Implemented (read-only) | class + student + combined analytics shipped with report handoff |
+| Setup/Admin defaults | Partial | workspace setup screen shipped (analysis/attendance/comments/printer/security/email); deeper legacy setup breadth still pending |
 | Planner/Course Description | Missing | not yet implemented |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial | exchange done; chapter-13 breadth pending |

@@ -23,7 +23,7 @@ Map legacy references to current implementation, gap status, and planned chunk I
 | Ch 12 combined report tabs | combined analytics | `CombinedAnalyticsScreen.tsx` + `analytics.combined.open` + `reports.combinedAnalysisModel` | Implemented (read-only) | EPIC-ANALYTICS-02 | `combined-analytics.e2e.spec.cjs`, `combined-analytics-report-alignment.e2e.spec.cjs`, `analytics_combined_open.rs`, `analytics_combined_reports_alignment.rs` |
 | Ch 6 planner | unit/lesson planner | no module | Missing | EPIC-PLANNER-01 | new planner tests |
 | Ch 6-8/6-11 | course description/time management | no module | Missing | EPIC-PLANNER-02 | new course description tests |
-| MAIN Setup menu | setup subdomains | partial via calc settings | Partial | EPIC-SETUP-01 | setup-specific tests |
+| MAIN Setup menu | setup subdomains | `SetupAdminScreen.tsx` + `CalcSettingsScreen.tsx` + `setup.get/update` | Partial | EPIC-SETUP-01 | `setup-admin.e2e.spec.cjs`, `setup_admin_ipc.rs` |
 | Ch 3-2/3-3 + BACKUP | backup/restore | `backup.*`, packaged smoke | Partial | EPIC-INTEGRATIONS-01 | backup e2e + packaged smoke |
 | Ch 13 exports/integrations | external adapter breadth | exchange/SIS partial | Partial | EPIC-INTEGRATIONS-01 | exchange tests + adapter tests |
 | MAIN Help/menu discoverability | command discoverability parity | AppShell legacy menu blocks | Partial | EPIC-UX-01 | navigation/discoverability e2e |
