@@ -15,6 +15,7 @@ import {
   AssessmentsBulkCreateResultSchema,
   AssessmentsBulkUpdateResultSchema,
   AssessmentsCreateResultSchema,
+  AssessmentsListResultSchema,
   AssessmentsUpdateResultSchema,
   CalcAssessmentStatsResultSchema,
   CalcMarkSetSummaryResultSchema,
@@ -23,10 +24,16 @@ import {
   CommentsSetsListResultSchema,
   CommentsSetsOpenResultSchema,
   CommentsRemarksUpsertOneResultSchema,
+  EntriesCloneApplyResultSchema,
+  EntriesClonePeekResultSchema,
+  EntriesCloneSaveResultSchema,
+  EntriesDeleteResultSchema,
   GridBulkUpdateResultSchema,
   GridGetResultSchema,
   GridUpdateCellResultSchema,
   MarkSetOpenResultSchema,
+  MarksPrefHideDeletedGetResultSchema,
+  MarksPrefHideDeletedSetResultSchema,
   StudentsMembershipGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
@@ -47,6 +54,7 @@ type AssessmentRow = {
   title: string;
   weight: number | null;
   outOf: number | null;
+  isDeletedLike?: boolean;
 };
 
 type BulkScoreEdit = {
@@ -99,7 +107,15 @@ export function MarksScreen(props: {
   const GRID_PREFETCH_COLS = 6;
 
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [allAssessments, setAllAssessments] = useState<AssessmentRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
+  const [visibleAssessmentSourceIdxs, setVisibleAssessmentSourceIdxs] = useState<number[]>([]);
+  const [hideDeletedEntries, setHideDeletedEntries] = useState(true);
+  const [cloneEntryMeta, setCloneEntryMeta] = useState<{
+    exists: boolean;
+    sourceMarkSetId?: string | null;
+    title?: string | null;
+  }>({ exists: false });
   const [cells, setCells] = useState<Array<Array<number | null>>>([]);
   const [calcCategories, setCalcCategories] = useState<Array<{ name: string; weight: number }>>(
     []
@@ -165,6 +181,15 @@ export function MarksScreen(props: {
     applyWeight: false,
     weight: "1"
   });
+  const [updateAllModal, setUpdateAllModal] = useState<{
+    open: boolean;
+    state: "scored" | "zero" | "no_mark";
+    value: string;
+  }>({
+    open: false,
+    state: "scored",
+    value: "1"
+  });
 
   const [membershipMaskByStudentId, setMembershipMaskByStudentId] = useState<Record<string, string>>({});
   const [membershipMarkSetSortById, setMembershipMarkSetSortById] = useState<Record<string, number>>({});
@@ -212,6 +237,60 @@ export function MarksScreen(props: {
   useEffect(() => {
     calcFiltersRef.current = calcFilters;
   }, [calcFilters]);
+
+  function sourceIdxForVisibleCol(col: number): number | null {
+    if (col <= 0) return null;
+    if (col > visibleAssessmentSourceIdxs.length) return null;
+    return visibleAssessmentSourceIdxs[col - 1] ?? null;
+  }
+
+  function applyAssessmentVisibility(
+    nextAll: AssessmentRow[],
+    hideDeleted: boolean
+  ): { visible: AssessmentRow[]; sourceIdxs: number[] } {
+    const visible: AssessmentRow[] = [];
+    const sourceIdxs: number[] = [];
+    for (let i = 0; i < nextAll.length; i += 1) {
+      const a = nextAll[i];
+      const deletedLike = a.isDeletedLike === true;
+      if (hideDeleted && deletedLike) continue;
+      visible.push(a);
+      sourceIdxs.push(i);
+    }
+    return { visible, sourceIdxs };
+  }
+
+  function applyHideDeletedView(nextHideDeleted: boolean, nextAllAssessments = allAssessments) {
+    const { visible, sourceIdxs } = applyAssessmentVisibility(nextAllAssessments, nextHideDeleted);
+    setHideDeletedEntries(nextHideDeleted);
+    setAssessments(visible);
+    setVisibleAssessmentSourceIdxs(sourceIdxs);
+    setSelectedCell((cur) => {
+      if (!cur) return cur;
+      const maxCol = visible.length + 1;
+      return { row: cur.row, col: Math.min(cur.col, Math.max(0, maxCol)) };
+    });
+    const initialRows = Math.min(students.length, GRID_TILE_ROWS);
+    const initialCols = Math.min(visible.length, GRID_TILE_COLS);
+    if (initialRows > 0 && initialCols > 0) {
+      ensureVisibleMarkColumnsLoaded(0, initialRows, 1, initialCols, {
+        rowCount: students.length,
+        colCount: nextAllAssessments.length
+      });
+    }
+  }
+
+  async function persistHideDeleted(nextHideDeleted: boolean) {
+    await requestParsed(
+      "marks.pref.hideDeleted.set",
+      {
+        classId: props.selectedClassId,
+        markSetId: props.selectedMarkSetId,
+        hideDeleted: nextHideDeleted
+      },
+      MarksPrefHideDeletedSetResultSchema
+    );
+  }
 
   function resetGridCache() {
     loadedTileKeysRef.current = new Set();
@@ -298,7 +377,7 @@ export function MarksScreen(props: {
     dims?: { rowCount: number; colCount: number }
   ) {
     const totalRows = dims?.rowCount ?? students.length;
-    const totalCols = dims?.colCount ?? assessments.length;
+    const totalCols = dims?.colCount ?? allAssessments.length;
     if (totalRows <= 0 || totalCols <= 0) return;
 
     const expanded = expandWindow(
@@ -324,6 +403,55 @@ export function MarksScreen(props: {
       gridTileCacheMissesRef.current += 1;
       void fetchGridTile(tile, epoch);
     }
+  }
+
+  function ensureVisibleMarkColumnsLoaded(
+    rowStart: number,
+    rowCount: number,
+    firstVisibleMarkCol: number,
+    lastVisibleMarkCol: number,
+    dims?: { rowCount: number; colCount: number }
+  ) {
+    if (rowCount <= 0) return;
+    const sourceCols: number[] = [];
+    for (let col = firstVisibleMarkCol; col <= lastVisibleMarkCol; col += 1) {
+      const sourceIdx = sourceIdxForVisibleCol(col);
+      if (sourceIdx == null) continue;
+      sourceCols.push(sourceIdx);
+    }
+    if (sourceCols.length === 0) return;
+
+    sourceCols.sort((a, b) => a - b);
+    const deduped = sourceCols.filter((v, i) => i === 0 || sourceCols[i - 1] !== v);
+    let segStart = deduped[0];
+    let prev = deduped[0];
+    for (let i = 1; i < deduped.length; i += 1) {
+      const cur = deduped[i];
+      if (cur === prev + 1) {
+        prev = cur;
+        continue;
+      }
+      ensureGridWindowLoaded(
+        {
+          rowStart,
+          rowCount,
+          colStart: segStart,
+          colCount: prev - segStart + 1
+        },
+        dims
+      );
+      segStart = cur;
+      prev = cur;
+    }
+    ensureGridWindowLoaded(
+      {
+        rowStart,
+        rowCount,
+        colStart: segStart,
+        colCount: prev - segStart + 1
+      },
+      dims
+    );
   }
 
   async function refreshCalcViews() {
@@ -508,6 +636,95 @@ export function MarksScreen(props: {
     });
   }
 
+  async function loadMarkSet(isCancelled?: () => boolean) {
+    props.onError(null);
+    requestEpochRef.current += 1;
+    const runEpoch = requestEpochRef.current;
+    resetGridCache();
+    try {
+      const [open, hideDeletedPref, assessmentsRes, clonePeek] = await Promise.all([
+        requestParsed(
+          "markset.open",
+          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+          MarkSetOpenResultSchema
+        ),
+        requestParsed(
+          "marks.pref.hideDeleted.get",
+          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+          MarksPrefHideDeletedGetResultSchema
+        ),
+        requestParsed(
+          "assessments.list",
+          {
+            classId: props.selectedClassId,
+            markSetId: props.selectedMarkSetId,
+            hideDeleted: false
+          },
+          AssessmentsListResultSchema
+        ),
+        requestParsed(
+          "entries.clone.peek",
+          { classId: props.selectedClassId },
+          EntriesClonePeekResultSchema
+        )
+      ]);
+      if (isCancelled?.()) return;
+      if (runEpoch !== requestEpochRef.current) return;
+
+      const nextAllAssessments = assessmentsRes.assessments as AssessmentRow[];
+      const { visible, sourceIdxs } = applyAssessmentVisibility(
+        nextAllAssessments,
+        hideDeletedPref.hideDeleted
+      );
+      const underlyingColCount = Math.max(open.colCount, nextAllAssessments.length);
+      setStudents(open.students);
+      setAllAssessments(nextAllAssessments);
+      setAssessments(visible);
+      setVisibleAssessmentSourceIdxs(sourceIdxs);
+      setHideDeletedEntries(hideDeletedPref.hideDeleted);
+      setCloneEntryMeta(clonePeek.clone);
+      setCells(
+        Array.from({ length: open.rowCount }, () =>
+          Array.from({ length: underlyingColCount }, () => null)
+        )
+      );
+      setSelectedCell((cur) => {
+        if (open.students.length === 0) return null;
+        const row = cur?.row != null ? Math.min(Math.max(cur.row, 0), open.students.length - 1) : 0;
+        const maxCol = visible.length + 1;
+        const col = cur?.col != null ? Math.min(cur.col, Math.max(0, maxCol)) : 0;
+        return { row, col };
+      });
+      const initialRows = Math.min(open.rowCount, GRID_TILE_ROWS);
+      const initialCols = Math.min(visible.length, GRID_TILE_COLS);
+      if (initialRows > 0 && initialCols > 0) {
+        ensureVisibleMarkColumnsLoaded(0, initialRows, 1, initialCols, {
+          rowCount: open.rowCount,
+          colCount: underlyingColCount
+        });
+      }
+
+      await refreshCalcViews();
+      if (isCancelled?.()) return;
+    } catch (e: any) {
+      if (isCancelled?.()) return;
+      props.onError(e?.message ?? String(e));
+      setStudents([]);
+      setAllAssessments([]);
+      setAssessments([]);
+      setVisibleAssessmentSourceIdxs([]);
+      setHideDeletedEntries(true);
+      setCloneEntryMeta({ exists: false });
+      setCells([]);
+      setAssessmentStats([]);
+      setStudentFinalMarks({});
+      setStudentCounts({});
+      setSettingsApplied(null);
+      setPerStudentCategories({});
+      setCalcCategories([]);
+    }
+  }
+
   // When type checkboxes change, derive the bitmask expected by the sidecar.
   useEffect(() => {
     const all = typesSelected.every(Boolean);
@@ -634,8 +851,8 @@ export function MarksScreen(props: {
     }
   }
 
-  function selectedEditableCells(): Array<{ row: number; col: number }> {
-    const out: Array<{ row: number; col: number }> = [];
+  function selectedEditableCells(): Array<{ row: number; sourceCol: number }> {
+    const out: Array<{ row: number; sourceCol: number }> = [];
     const r = gridSelection.current?.range;
     if (r) {
       for (let rr = 0; rr < r.height; rr += 1) {
@@ -643,15 +860,17 @@ export function MarksScreen(props: {
         if (row < 0 || row >= students.length) continue;
         for (let cc = 0; cc < r.width; cc += 1) {
           const col = r.x + cc;
-          if (col <= 0 || col > assessments.length) continue;
-          out.push({ row, col });
+          const sourceCol = sourceIdxForVisibleCol(col);
+          if (sourceCol == null) continue;
+          out.push({ row, sourceCol });
         }
       }
       if (out.length > 0) return out;
     }
 
     if (selectedCell && selectedCell.col > 0 && selectedCell.col <= assessments.length) {
-      return [selectedCell];
+      const sourceCol = sourceIdxForVisibleCol(selectedCell.col);
+      if (sourceCol != null) return [{ row: selectedCell.row, sourceCol }];
     }
     return [];
   }
@@ -664,7 +883,7 @@ export function MarksScreen(props: {
     if (targets.length === 0) return;
     const edits: BulkScoreEdit[] = targets.map((t) => ({
       row: t.row,
-      col: t.col - 1,
+      col: t.sourceCol,
       state,
       value: scoreValue
     }));
@@ -676,13 +895,14 @@ export function MarksScreen(props: {
     if (!r || r.height <= 1) return;
     const edits: BulkScoreEdit[] = [];
     for (let cc = 0; cc < r.width; cc += 1) {
-      const col = r.x + cc;
-      if (col <= 0 || col > assessments.length) continue;
-      const source = cells[r.y]?.[col - 1] ?? null;
+      const visibleCol = r.x + cc;
+      const sourceCol = sourceIdxForVisibleCol(visibleCol);
+      if (sourceCol == null) continue;
+      const source = cells[r.y]?.[sourceCol] ?? null;
       for (let rr = 1; rr < r.height; rr += 1) {
         const row = r.y + rr;
         if (row < 0 || row >= students.length) continue;
-        edits.push(makeEditFromDisplayValue(row, col - 1, source));
+        edits.push(makeEditFromDisplayValue(row, sourceCol, source));
       }
     }
     await applyBulkEdits(edits);
@@ -695,13 +915,15 @@ export function MarksScreen(props: {
     for (let rr = 0; rr < r.height; rr += 1) {
       const row = r.y + rr;
       if (row < 0 || row >= students.length) continue;
-      const sourceCol = r.x;
-      if (sourceCol <= 0 || sourceCol > assessments.length) continue;
-      const source = cells[row]?.[sourceCol - 1] ?? null;
+      const sourceVisibleCol = r.x;
+      const sourceCol = sourceIdxForVisibleCol(sourceVisibleCol);
+      if (sourceCol == null) continue;
+      const source = cells[row]?.[sourceCol] ?? null;
       for (let cc = 1; cc < r.width; cc += 1) {
-        const col = r.x + cc;
-        if (col <= 0 || col > assessments.length) continue;
-        edits.push(makeEditFromDisplayValue(row, col - 1, source));
+        const visibleCol = r.x + cc;
+        const targetSourceCol = sourceIdxForVisibleCol(visibleCol);
+        if (targetSourceCol == null) continue;
+        edits.push(makeEditFromDisplayValue(row, targetSourceCol, source));
       }
     }
     await applyBulkEdits(edits);
@@ -713,20 +935,22 @@ export function MarksScreen(props: {
     if (r) {
       for (let cc = 0; cc < r.width; cc += 1) {
         const col = r.x + cc;
-        if (col <= 0 || col > assessments.length) continue;
-        out.push(col - 1);
+        const sourceIdx = sourceIdxForVisibleCol(col);
+        if (sourceIdx == null) continue;
+        out.push(sourceIdx);
       }
     } else if (selectedCell && selectedCell.col > 0 && selectedCell.col <= assessments.length) {
-      out.push(selectedCell.col - 1);
+      const sourceIdx = sourceIdxForVisibleCol(selectedCell.col);
+      if (sourceIdx != null) out.push(sourceIdx);
     }
     const uniq = [...new Set(out)].sort((a, b) => a - b);
     if (uniq.length > 0) return uniq;
     // Legacy quick actions should still work when no column is actively selected.
-    return assessments.length > 0 ? [0] : [];
+    return visibleAssessmentSourceIdxs.length > 0 ? [visibleAssessmentSourceIdxs[0]] : [];
   }
 
   async function quickNewEntry() {
-    const title = `New Entry ${assessments.length + 1}`;
+    const title = `New Entry ${allAssessments.length + 1}`;
     props.onError(null);
     try {
       await requestParsed(
@@ -779,13 +1003,160 @@ export function MarksScreen(props: {
     }
   }
 
+  async function deleteSelectedEntry() {
+    const selected = selectedAssessmentIndexes();
+    if (selected.length === 0) {
+      props.onError("Select an entry column first.");
+      return;
+    }
+    const assessment = allAssessments[selected[0]];
+    if (!assessment) {
+      props.onError("Selected entry was not found.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete Entry ${assessment.idx + 1}: "${assessment.title}"?\n\n` +
+        "This sets entry weight to 0 (soft delete) and preserves marks/comments."
+    );
+    if (!confirmed) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "entries.delete",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          assessmentId: assessment.id
+        },
+        EntriesDeleteResultSchema
+      );
+      await loadMarkSet();
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function cloneSelectedEntry() {
+    const selected = selectedAssessmentIndexes();
+    if (selected.length === 0) {
+      props.onError("Select an entry column first.");
+      return;
+    }
+    const assessment = allAssessments[selected[0]];
+    if (!assessment) {
+      props.onError("Selected entry was not found.");
+      return;
+    }
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "entries.clone.save",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          assessmentId: assessment.id
+        },
+        EntriesCloneSaveResultSchema
+      );
+      setCloneEntryMeta({
+        exists: true,
+        sourceMarkSetId: res.clone.sourceMarkSetId,
+        title: res.clone.title
+      });
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function loadClonedEntry() {
+    props.onError(null);
+    try {
+      await requestParsed(
+        "entries.clone.apply",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          titleMode: "appendClone"
+        },
+        EntriesCloneApplyResultSchema
+      );
+      await loadMarkSet();
+      await refreshCalcViews();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function toggleHideDeletedEntries() {
+    const next = !hideDeletedEntries;
+    props.onError(null);
+    try {
+      await persistHideDeleted(next);
+      applyHideDeletedView(next);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  function openUpdateAllModal() {
+    if (!selectedStudentId) {
+      props.onError("Select a student row first.");
+      return;
+    }
+    if (assessments.length === 0) {
+      props.onError("No visible entries to update.");
+      return;
+    }
+    setUpdateAllModal((cur) => ({ ...cur, open: true }));
+  }
+
+  async function applyUpdateAllModal() {
+    if (!selectedCell || selectedCell.row < 0 || selectedCell.row >= students.length) {
+      props.onError("Select a student row first.");
+      return;
+    }
+    if (visibleAssessmentSourceIdxs.length === 0) {
+      props.onError("No visible entries to update.");
+      return;
+    }
+    let state: "scored" | "zero" | "no_mark" = updateAllModal.state;
+    let value: number | null = null;
+    if (state === "scored") {
+      const n = Number(updateAllModal.value.trim());
+      if (!Number.isFinite(n) || n <= 0) {
+        props.onError("Scored value must be a positive number.");
+        return;
+      }
+      value = n;
+    } else if (state === "zero") {
+      value = 0;
+    } else {
+      value = null;
+    }
+
+    const row = selectedCell.row;
+    const edits: BulkScoreEdit[] = visibleAssessmentSourceIdxs.map((sourceCol) => ({
+      row,
+      col: sourceCol,
+      state,
+      value
+    }));
+    await applyBulkEdits(edits);
+    setUpdateAllModal((cur) => ({ ...cur, open: false }));
+  }
+
   function openAssessmentUpdateModal(mode: "heading" | "weight" | "entry_update" | "multiple_update") {
     const selected = selectedAssessmentIndexes();
     if (selected.length === 0) {
       props.onError("Select an entry column first.");
       return;
     }
-    const assessment = assessments[selected[0]];
+    const assessment = allAssessments[selected[0]];
+    if (!assessment) {
+      props.onError("Selected entry was not found.");
+      return;
+    }
     const initialWeight =
       assessment.weight == null || !Number.isFinite(assessment.weight)
         ? "1"
@@ -833,7 +1204,7 @@ export function MarksScreen(props: {
     try {
       if (assessmentUpdateModal.scope === "single") {
         const idx = selected[0];
-        const assessment = assessments[idx];
+        const assessment = allAssessments[idx];
         if (!assessment) {
           props.onError("Selected entry was not found.");
           return;
@@ -858,7 +1229,7 @@ export function MarksScreen(props: {
       } else {
         const updates = selected
           .map((idx, i) => {
-            const assessment = assessments[idx];
+            const assessment = allAssessments[idx];
             if (!assessment) return null;
             const patch: Record<string, unknown> = {};
             if (assessmentUpdateModal.applyTitle) {
@@ -957,11 +1328,13 @@ export function MarksScreen(props: {
       for (let cc = 0; cc < rowVals.length; cc += 1) {
         const col = targetCol + cc;
         if (col <= 0 || col > assessments.length) continue;
+        const sourceCol = sourceIdxForVisibleCol(col);
+        if (sourceCol == null) continue;
         const parsed = parsePastedValue(String(rowVals[cc] ?? ""));
         if (!parsed) continue;
         edits.push({
           row,
-          col: col - 1,
+          col: sourceCol,
           state: parsed.state,
           value: parsed.value
         });
@@ -1010,11 +1383,19 @@ export function MarksScreen(props: {
       tileRequests: gridTileRequestsRef.current,
       inflightMax: gridInflightMaxRef.current
     });
+    w.__markbookTest.getMarksVisibleAssessments = () => ({
+      hideDeletedEntries,
+      ids: assessments.map((a) => a.id),
+      sourceIdxs: visibleAssessmentSourceIdxs.slice()
+    });
     return () => {
       if (w.__markbookTest?.openMarksCellEditor) delete w.__markbookTest.openMarksCellEditor;
       if (w.__markbookTest?.getMarksGridDebug) delete w.__markbookTest.getMarksGridDebug;
+      if (w.__markbookTest?.getMarksVisibleAssessments) {
+        delete w.__markbookTest.getMarksVisibleAssessments;
+      }
     };
-  }, [assessments.length, cells, gridGetRequests, students.length]);
+  }, [assessments, cells, gridGetRequests, hideDeletedEntries, students.length, visibleAssessmentSourceIdxs]);
 
   useEffect(() => {
     function onErr(e: ErrorEvent) {
@@ -1037,65 +1418,9 @@ export function MarksScreen(props: {
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      props.onError(null);
-      requestEpochRef.current += 1;
-      const runEpoch = requestEpochRef.current;
-      resetGridCache();
-      try {
-        const open = await requestParsed(
-          "markset.open",
-          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
-          MarkSetOpenResultSchema
-        );
-        if (cancelled) return;
-        if (runEpoch !== requestEpochRef.current) return;
-        setStudents(open.students);
-        setAssessments(open.assessments);
-        setCells(
-          Array.from({ length: open.rowCount }, () =>
-            Array.from({ length: open.colCount }, () => null)
-          )
-        );
-        // Default to showing results for a student immediately (and keep selection in range
-        // across mark-set changes). This also stabilizes E2E by ensuring the results panel
-        // always has a deterministic selected row once data is loaded.
-        setSelectedCell((cur) => {
-          if (open.students.length === 0) return null;
-          const row = cur?.row != null ? Math.min(Math.max(cur.row, 0), open.students.length - 1) : 0;
-          const col = cur?.col != null ? cur.col : 0;
-          return { row, col };
-        });
-        const initialRows = Math.min(open.rowCount, GRID_TILE_ROWS);
-        const initialCols = Math.min(open.colCount, GRID_TILE_COLS);
-        if (initialRows > 0 && initialCols > 0) {
-          ensureGridWindowLoaded(
-            {
-            rowStart: 0,
-            rowCount: initialRows,
-            colStart: 0,
-            colCount: initialCols
-            },
-            { rowCount: open.rowCount, colCount: open.colCount }
-          );
-        }
-
-        await refreshCalcViews();
-        if (cancelled) return;
-      } catch (e: any) {
-        if (cancelled) return;
-        props.onError(e?.message ?? String(e));
-        setStudents([]);
-        setAssessments([]);
-        setCells([]);
-        setAssessmentStats([]);
-        setStudentFinalMarks({});
-        setStudentCounts({});
-        setSettingsApplied(null);
-        setPerStudentCategories({});
-        setCalcCategories([]);
-      }
+      await loadMarkSet(() => cancelled);
     }
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
@@ -1145,7 +1470,8 @@ export function MarksScreen(props: {
       };
     }
 
-    const v = cells[row]?.[col - 1] ?? null;
+    const sourceCol = sourceIdxForVisibleCol(col);
+    const v = sourceCol == null ? null : cells[row]?.[sourceCol] ?? null;
     const txt = v == null ? "" : String(v);
     return {
       kind: GridCellKind.Number,
@@ -1174,13 +1500,15 @@ export function MarksScreen(props: {
   function openEditorAt(col: number, row: number) {
     if (col <= 0 || col > assessments.length) return;
     if (row < 0 || row >= students.length) return;
+    const sourceCol = sourceIdxForVisibleCol(col);
+    if (sourceCol == null) return;
     ensureGridWindowLoaded({
       rowStart: row,
       rowCount: 1,
-      colStart: col - 1,
+      colStart: sourceCol,
       colCount: 1
     });
-    const cur = cells[row]?.[col - 1] ?? null;
+    const cur = cells[row]?.[sourceCol] ?? null;
     const text = cur == null ? "" : String(cur);
     editorRef.current?.scrollTo(col, row);
     setEditingCell({ col, row, text });
@@ -1194,8 +1522,8 @@ export function MarksScreen(props: {
     if (col === 0) return;
     if (col === assessments.length + 1) return;
     if (row < 0 || row >= students.length) return;
-    const gridCol = col - 1;
-    if (gridCol < 0 || gridCol >= assessments.length) return;
+    const sourceCol = sourceIdxForVisibleCol(col);
+    if (sourceCol == null) return;
 
     // Locked semantics:
     // - blank => No Mark (excluded)
@@ -1237,7 +1565,7 @@ export function MarksScreen(props: {
           classId: props.selectedClassId,
           markSetId: props.selectedMarkSetId,
           row,
-          col: gridCol,
+          col: sourceCol,
           value: toWrite,
           editKind: toWrite == null ? "clear" : "set"
         },
@@ -1247,7 +1575,7 @@ export function MarksScreen(props: {
       setCells((prev) => {
         const next = prev.map((r) => r.slice());
         if (!next[row]) return prev;
-        next[row][gridCol] = toWrite;
+        next[row][sourceCol] = toWrite;
         return next;
       });
       void refreshCalcViews();
@@ -1262,7 +1590,7 @@ export function MarksScreen(props: {
             markSetId: props.selectedMarkSetId,
             rowStart: row,
             rowCount: 1,
-            colStart: gridCol,
+            colStart: sourceCol,
             colCount: 1
           },
           GridGetResultSchema
@@ -1270,7 +1598,7 @@ export function MarksScreen(props: {
         setCells((prev) => {
           const next = prev.map((r) => r.slice());
           if (!next[row] || !grid.cells?.[0]) return prev;
-          next[row][gridCol] = grid.cells[0][0] ?? null;
+          next[row][sourceCol] = grid.cells[0][0] ?? null;
           return next;
         });
       } catch {
@@ -1284,7 +1612,8 @@ export function MarksScreen(props: {
     const { col, row } = editingCell;
     if (col === 0) return;
     if (col === assessments.length + 1) return;
-    const gridCol = col - 1;
+    const sourceCol = sourceIdxForVisibleCol(col);
+    if (sourceCol == null) return;
 
     const trimmed = editingCell.text.trim();
     let raw: number | null = null;
@@ -1312,7 +1641,7 @@ export function MarksScreen(props: {
           classId: props.selectedClassId,
           markSetId: props.selectedMarkSetId,
           row,
-          col: gridCol,
+          col: sourceCol,
           value: toWrite,
           editKind: toWrite == null ? "clear" : "set"
         },
@@ -1322,7 +1651,7 @@ export function MarksScreen(props: {
       setCells((prev) => {
         const next = prev.map((r) => r.slice());
         if (!next[row]) return prev;
-        next[row][gridCol] = toWrite;
+        next[row][sourceCol] = toWrite;
         return next;
       });
       void refreshCalcViews();
@@ -1408,6 +1737,42 @@ export function MarksScreen(props: {
           onClick={() => openAssessmentUpdateModal("multiple_update")}
         >
           Multiple Update
+        </button>
+        <button
+          data-testid="marks-action-update-all-btn"
+          onClick={() => openUpdateAllModal()}
+        >
+          Update All
+        </button>
+        <button
+          data-testid="marks-action-clone-entry-btn"
+          onClick={() => void cloneSelectedEntry()}
+        >
+          Clone Entry
+        </button>
+        <button
+          data-testid="marks-action-load-clone-btn"
+          disabled={!cloneEntryMeta.exists}
+          title={
+            cloneEntryMeta.exists
+              ? `Load clone: ${cloneEntryMeta.title ?? "saved entry"}`
+              : "No saved clone entry"
+          }
+          onClick={() => void loadClonedEntry()}
+        >
+          Load Clone
+        </button>
+        <button
+          data-testid="marks-action-delete-entry-btn"
+          onClick={() => void deleteSelectedEntry()}
+        >
+          Delete Entry
+        </button>
+        <button
+          data-testid="marks-action-hide-deleted-btn"
+          onClick={() => void toggleHideDeletedEntries()}
+        >
+          {hideDeletedEntries ? "Show Deleted Entries" : "Hide Deleted Entries"}
         </button>
         <span style={{ width: 1, height: 20, background: "#ddd", margin: "0 2px" }} />
         <button data-testid="marks-set-no-mark-btn" onClick={() => void setSelectedCellsState("no_mark", null)}>
@@ -1888,6 +2253,92 @@ export function MarksScreen(props: {
         </div>
       ) : null}
 
+      {updateAllModal.open ? (
+        <div
+          data-testid="marks-update-all-modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.2)",
+            zIndex: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <div
+            style={{
+              width: 460,
+              background: "#fff",
+              border: "1px solid #ddd",
+              borderRadius: 10,
+              padding: 14
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Update All Visible Entries</div>
+            <div style={{ color: "#555", fontSize: 13, marginBottom: 10 }}>
+              Applies to selected student across currently visible entry columns.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  data-testid="marks-update-all-state-scored"
+                  type="radio"
+                  checked={updateAllModal.state === "scored"}
+                  onChange={() => setUpdateAllModal((cur) => ({ ...cur, state: "scored" }))}
+                />
+                Scored
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  data-testid="marks-update-all-state-zero"
+                  type="radio"
+                  checked={updateAllModal.state === "zero"}
+                  onChange={() => setUpdateAllModal((cur) => ({ ...cur, state: "zero" }))}
+                />
+                Zero
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  data-testid="marks-update-all-state-no-mark"
+                  type="radio"
+                  checked={updateAllModal.state === "no_mark"}
+                  onChange={() => setUpdateAllModal((cur) => ({ ...cur, state: "no_mark" }))}
+                />
+                No Mark
+              </label>
+            </div>
+
+            <input
+              data-testid="marks-update-all-value"
+              value={updateAllModal.value}
+              onChange={(e) =>
+                setUpdateAllModal((cur) => ({ ...cur, value: e.currentTarget.value }))
+              }
+              disabled={updateAllModal.state !== "scored"}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6 }}
+              placeholder="Scored value"
+            />
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                data-testid="marks-update-all-apply-btn"
+                onClick={() => void applyUpdateAllModal()}
+              >
+                Apply
+              </button>
+              <button
+                data-testid="marks-update-all-cancel-btn"
+                onClick={() => setUpdateAllModal((cur) => ({ ...cur, open: false }))}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <DataEditor
         ref={editorRef}
         columns={cols}
@@ -1911,12 +2362,12 @@ export function MarksScreen(props: {
           const lastMarkCol = Math.min(assessments.length, lastVisibleCol);
           if (lastMarkCol < firstMarkCol) return;
 
-          ensureGridWindowLoaded({
+          ensureVisibleMarkColumnsLoaded(
             rowStart,
             rowCount,
-            colStart: firstMarkCol - 1,
-            colCount: lastMarkCol - firstMarkCol + 1
-          });
+            firstMarkCol,
+            lastMarkCol
+          );
         }}
         cellActivationBehavior="double-click"
         editOnType={false}

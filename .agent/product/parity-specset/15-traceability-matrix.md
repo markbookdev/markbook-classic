@@ -15,7 +15,7 @@ Map legacy references to current implementation, gap status, and planned chunk I
 | Ch 4-2 + iPad form | device mappings | `DeviceMappingsScreen.tsx`, `devices.*` | Implemented | Maintain | `device-mappings.e2e.spec.cjs` |
 | Ch 8-2/8-3/8-5/8-8/8-9 | marks entry/update/weight | `MarksScreen.tsx`, `grid.*`, `assessments.*` | Partial | EPIC-CORE-01 | marks e2e suites |
 | Ch 8-4 + MARKSET form | mark set lifecycle | `MarkSetSetupScreen.tsx`, `marksets.*` | Partial | EPIC-CORE-01 | `markset-lifecycle.e2e.spec.cjs` |
-| MAIN Working On menu | clone/delete/hide/update-all | marks action strip + handlers | Partial | EPIC-CORE-01 | `marks-action-strip.e2e.spec.cjs` (+ new) |
+| MAIN Working On menu | clone/delete/hide/update-all | marks action strip + `entries.*` + `marks.pref.hideDeleted.*` handlers | Implemented | EPIC-CORE-01 | `marks-action-strip.e2e.spec.cjs`, `marks-hide-deleted.e2e.spec.cjs`, `marks-update-all.e2e.spec.cjs`, rust `entries_*` tests |
 | Ch 10 + COMMEDIT/ERC/ERCXFER | comments and transfer modes | comment screens + `comments.*` handlers | Partial | EPIC-COMMENTS-01 | `comments.e2e.spec.cjs`, `marks-remarks.e2e.spec.cjs` |
 | Ch 9 class report tabs | interactive class analytics | report models exist, interactive tabs missing | Partial | EPIC-ANALYTICS-01 | new class analytics e2e |
 | Ch 11 student report tabs | interactive student analytics | report model exists | Partial | EPIC-ANALYTICS-02 | new student analytics e2e |

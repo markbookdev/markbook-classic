@@ -29,7 +29,7 @@ Status rules:
 | GAP-003 | Student analytics tabs (ch11) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Needs trend/category/compare UX. |
 | GAP-004 | Combined report analytics (ch12) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Requires combined set weighting workflows. |
 | GAP-005 | Comments transfer-mode UX parity | Partial | 3 | 4 | 2 | 2 | 5 | 3 | 3 | 15 | Back-end data present, UX/flows incomplete. |
-| GAP-006 | Working On menu full parity | Partial | 3 | 4 | 1 | 3 | 5 | 3 | 3 | 16 | Clone/delete/hide/update-all full semantics. |
+| GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |
 | GAP-007 | Class update-from-file/SIS deep parity | Partial | 3 | 3 | 3 | 2 | 4 | 4 | 4 | 13 | Existing import paths need richer modes. |
 | GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial | 4 | 3 | 2 | 4 | 3 | 3 | 4 | 12 | scattered settings not fully exposed. |
 | GAP-009 | Bulk email workflow | Missing | 4 | 3 | 2 | 1 | 2 | 3 | 3 | 9 | deferred until core parity closure. |
@@ -42,11 +42,11 @@ Status rules:
 2. GAP-012
 3. GAP-003
 4. GAP-004
-5. GAP-006
-6. GAP-005
-7. GAP-001
-8. GAP-007
-9. GAP-008
+5. GAP-005
+6. GAP-001
+7. GAP-007
+8. GAP-008
+9. GAP-006
 10. GAP-009
 11. GAP-011
 12. GAP-010

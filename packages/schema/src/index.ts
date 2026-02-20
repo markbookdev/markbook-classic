@@ -196,6 +196,39 @@ export const GridBulkUpdateResultSchema = z.object({
     .optional()
 });
 
+export const EntriesDeleteResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const EntriesCloneSaveResultSchema = z.object({
+  ok: z.literal(true),
+  clone: z.object({
+    sourceMarkSetId: z.string().nullable(),
+    title: z.string().nullable()
+  })
+});
+
+export const EntriesClonePeekResultSchema = z.object({
+  clone: z.object({
+    exists: z.boolean(),
+    sourceMarkSetId: z.string().optional().nullable(),
+    title: z.string().optional().nullable()
+  })
+});
+
+export const EntriesCloneApplyResultSchema = z.object({
+  ok: z.literal(true),
+  assessmentId: z.string()
+});
+
+export const MarksPrefHideDeletedGetResultSchema = z.object({
+  hideDeleted: z.boolean()
+});
+
+export const MarksPrefHideDeletedSetResultSchema = z.object({
+  ok: z.literal(true)
+});
+
 export const ReportsMarkSetGridModelResultSchema = z.object({
   class: z.object({
     id: z.string(),
@@ -352,7 +385,8 @@ export const AssessmentsListResultSchema = z.object({
       term: z.number().nullable(),
       legacyType: z.number().nullable(),
       weight: z.number().nullable(),
-      outOf: z.number().nullable()
+      outOf: z.number().nullable(),
+      isDeletedLike: z.boolean().optional()
     })
   )
 });

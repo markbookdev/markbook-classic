@@ -59,16 +59,63 @@ test("marks action strip supports legacy quick actions", async () => {
     await expect(page.getByTestId("marks-assessment-update-modal")).toBeVisible();
     await page.getByTestId("marks-assessment-update-apply-btn").click();
 
+    let firstVisibleAssessmentId = null;
+    for (let i = 0; i < 25; i += 1) {
+      firstVisibleAssessmentId = await page.evaluate(() => {
+        const vis = window.__markbookTest?.getMarksVisibleAssessments?.();
+        return vis?.ids?.[0] ?? null;
+      });
+      if (firstVisibleAssessmentId) break;
+      await page.waitForTimeout(200);
+    }
+    expect(firstVisibleAssessmentId).toBeTruthy();
+
     let firstWeight = null;
     for (let i = 0; i < 25; i += 1) {
-      firstWeight = await page.evaluate(async ({ classId, markSetId }) => {
+      firstWeight = await page.evaluate(async ({ classId, markSetId, assessmentId }) => {
         const list = await window.markbook.request("assessments.list", { classId, markSetId });
-        return list.assessments[0]?.weight ?? null;
-      }, { classId: imported.classId, markSetId: imported.markSetId });
+        const row = list.assessments.find((a) => a.id === assessmentId);
+        return row?.weight ?? null;
+      }, { classId: imported.classId, markSetId: imported.markSetId, assessmentId: firstVisibleAssessmentId });
       if (firstWeight === 2) break;
       await page.waitForTimeout(200);
     }
     expect(firstWeight).toBe(2);
+
+    // Clone Entry + Load Clone
+    await page.evaluate(() => {
+      const ok = window.__markbookTest?.openMarksCellEditor?.(1, 0);
+      if (!ok) throw new Error("failed to select first entry for clone");
+    });
+    await page.keyboard.press("Escape");
+
+    const beforeCloneCount = await page.evaluate(async ({ classId, markSetId }) => {
+      const list = await window.markbook.request("assessments.list", {
+        classId,
+        markSetId,
+        hideDeleted: false,
+      });
+      return list.assessments.length;
+    }, { classId: imported.classId, markSetId: imported.markSetId });
+
+    await page.getByTestId("marks-action-clone-entry-btn").click();
+    await expect(page.getByTestId("marks-action-load-clone-btn")).toBeEnabled();
+    await page.getByTestId("marks-action-load-clone-btn").click();
+
+    let afterCloneCount = beforeCloneCount;
+    for (let i = 0; i < 25; i += 1) {
+      afterCloneCount = await page.evaluate(async ({ classId, markSetId }) => {
+        const list = await window.markbook.request("assessments.list", {
+          classId,
+          markSetId,
+          hideDeleted: false,
+        });
+        return list.assessments.length;
+      }, { classId: imported.classId, markSetId: imported.markSetId });
+      if (afterCloneCount >= beforeCloneCount + 1) break;
+      await page.waitForTimeout(200);
+    }
+    expect(afterCloneCount).toBe(beforeCloneCount + 1);
   } finally {
     await app.close();
   }

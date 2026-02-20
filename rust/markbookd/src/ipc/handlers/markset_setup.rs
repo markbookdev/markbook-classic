@@ -1,3 +1,4 @@
+use crate::db;
 use crate::ipc::error::{err, ok};
 use crate::ipc::types::{AppState, Request};
 use rusqlite::types::Value;
@@ -69,6 +70,78 @@ fn normalized_opt_str(
     };
     let t = s.trim().to_string();
     if t.is_empty() { Ok(None) } else { Ok(Some(t)) }
+}
+
+fn hide_deleted_pref_key(class_id: &str, mark_set_id: &str) -> String {
+    format!("marks.hideDeleted.{class_id}.{mark_set_id}")
+}
+
+fn entry_clone_key(class_id: &str) -> String {
+    format!("entries.clone.{class_id}")
+}
+
+fn mark_set_weight_method(conn: &Connection, mark_set_id: &str) -> Result<i64, HandlerErr> {
+    conn.query_row(
+        "SELECT weight_method FROM mark_sets WHERE id = ?",
+        [mark_set_id],
+        |r| r.get::<_, i64>(0),
+    )
+    .map_err(|e| HandlerErr {
+        code: "db_query_failed",
+        message: e.to_string(),
+        details: None,
+    })
+}
+
+fn category_weight_map(
+    conn: &Connection,
+    mark_set_id: &str,
+) -> Result<HashMap<String, f64>, HandlerErr> {
+    let mut stmt = conn
+        .prepare("SELECT name, weight FROM categories WHERE mark_set_id = ?")
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map([mark_set_id], |row| {
+            let name: String = row.get(0)?;
+            let weight: Option<f64> = row.get(1)?;
+            Ok((name, weight))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    let mut out = HashMap::new();
+    for (name, weight) in rows {
+        out.insert(name.to_uppercase(), weight.unwrap_or(0.0));
+    }
+    Ok(out)
+}
+
+fn is_assessment_deleted_like(
+    weight_method: i64,
+    category_weights: &HashMap<String, f64>,
+    weight: Option<f64>,
+    category_name: Option<&str>,
+) -> bool {
+    let weight_deleted = weight.unwrap_or(0.0) <= 0.0;
+    let category_deleted = if weight_method == 1 {
+        match category_name {
+            Some(name) => category_weights
+                .get(&name.trim().to_uppercase())
+                .map(|w| *w <= 0.0)
+                .unwrap_or(false),
+            None => false,
+        }
+    } else {
+        false
+    };
+    weight_deleted || category_deleted
 }
 
 fn handle_categories_list(state: &mut AppState, req: &Request) -> serde_json::Value {
@@ -363,12 +436,26 @@ fn handle_assessments_list(state: &mut AppState, req: &Request) -> serde_json::V
         Some(v) => v.to_string(),
         None => return err(&req.id, "bad_params", "missing markSetId", None),
     };
+    let hide_deleted = req
+        .params
+        .get("hideDeleted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     match mark_set_exists(conn, &class_id, &mark_set_id) {
         Ok(true) => {}
         Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
         Err(e) => return e.response(&req.id),
     }
+
+    let weight_method = match mark_set_weight_method(conn, &mark_set_id) {
+        Ok(v) => v,
+        Err(e) => return e.response(&req.id),
+    };
+    let category_weights = match category_weight_map(conn, &mark_set_id) {
+        Ok(v) => v,
+        Err(e) => return e.response(&req.id),
+    };
 
     let mut stmt = match conn.prepare(
         "SELECT id, idx, date, category_name, title, term, legacy_type, weight, out_of
@@ -390,7 +477,10 @@ fn handle_assessments_list(state: &mut AppState, req: &Request) -> serde_json::V
             let legacy_type: Option<i64> = row.get(6)?;
             let weight: Option<f64> = row.get(7)?;
             let out_of: Option<f64> = row.get(8)?;
-            Ok(json!({
+            Ok((
+                category_name.clone(),
+                weight,
+                json!({
                 "id": id,
                 "idx": idx,
                 "date": date,
@@ -400,12 +490,31 @@ fn handle_assessments_list(state: &mut AppState, req: &Request) -> serde_json::V
                 "legacyType": legacy_type,
                 "weight": weight,
                 "outOf": out_of
-            }))
+                }),
+            ))
         })
         .and_then(|it| it.collect::<Result<Vec<_>, _>>());
 
     match rows {
-        Ok(assessments) => ok(&req.id, json!({ "assessments": assessments })),
+        Ok(assessments_raw) => {
+            let mut assessments = Vec::with_capacity(assessments_raw.len());
+            for (category_name, weight, mut row) in assessments_raw {
+                let deleted_like = is_assessment_deleted_like(
+                    weight_method,
+                    &category_weights,
+                    weight,
+                    category_name.as_deref(),
+                );
+                if hide_deleted && deleted_like {
+                    continue;
+                }
+                if let Some(obj) = row.as_object_mut() {
+                    obj.insert("isDeletedLike".to_string(), json!(deleted_like));
+                }
+                assessments.push(row);
+            }
+            ok(&req.id, json!({ "assessments": assessments }))
+        }
         Err(e) => err(&req.id, "db_query_failed", e.to_string(), None),
     }
 }
@@ -864,6 +973,513 @@ fn handle_assessments_delete(state: &mut AppState, req: &Request) -> serde_json:
     }
 
     ok(&req.id, json!({ "ok": true }))
+}
+
+fn handle_marks_pref_hide_deleted_get(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+
+    match mark_set_exists(conn, class_id, mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let key = hide_deleted_pref_key(class_id, mark_set_id);
+    let hide_deleted = match db::settings_get_json(conn, &key) {
+        Ok(Some(v)) => v
+            .get("hideDeleted")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(true),
+        Ok(None) => true,
+        Err(e) => {
+            return err(
+                &req.id,
+                "db_query_failed",
+                e.to_string(),
+                Some(json!({ "table": "workspace_settings" })),
+            );
+        }
+    };
+
+    ok(&req.id, json!({ "hideDeleted": hide_deleted }))
+}
+
+fn handle_marks_pref_hide_deleted_set(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let hide_deleted = match req.params.get("hideDeleted").and_then(|v| v.as_bool()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing/invalid hideDeleted", None),
+    };
+
+    match mark_set_exists(conn, class_id, mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let key = hide_deleted_pref_key(class_id, mark_set_id);
+    if let Err(e) = db::settings_set_json(conn, &key, &json!({ "hideDeleted": hide_deleted })) {
+        return err(
+            &req.id,
+            "db_update_failed",
+            e.to_string(),
+            Some(json!({ "table": "workspace_settings" })),
+        );
+    }
+
+    ok(&req.id, json!({ "ok": true }))
+}
+
+fn handle_entries_delete(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let assessment_id = match req.params.get("assessmentId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing assessmentId", None),
+    };
+
+    match mark_set_exists(conn, &class_id, &mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let changed = match conn.execute(
+        "UPDATE assessments SET weight = 0 WHERE id = ? AND mark_set_id = ?",
+        (&assessment_id, &mark_set_id),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return err(
+                &req.id,
+                "db_update_failed",
+                e.to_string(),
+                Some(json!({ "table": "assessments" })),
+            );
+        }
+    };
+
+    if changed == 0 {
+        return err(&req.id, "not_found", "assessment not found", None);
+    }
+
+    ok(&req.id, json!({ "ok": true }))
+}
+
+fn handle_entries_clone_save(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let assessment_id = match req.params.get("assessmentId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing assessmentId", None),
+    };
+
+    match mark_set_exists(conn, &class_id, &mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let assessment = match conn
+        .query_row(
+            "SELECT idx, date, category_name, title, term, legacy_type, weight, out_of
+             FROM assessments
+             WHERE id = ? AND mark_set_id = ?",
+            (&assessment_id, &mark_set_id),
+            |r| {
+                Ok(json!({
+                    "idx": r.get::<_, i64>(0)?,
+                    "date": r.get::<_, Option<String>>(1)?,
+                    "categoryName": r.get::<_, Option<String>>(2)?,
+                    "title": r.get::<_, String>(3)?,
+                    "term": r.get::<_, Option<i64>>(4)?,
+                    "legacyType": r.get::<_, Option<i64>>(5)?,
+                    "weight": r.get::<_, Option<f64>>(6)?,
+                    "outOf": r.get::<_, Option<f64>>(7)?,
+                }))
+            },
+        )
+        .optional()
+    {
+        Ok(Some(v)) => v,
+        Ok(None) => return err(&req.id, "not_found", "assessment not found", None),
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mut stmt = match conn.prepare(
+        "SELECT s.sort_order, sc.status, sc.raw_value, sc.remark
+         FROM students s
+         LEFT JOIN scores sc ON sc.student_id = s.id AND sc.assessment_id = ?
+         WHERE s.class_id = ?
+         ORDER BY s.sort_order",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let scores = match stmt
+        .query_map((&assessment_id, &class_id), |row| {
+            Ok(json!({
+                "sortOrder": row.get::<_, i64>(0)?,
+                "status": row.get::<_, Option<String>>(1)?,
+                "rawValue": row.get::<_, Option<f64>>(2)?,
+                "remark": row.get::<_, Option<String>>(3)?,
+            }))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let clone_payload = json!({
+        "sourceClassId": class_id,
+        "sourceMarkSetId": mark_set_id,
+        "sourceAssessmentId": assessment_id,
+        "assessment": assessment,
+        "scoresBySortOrder": scores,
+    });
+    let key = entry_clone_key(&class_id);
+    if let Err(e) = db::settings_set_json(conn, &key, &clone_payload) {
+        return err(
+            &req.id,
+            "db_update_failed",
+            e.to_string(),
+            Some(json!({ "table": "workspace_settings" })),
+        );
+    }
+
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "clone": {
+                "sourceMarkSetId": clone_payload["sourceMarkSetId"],
+                "title": clone_payload["assessment"]["title"]
+            }
+        }),
+    )
+}
+
+fn handle_entries_clone_peek(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v,
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+
+    let key = entry_clone_key(class_id);
+    let payload = match db::settings_get_json(conn, &key) {
+        Ok(v) => v,
+        Err(e) => {
+            return err(
+                &req.id,
+                "db_query_failed",
+                e.to_string(),
+                Some(json!({ "table": "workspace_settings" })),
+            );
+        }
+    };
+    let Some(payload) = payload else {
+        return ok(&req.id, json!({ "clone": { "exists": false } }));
+    };
+    let source_mark_set_id = payload
+        .get("sourceMarkSetId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let title = payload
+        .get("assessment")
+        .and_then(|v| v.get("title"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    ok(
+        &req.id,
+        json!({
+            "clone": {
+                "exists": true,
+                "sourceMarkSetId": source_mark_set_id,
+                "title": title
+            }
+        }),
+    )
+}
+
+fn handle_entries_clone_apply(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let mark_set_id = match req.params.get("markSetId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing markSetId", None),
+    };
+    let insert_at_idx = match req.params.get("insertAtIdx").and_then(|v| v.as_i64()) {
+        Some(v) if v >= 0 => Some(v),
+        Some(_) => return err(&req.id, "bad_params", "insertAtIdx must be >= 0", None),
+        None => None,
+    };
+    let title_mode = match req.params.get("titleMode").and_then(|v| v.as_str()) {
+        Some("same") => "same",
+        Some("appendClone") => "appendClone",
+        Some(_) => {
+            return err(
+                &req.id,
+                "bad_params",
+                "titleMode must be 'same' or 'appendClone'",
+                None,
+            );
+        }
+        None => "appendClone",
+    };
+
+    match mark_set_exists(conn, &class_id, &mark_set_id) {
+        Ok(true) => {}
+        Ok(false) => return err(&req.id, "not_found", "mark set not found", None),
+        Err(e) => return e.response(&req.id),
+    }
+
+    let key = entry_clone_key(&class_id);
+    let payload = match db::settings_get_json(conn, &key) {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return err(
+                &req.id,
+                "not_found",
+                "no saved entry clone for this class",
+                None,
+            );
+        }
+        Err(e) => {
+            return err(
+                &req.id,
+                "db_query_failed",
+                e.to_string(),
+                Some(json!({ "table": "workspace_settings" })),
+            );
+        }
+    };
+
+    let assessment = payload.get("assessment").cloned().unwrap_or_else(|| json!({}));
+    let source_title = assessment
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Cloned Entry");
+    let title = if title_mode == "same" {
+        source_title.to_string()
+    } else {
+        format!("{source_title} (Clone)")
+    };
+    let date = assessment
+        .get("date")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let category_name = assessment
+        .get("categoryName")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let term = assessment.get("term").and_then(|v| v.as_i64());
+    let legacy_type = assessment.get("legacyType").and_then(|v| v.as_i64());
+    let weight = assessment.get("weight").and_then(|v| v.as_f64()).or(Some(1.0));
+    let out_of = assessment.get("outOf").and_then(|v| v.as_f64());
+
+    let mut scores_by_sort_order: HashMap<i64, (String, Option<f64>, Option<String>)> =
+        HashMap::new();
+    if let Some(rows) = payload.get("scoresBySortOrder").and_then(|v| v.as_array()) {
+        for row in rows {
+            let Some(sort_order) = row.get("sortOrder").and_then(|v| v.as_i64()) else {
+                continue;
+            };
+            let Some(status) = row.get("status").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let raw_value = row.get("rawValue").and_then(|v| v.as_f64());
+            let remark = row
+                .get("remark")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            scores_by_sort_order.insert(sort_order, (status.to_string(), raw_value, remark));
+        }
+    }
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+
+    let assessment_count: i64 = match tx.query_row(
+        "SELECT COUNT(*) FROM assessments WHERE mark_set_id = ?",
+        [&mark_set_id],
+        |r| r.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let insert_idx = insert_at_idx.unwrap_or(assessment_count).clamp(0, assessment_count);
+
+    let mut shift_stmt = match tx.prepare(
+        "SELECT id, idx FROM assessments WHERE mark_set_id = ? AND idx >= ? ORDER BY idx DESC",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let to_shift = match shift_stmt
+        .query_map((&mark_set_id, insert_idx), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    drop(shift_stmt);
+    for (assessment_id, idx) in to_shift {
+        if let Err(e) = tx.execute(
+            "UPDATE assessments SET idx = ? WHERE id = ?",
+            (idx + 1, assessment_id),
+        ) {
+            return err(
+                &req.id,
+                "db_update_failed",
+                e.to_string(),
+                Some(json!({ "table": "assessments" })),
+            );
+        }
+    }
+
+    let new_assessment_id = Uuid::new_v4().to_string();
+    if let Err(e) = tx.execute(
+        "INSERT INTO assessments(
+           id,
+           mark_set_id,
+           idx,
+           date,
+           category_name,
+           title,
+           term,
+           legacy_type,
+           weight,
+           out_of
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            &new_assessment_id,
+            &mark_set_id,
+            insert_idx,
+            date.as_deref(),
+            category_name.as_deref(),
+            &title,
+            term,
+            legacy_type,
+            weight,
+            out_of,
+        ),
+    ) {
+        return err(
+            &req.id,
+            "db_insert_failed",
+            e.to_string(),
+            Some(json!({ "table": "assessments" })),
+        );
+    }
+
+    let mut students_stmt = match tx.prepare(
+        "SELECT id, sort_order FROM students WHERE class_id = ? ORDER BY sort_order",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let target_students = match students_stmt
+        .query_map([&class_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    drop(students_stmt);
+
+    for (student_id, sort_order) in target_students {
+        let Some((status, raw_value, remark)) = scores_by_sort_order.get(&sort_order) else {
+            continue;
+        };
+        if let Err(e) = tx.execute(
+            "INSERT INTO scores(id, assessment_id, student_id, raw_value, status, remark)
+             VALUES(?, ?, ?, ?, ?, ?)",
+            (
+                Uuid::new_v4().to_string(),
+                &new_assessment_id,
+                &student_id,
+                raw_value,
+                status,
+                remark,
+            ),
+        ) {
+            return err(
+                &req.id,
+                "db_insert_failed",
+                e.to_string(),
+                Some(json!({ "table": "scores" })),
+            );
+        }
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "assessmentId": new_assessment_id
+        }),
+    )
 }
 
 fn handle_assessments_reorder(state: &mut AppState, req: &Request) -> serde_json::Value {
@@ -2476,6 +3092,12 @@ fn handle_assessments_bulk_update(state: &mut AppState, req: &Request) -> serde_
 
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
     match req.method.as_str() {
+        "marks.pref.hideDeleted.get" => Some(handle_marks_pref_hide_deleted_get(state, req)),
+        "marks.pref.hideDeleted.set" => Some(handle_marks_pref_hide_deleted_set(state, req)),
+        "entries.delete" => Some(handle_entries_delete(state, req)),
+        "entries.clone.save" => Some(handle_entries_clone_save(state, req)),
+        "entries.clone.peek" => Some(handle_entries_clone_peek(state, req)),
+        "entries.clone.apply" => Some(handle_entries_clone_apply(state, req)),
         "marksets.create" => Some(handle_marksets_create(state, req)),
         "marksets.delete" => Some(handle_marksets_delete(state, req)),
         "marksets.undelete" => Some(handle_marksets_undelete(state, req)),

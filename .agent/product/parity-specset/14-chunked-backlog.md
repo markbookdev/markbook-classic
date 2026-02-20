@@ -13,6 +13,8 @@ Execution-ready chunk list for iterative delivery.
   - acceptance criteria
 
 ## EPIC-CORE-01: Working On action completion
+- Status:
+  - DONE (2026-02-20): clone/delete/hide/update-all semantics shipped with backend + marks UI + tests.
 - Objective:
   - Complete clone/delete/hide/update-all parity semantics.
 - File targets:
@@ -23,7 +25,8 @@ Execution-ready chunk list for iterative delivery.
 - API changes:
   - additive entries/assessment action endpoints if needed.
 - Tests:
-  - Rust action semantics + Playwright marks-action-strip expansion.
+  - Rust: `entries_delete_semantics.rs`, `entries_clone_roundtrip.rs`, `assessments_hide_deleted_like.rs`
+  - Playwright: `marks-action-strip.e2e.spec.cjs`, `marks-hide-deleted.e2e.spec.cjs`, `marks-update-all.e2e.spec.cjs`
 - Acceptance:
   - all Working On actions functional and persistent.
 

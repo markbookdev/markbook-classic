@@ -209,3 +209,34 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/legacy-truth-evidence-lane.md`
   - `/Users/davemercier/dev/markbook/markbook-classic/docs/parity/implementation-roadmap-summary.md`
 - Validation: all required files from the parity specset plan exist and were cross-checked.
+
+### Working-On Parity Closure Snapshot (2026-02-20)
+- Focus: `EPIC-CORE-01` (legacy Working On clone/delete/hide/update-all semantics).
+- Backend additions:
+  - IPC: `entries.delete`, `entries.clone.save`, `entries.clone.peek`, `entries.clone.apply`.
+  - IPC: `marks.pref.hideDeleted.get`, `marks.pref.hideDeleted.set`.
+  - `assessments.list` now supports optional `hideDeleted` and returns optional `isDeletedLike`.
+  - Deleted-like semantics now align with legacy intent:
+    - `assessment.weight <= 0`, or
+    - mark set `weightMethod = category` and category weight `<= 0`.
+- Renderer additions:
+  - Marks action strip now includes: Clone Entry, Load Clone, Delete Entry, Hide Deleted Entries toggle, Update All.
+  - Marks grid now supports hidden-entry views while preserving underlying source-column mapping for windowed `grid.get`.
+  - Added deterministic E2E hook: `window.__markbookTest.getMarksVisibleAssessments()`.
+- New Rust tests:
+  - `rust/markbookd/tests/entries_delete_semantics.rs`
+  - `rust/markbookd/tests/entries_clone_roundtrip.rs`
+  - `rust/markbookd/tests/assessments_hide_deleted_like.rs`
+- New/expanded Playwright tests:
+  - `apps/desktop/e2e/marks-action-strip.e2e.spec.cjs` (expanded)
+  - `apps/desktop/e2e/marks-hide-deleted.e2e.spec.cjs` (new)
+  - `apps/desktop/e2e/marks-update-all.e2e.spec.cjs` (new)
+- Verification run for this slice:
+  - `cargo test --test ipc_router_smoke` => PASS
+  - `cargo test --test entries_delete_semantics` => PASS
+  - `cargo test --test entries_clone_roundtrip` => PASS
+  - `cargo test --test assessments_hide_deleted_like` => PASS
+  - `bun x playwright test apps/desktop/e2e/marks-action-strip.e2e.spec.cjs apps/desktop/e2e/marks-hide-deleted.e2e.spec.cjs apps/desktop/e2e/marks-update-all.e2e.spec.cjs` => PASS
+  - `bun run test:e2e` => PASS (`33 passed`, `1 skipped`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
