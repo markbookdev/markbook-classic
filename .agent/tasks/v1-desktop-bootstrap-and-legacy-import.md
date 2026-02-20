@@ -240,3 +240,31 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:e2e` => PASS (`33 passed`, `1 skipped`)
   - `bun run test:parity:regression` => PASS
   - `bun run test:packaging` => PASS
+
+### EPIC-CORE-02 Snapshot (2026-02-20, class update-from-legacy + markset transfer)
+- Backend shipped:
+  - `classes.legacyPreview` with deterministic match/new/ambiguous/local-only diagnostics.
+  - `classes.updateFromLegacy` with locked defaults:
+    - mode `upsert_preserve`
+    - collisionPolicy `merge_existing`
+    - preserveLocalValidity `true`
+  - `marksets.transfer.preview` and `marksets.transfer.apply` with merge/append/stop collision handling.
+  - `class_meta` import-link metadata persisted:
+    - `legacy_folder_path`, `legacy_cl_file`, `legacy_year_token`, `last_imported_at`
+- Renderer shipped:
+  - Dashboard actions for preview/update from legacy folder.
+  - Students screen import diagnostics panel (source/time/warning count).
+  - Mark Set Setup transfer dialog (source class/set, preview collisions/alignment, apply policy).
+- New Rust tests:
+  - `rust/markbookd/tests/classes_update_from_legacy_upsert.rs`
+  - `rust/markbookd/tests/classes_update_preserve_validity.rs`
+  - `rust/markbookd/tests/classes_update_collision_policy.rs`
+  - `rust/markbookd/tests/marksets_transfer_apply.rs`
+  - `rust/markbookd/tests/db_class_meta_import_link_migration.rs`
+- New/updated Playwright tests:
+  - `apps/desktop/e2e/class-update-from-legacy.e2e.spec.cjs`
+  - `apps/desktop/e2e/markset-transfer.e2e.spec.cjs`
+  - extended `apps/desktop/e2e/students-membership.e2e.spec.cjs` to lock update-from-legacy validity preservation.
+- Verification for this slice:
+  - `cargo test --test classes_update_from_legacy_upsert --test classes_update_preserve_validity --test classes_update_collision_policy --test marksets_transfer_apply --test db_class_meta_import_link_migration` => PASS
+  - `bun x playwright test apps/desktop/e2e/class-update-from-legacy.e2e.spec.cjs apps/desktop/e2e/markset-transfer.e2e.spec.cjs apps/desktop/e2e/students-membership.e2e.spec.cjs` => PASS

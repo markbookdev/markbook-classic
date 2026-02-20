@@ -31,14 +31,33 @@ Execution-ready chunk list for iterative delivery.
   - all Working On actions functional and persistent.
 
 ## EPIC-CORE-02: Mark set transfer and class update parity details
+- Status:
+  - DONE (2026-02-20): update-from-legacy preview/apply + markset transfer preview/apply shipped with UI + tests.
 - Objective:
   - close remaining transfer/update-from-file nuances.
 - File targets:
   - `rust/markbookd/src/legacy.rs`
   - `rust/markbookd/src/ipc/handlers/import_legacy.rs`
+  - `rust/markbookd/src/ipc/handlers/markset_setup.rs`
+  - `apps/desktop/src/renderer/ui/screens/DashboardScreen.tsx`
   - `apps/desktop/src/renderer/ui/screens/StudentsScreen.tsx`
+  - `apps/desktop/src/renderer/ui/screens/MarkSetSetupScreen.tsx`
+  - `apps/desktop/src/renderer/ui/app/AppShell.tsx`
+- API changes:
+  - `classes.legacyPreview`
+  - `classes.updateFromLegacy`
+  - `marksets.transfer.preview`
+  - `marksets.transfer.apply`
+- Locked defaults:
+  - update mode: `upsert_preserve`
+  - transfer collision policy: `merge_existing`
+  - preserve matched local `active` + `mark_set_mask`: `true`
 - Tests:
-  - import/update integration tests + e2e import workflows.
+  - Rust: `classes_update_from_legacy_upsert.rs`, `classes_update_preserve_validity.rs`, `classes_update_collision_policy.rs`, `marksets_transfer_apply.rs`, `db_class_meta_import_link_migration.rs`
+  - Playwright: `class-update-from-legacy.e2e.spec.cjs`, `markset-transfer.e2e.spec.cjs`, extended `students-membership.e2e.spec.cjs`
+- Acceptance:
+  - Existing classes can be previewed and updated in-place from legacy folders with deterministic merge diagnostics.
+  - Mark set transfer supports preview and apply with merge/append/stop collision policies and sort-order row alignment warnings.
 
 ## EPIC-ANALYTICS-01: Class analytics interactive tabs
 - Objective:

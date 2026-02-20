@@ -30,7 +30,7 @@ Status rules:
 | GAP-004 | Combined report analytics (ch12) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Requires combined set weighting workflows. |
 | GAP-005 | Comments transfer-mode UX parity | Partial | 3 | 4 | 2 | 2 | 5 | 3 | 3 | 15 | Back-end data present, UX/flows incomplete. |
 | GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |
-| GAP-007 | Class update-from-file/SIS deep parity | Partial | 3 | 3 | 3 | 2 | 4 | 4 | 4 | 13 | Existing import paths need richer modes. |
+| GAP-007 | Class update-from-file/SIS deep parity | Partial (core shipped) | 1 | 1 | 2 | 1 | 4 | 2 | 2 | 10 | `classes.legacyPreview`, `classes.updateFromLegacy`, and mark set transfer shipped; SIS/attach nuances remain. |
 | GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial | 4 | 3 | 2 | 4 | 3 | 3 | 4 | 12 | scattered settings not fully exposed. |
 | GAP-009 | Bulk email workflow | Missing | 4 | 3 | 2 | 1 | 2 | 3 | 3 | 9 | deferred until core parity closure. |
 | GAP-010 | Chapter 13 external adapters breadth | Partial | 4 | 3 | 3 | 1 | 2 | 3 | 5 | 7 | focus on SIS/class exchange first. |
@@ -44,9 +44,9 @@ Status rules:
 4. GAP-004
 5. GAP-005
 6. GAP-001
-7. GAP-007
-8. GAP-008
-9. GAP-006
+7. GAP-008
+8. GAP-006
+9. GAP-007
 10. GAP-009
 11. GAP-011
 12. GAP-010
