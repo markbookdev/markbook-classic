@@ -3,6 +3,9 @@ use super::types::{AppState, Request};
 use crate::ipc::error::err;
 
 pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
+    if let Some(resp) = handlers::analytics::try_handle(state, &req) {
+        return resp;
+    }
     if let Some(resp) = handlers::core::try_handle(state, &req) {
         return resp;
     }

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "description": "Parity fixture requirements for Sample25.",
+  "strictReady": false,
   "required": {
     "regression": [
       "calc-behavior-locks.json",

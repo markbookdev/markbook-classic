@@ -29,6 +29,12 @@ export function ReportsScreen(props: {
   selectedClassId: string;
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
+  initialContext?: {
+    filters: { term: number | null; categoryName: string | null; typesMask: number | null };
+    studentScope: "all" | "active" | "valid";
+    studentId?: string | null;
+  };
+  contextVersion?: number;
 }) {
   const [exportingGridPdf, setExportingGridPdf] = useState(false);
   const [exportingSummaryPdf, setExportingSummaryPdf] = useState(false);
@@ -94,6 +100,31 @@ export function ReportsScreen(props: {
       cancelled = true;
     };
   }, [props.selectedClassId, props.selectedMarkSetId]);
+
+  React.useEffect(() => {
+    if (!props.initialContext) return;
+    setReportFilters({
+      term: props.initialContext.filters.term ?? null,
+      categoryName: props.initialContext.filters.categoryName ?? null,
+      typesMask: props.initialContext.filters.typesMask ?? null
+    });
+    const mask = props.initialContext.filters.typesMask;
+    if (mask == null) {
+      setTypesSelected([true, true, true, true, true]);
+    } else {
+      setTypesSelected([
+        (mask & 1) !== 0,
+        (mask & 2) !== 0,
+        (mask & 4) !== 0,
+        (mask & 8) !== 0,
+        (mask & 16) !== 0
+      ]);
+    }
+    setStudentScope(props.initialContext.studentScope ?? "all");
+    if (props.initialContext.studentId) {
+      setSelectedStudentId(props.initialContext.studentId);
+    }
+  }, [props.contextVersion, props.initialContext]);
 
   React.useEffect(() => {
     let mask = 0;

@@ -25,8 +25,8 @@ Status rules:
 | ID | Legacy area | Current status | Func gap | Workflow gap | Data gap | Calc impact | Criticality | Risk | Complexity | Priority | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | GAP-001 | Planner + course description (ch6/tools) | Missing | 5 | 5 | 3 | 1 | 4 | 3 | 4 | 13 | Entire module family absent. |
-| GAP-002 | Class interactive analytics tabs (ch9) | Partial | 4 | 4 | 2 | 5 | 5 | 4 | 4 | 19 | Report models exist; interactive parity missing. |
-| GAP-003 | Student analytics tabs (ch11) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Needs trend/category/compare UX. |
+| GAP-002 | Class interactive analytics tabs (ch9) | Partial (read-only tab shipped) | 3 | 3 | 2 | 5 | 5 | 4 | 4 | 18 | Class analytics screen + backend model shipped; interactive deep actions still pending. |
+| GAP-003 | Student analytics tabs (ch11) | Partial (read-only tab shipped) | 3 | 3 | 2 | 5 | 4 | 4 | 4 | 16 | Student analytics screen shipped; compare/trend/combined actions pending. |
 | GAP-004 | Combined report analytics (ch12) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Requires combined set weighting workflows. |
 | GAP-005 | Comments transfer-mode UX parity | Partial | 3 | 4 | 2 | 2 | 5 | 3 | 3 | 15 | Back-end data present, UX/flows incomplete. |
 | GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |

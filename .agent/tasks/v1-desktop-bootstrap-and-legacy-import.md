@@ -268,3 +268,40 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
 - Verification for this slice:
   - `cargo test --test classes_update_from_legacy_upsert --test classes_update_preserve_validity --test classes_update_collision_policy --test marksets_transfer_apply --test db_class_meta_import_link_migration` => PASS
   - `bun x playwright test apps/desktop/e2e/class-update-from-legacy.e2e.spec.cjs apps/desktop/e2e/markset-transfer.e2e.spec.cjs apps/desktop/e2e/students-membership.e2e.spec.cjs` => PASS
+
+### EPIC-ANALYTICS-01/02 Snapshot (2026-02-20, read-only class/student analytics + strict-lane activation wiring)
+- Backend shipped:
+  - new IPC handler module `rust/markbookd/src/ipc/handlers/analytics.rs`.
+  - new additive endpoints:
+    - `analytics.class.open`
+    - `analytics.student.open`
+    - `analytics.filters.options`
+  - router dispatch updated; existing report/calc contracts unchanged.
+- Renderer shipped:
+  - new screens:
+    - `apps/desktop/src/renderer/ui/screens/ClassAnalyticsScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/StudentAnalyticsScreen.tsx`
+  - app shell navigation/routes updated with Class Analytics and Student Analytics.
+  - analytics screens now pass filters/scope into Reports via “Open in Reports” context handoff.
+  - reports screen accepts optional context prefill for term/category/types/scope/student.
+- Schema/test/contracts shipped:
+  - added analytics Zod schemas in `packages/schema/src/index.ts`.
+  - added Rust integration tests:
+    - `rust/markbookd/tests/analytics_class_open.rs`
+    - `rust/markbookd/tests/analytics_student_open.rs`
+    - `rust/markbookd/tests/analytics_reports_alignment.rs`
+  - added Playwright tests:
+    - `apps/desktop/e2e/class-analytics.e2e.spec.cjs`
+    - `apps/desktop/e2e/student-analytics.e2e.spec.cjs`
+    - `apps/desktop/e2e/analytics-report-alignment.e2e.spec.cjs`
+- Strict parity-lane activation wiring:
+  - `fixtures/legacy/Sample25/expected/parity-manifest.json` now includes `strictReady` flag.
+  - `apps/desktop/scripts/parity-status.cjs` now emits machine-readable status JSON with `mode` + strict readiness details.
+  - `quality-gates.yml` now conditionally enforces `test:parity:strict` when `strictReady=true`.
+- Validation:
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:parity:status -- --json` => PASS (`mode=ready`, strict pending by manifest)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:e2e` => PASS (`38 passed`, `1 skipped packaged smoke`)
+  - `bun run test:packaging` => PASS

@@ -41,6 +41,8 @@ jobs:
 
   parity-regression:
     runs-on: ubuntu-latest
+    outputs:
+      strict_required: ${{ steps.parity_status.outputs.strict_required }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,10 +57,20 @@ jobs:
         run: bun install
 
       - name: Parity status
-        run: bun run test:parity:status
+        id: parity_status
+        shell: bash
+        run: |
+          bun run test:parity:status -- --json > parity-status.json
+          cat parity-status.json
+          strict_required=$(node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('parity-status.json','utf8')); process.stdout.write(String(Boolean(p.strict && p.strict.requiredByManifest)));")
+          echo "strict_required=$strict_required" >> "$GITHUB_OUTPUT"
 
       - name: Parity regression lane
         run: bun run test:parity:regression
+
+      - name: Parity strict lane
+        if: steps.parity_status.outputs.strict_required == 'true'
+        run: bun run test:parity:strict
 
   desktop-e2e:
     runs-on: macos-latest

@@ -17,7 +17,35 @@ function missingFiles(baseDir, relPaths) {
   return relPaths.filter((rel) => !fs.existsSync(path.join(baseDir, rel)));
 }
 
+function printHumanStatus(payload, expectedDir, manifestPath) {
+  console.log("parity-status: Sample25 lanes");
+  console.log(`- manifest: ${manifestPath}`);
+  console.log(`- regression required: ${payload.regression.requiredCount}`);
+  console.log(`- strict required: ${payload.strict.requiredCount}`);
+  console.log(`- strict configured: ${payload.strict.requiredByManifest ? "yes" : "no"}`);
+
+  if (payload.regression.missing.length > 0) {
+    console.error("parity-status: regression lane missing required files:");
+    for (const rel of payload.regression.missing) {
+      console.error(`  - ${path.join(expectedDir, rel)}`);
+    }
+  } else {
+    console.log("- regression lane: READY");
+  }
+
+  if (payload.strict.missing.length > 0) {
+    const tag = payload.strict.requiredByManifest ? "NOT READY" : "PENDING (missing files)";
+    console.log(`- strict lane: ${tag}`);
+    for (const rel of payload.strict.missing) {
+      console.log(`  - ${path.join(expectedDir, rel)}`);
+    }
+  } else {
+    console.log("- strict lane: READY");
+  }
+}
+
 function main() {
+  const jsonMode = process.argv.includes("--json");
   const appDir = path.join(__dirname, "..");
   const repoRoot = path.join(appDir, "..", "..");
   const expectedDir = path.join(repoRoot, "fixtures", "legacy", "Sample25", "expected");
@@ -28,34 +56,39 @@ function main() {
   }
 
   const manifest = readJson(manifestPath);
+  const strictRequiredByManifest = manifest?.strictReady === true;
   const regressionRequired = requiredList(manifest, "regression");
   const strictRequired = requiredList(manifest, "strict");
   const regressionMissing = missingFiles(expectedDir, regressionRequired);
   const strictMissing = missingFiles(expectedDir, strictRequired);
+  const regressionReady = regressionMissing.length === 0;
+  const strictFilesReady = strictMissing.length === 0;
+  const strictReady = !strictRequiredByManifest || strictFilesReady;
+  const overallReady = regressionReady && strictReady;
 
-  console.log("parity-status: Sample25 lanes");
-  console.log(`- manifest: ${manifestPath}`);
-  console.log(`- regression required: ${regressionRequired.length}`);
-  console.log(`- strict required: ${strictRequired.length}`);
-
-  if (regressionMissing.length > 0) {
-    console.error("parity-status: regression lane missing required files:");
-    for (const rel of regressionMissing) {
-      console.error(`  - ${path.join(expectedDir, rel)}`);
+  const payload = {
+    mode: overallReady ? "ready" : "not-ready",
+    manifestPath,
+    regression: {
+      requiredCount: regressionRequired.length,
+      ready: regressionReady,
+      missing: regressionMissing
+    },
+    strict: {
+      requiredByManifest: strictRequiredByManifest,
+      requiredCount: strictRequired.length,
+      filesReady: strictFilesReady,
+      ready: strictReady,
+      missing: strictMissing
     }
-    process.exitCode = 1;
-  } else {
-    console.log("- regression lane: READY");
-  }
+  };
 
-  if (strictMissing.length > 0) {
-    console.log("- strict lane: PENDING (missing files)");
-    for (const rel of strictMissing) {
-      console.log(`  - ${path.join(expectedDir, rel)}`);
-    }
-  } else {
-    console.log("- strict lane: READY");
+  if (!jsonMode) {
+    printHumanStatus(payload, expectedDir, manifestPath);
   }
+  console.log(JSON.stringify(payload));
+
+  if (!overallReady) process.exitCode = 1;
 }
 
 main();

@@ -13,7 +13,7 @@
 | Learning Skills | Implemented | edit + report model/export |
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
-| Analytics screens | Partial | report models exist; full interactive tabs missing |
+| Analytics screens | Partial | read-only class/student analytics tabs now implemented; combined analytics still pending |
 | Planner/Course Description | Missing | not yet implemented |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial | exchange done; chapter-13 breadth pending |

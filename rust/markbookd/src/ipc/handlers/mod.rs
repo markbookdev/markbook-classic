@@ -1,3 +1,4 @@
+pub mod analytics;
 pub mod assets;
 pub mod attendance;
 pub mod backup_exchange;

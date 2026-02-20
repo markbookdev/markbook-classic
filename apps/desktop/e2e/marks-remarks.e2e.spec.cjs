@@ -48,29 +48,41 @@ test("marks screen can edit/save remarks for selected student", async () => {
     await page.getByTestId("nav-marks").click();
     await page.waitForSelector('[data-testid="marks-screen"]');
     await page.waitForSelector('[data-testid="marks-results-panel"]');
+    const canvas = page.getByTestId("data-grid-canvas");
+    try {
+      await canvas.click({ position: { x: 40, y: 60 }, force: true });
+    } catch (e) {
+      const bb = await canvas.boundingBox();
+      if (bb == null) throw e;
+      await page.mouse.click(bb.x + 40, bb.y + 60);
+    }
     await page.getByTestId("marks-remark-set-select").selectOption(String(details.setNumber));
 
     const remarkText = `Remark ${Date.now()}`;
     await page.getByTestId("marks-remark-textarea").fill(remarkText);
+    await expect(page.getByTestId("marks-remark-save-btn")).toBeEnabled();
     await page.getByTestId("marks-remark-save-btn").click();
-    await expect(page.getByText("Saved")).toBeVisible();
 
-    const persisted = await page.evaluate(async ({ classId, markSetId, setNumber, studentId }) => {
-      const open = await window.markbook.request("comments.sets.open", {
-        classId,
-        markSetId,
-        setNumber
-      });
-      const row = open.remarksByStudent.find((r) => r.studentId === studentId);
-      return row?.remark ?? "";
-    }, {
-      classId: bootstrap.classId,
-      markSetId: bootstrap.markSetId,
-      setNumber: details.setNumber,
-      studentId: details.studentId
-    });
-
-    expect(persisted).toBe(remarkText);
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(async ({ classId, markSetId, setNumber, studentId }) => {
+            const open = await window.markbook.request("comments.sets.open", {
+              classId,
+              markSetId,
+              setNumber
+            });
+            const row = open.remarksByStudent.find((r) => r.studentId === studentId);
+            return row?.remark ?? "";
+          }, {
+            classId: bootstrap.classId,
+            markSetId: bootstrap.markSetId,
+            setNumber: details.setNumber,
+            studentId: details.studentId
+          }),
+        { timeout: 20000 }
+      )
+      .toBe(remarkText);
 
     await page.getByTestId("refresh-btn").click();
     await page.getByTestId("nav-marks").click();

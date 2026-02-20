@@ -25,12 +25,16 @@ import { LoanedItemsScreen } from "../screens/LoanedItemsScreen";
 import { DeviceMappingsScreen } from "../screens/DeviceMappingsScreen";
 import { CalcSettingsScreen } from "../screens/CalcSettingsScreen";
 import { ClassWizardScreen } from "../screens/ClassWizardScreen";
+import { ClassAnalyticsScreen } from "../screens/ClassAnalyticsScreen";
+import { StudentAnalyticsScreen } from "../screens/StudentAnalyticsScreen";
 
 type Screen =
   | "dashboard"
   | "marks"
   | "class_wizard"
   | "reports"
+  | "class_analytics"
+  | "student_analytics"
   | "students"
   | "markset_setup"
   | "attendance"
@@ -76,6 +80,12 @@ export function AppShell() {
   const [legacyPreviewByClass, setLegacyPreviewByClass] = useState<{
     classId: string;
     data: any;
+  } | null>(null);
+  const [reportsPrefill, setReportsPrefill] = useState<{
+    filters: { term: number | null; categoryName: string | null; typesMask: number | null };
+    studentScope: "all" | "active" | "valid";
+    studentId?: string | null;
+    nonce: number;
   } | null>(null);
 
   const [markSets, setMarkSets] = useState<MarkSetRow[]>([]);
@@ -527,6 +537,18 @@ export function AppShell() {
                 Reports
               </button>
               <button
+                data-testid="nav-class-analytics"
+                onClick={() => setScreen("class_analytics")}
+              >
+                Class Analytics
+              </button>
+              <button
+                data-testid="nav-student-analytics"
+                onClick={() => setScreen("student_analytics")}
+              >
+                Student Analytics
+              </button>
+              <button
                 data-testid="delete-class-btn"
                 onClick={() => selectedClassId && void deleteClass(selectedClassId)}
                 style={{ color: "#b00020" }}
@@ -644,7 +666,11 @@ export function AppShell() {
           ) : !selectedClassId ? (
             <div style={{ padding: 24, color: "#666" }}>Select a class.</div>
           ) : !selectedMarkSetId &&
-            (screen === "marks" || screen === "reports" || screen === "markset_setup") ? (
+            (screen === "marks" ||
+              screen === "reports" ||
+              screen === "markset_setup" ||
+              screen === "class_analytics" ||
+              screen === "student_analytics") ? (
             <div style={{ padding: 24, color: "#666" }}>Select a mark set.</div>
           ) : screen === "marks" ? (
             <MarksScreen
@@ -658,6 +684,46 @@ export function AppShell() {
               selectedClassId={selectedClassId}
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
+              initialContext={
+                reportsPrefill
+                  ? {
+                      filters: reportsPrefill.filters,
+                      studentScope: reportsPrefill.studentScope,
+                      studentId: reportsPrefill.studentId ?? null
+                    }
+                  : undefined
+              }
+              contextVersion={reportsPrefill?.nonce ?? 0}
+            />
+          ) : screen === "class_analytics" ? (
+            <ClassAnalyticsScreen
+              selectedClassId={selectedClassId}
+              selectedMarkSetId={selectedMarkSetId as string}
+              onError={setSidecarError}
+              onOpenReports={(ctx) => {
+                setReportsPrefill({
+                  filters: ctx.filters,
+                  studentScope: ctx.studentScope,
+                  studentId: null,
+                  nonce: Date.now()
+                });
+                setScreen("reports");
+              }}
+            />
+          ) : screen === "student_analytics" ? (
+            <StudentAnalyticsScreen
+              selectedClassId={selectedClassId}
+              selectedMarkSetId={selectedMarkSetId as string}
+              onError={setSidecarError}
+              onOpenReports={(ctx) => {
+                setReportsPrefill({
+                  filters: ctx.filters,
+                  studentScope: ctx.studentScope,
+                  studentId: ctx.studentId ?? null,
+                  nonce: Date.now()
+                });
+                setScreen("reports");
+              }}
             />
           ) : screen === "students" ? (
             <StudentsScreen

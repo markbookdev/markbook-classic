@@ -60,6 +60,8 @@ Execution-ready chunk list for iterative delivery.
   - Mark set transfer supports preview and apply with merge/append/stop collision policies and sort-order row alignment warnings.
 
 ## EPIC-ANALYTICS-01: Class analytics interactive tabs
+- Status:
+  - IN PROGRESS (2026-02-20): backend `analytics.class.open`/`analytics.filters.options` + read-only class analytics screen + report handoff wiring.
 - Objective:
   - deliver chapter-9 equivalent screen behaviors.
 - File targets:
@@ -69,6 +71,8 @@ Execution-ready chunk list for iterative delivery.
   - analytics tab e2e + model alignment tests.
 
 ## EPIC-ANALYTICS-02: Student + combined analytics parity
+- Status:
+  - IN PROGRESS (2026-02-20): backend `analytics.student.open` + read-only student analytics screen shipped; combined analytics remains next slice.
 - Objective:
   - deliver chapter 11/12 interactive parity.
 - Tests:

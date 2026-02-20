@@ -18,8 +18,8 @@ Map legacy references to current implementation, gap status, and planned chunk I
 | MAIN / MARKSET transfer flows | mark set transfer and merge | `marksets.transfer.preview/apply`, transfer dialog in `MarkSetSetupScreen.tsx` | Implemented (core) | EPIC-CORE-02 | `marksets_transfer_apply.rs`, `markset-transfer.e2e.spec.cjs` |
 | MAIN Working On menu | clone/delete/hide/update-all | marks action strip + `entries.*` + `marks.pref.hideDeleted.*` handlers | Implemented | EPIC-CORE-01 | `marks-action-strip.e2e.spec.cjs`, `marks-hide-deleted.e2e.spec.cjs`, `marks-update-all.e2e.spec.cjs`, rust `entries_*` tests |
 | Ch 10 + COMMEDIT/ERC/ERCXFER | comments and transfer modes | comment screens + `comments.*` handlers | Partial | EPIC-COMMENTS-01 | `comments.e2e.spec.cjs`, `marks-remarks.e2e.spec.cjs` |
-| Ch 9 class report tabs | interactive class analytics | report models exist, interactive tabs missing | Partial | EPIC-ANALYTICS-01 | new class analytics e2e |
-| Ch 11 student report tabs | interactive student analytics | report model exists | Partial | EPIC-ANALYTICS-02 | new student analytics e2e |
+| Ch 9 class report tabs | interactive class analytics | `ClassAnalyticsScreen.tsx` + `analytics.class.open` + report handoff | Partial (read-only) | EPIC-ANALYTICS-01 | `class-analytics.e2e.spec.cjs`, `analytics_class_open.rs` |
+| Ch 11 student report tabs | interactive student analytics | `StudentAnalyticsScreen.tsx` + `analytics.student.open` + report handoff | Partial (read-only) | EPIC-ANALYTICS-02 | `student-analytics.e2e.spec.cjs`, `analytics_student_open.rs` |
 | Ch 12 combined report tabs | combined analytics | report model exists | Partial | EPIC-ANALYTICS-02 | new combined analytics e2e |
 | Ch 6 planner | unit/lesson planner | no module | Missing | EPIC-PLANNER-01 | new planner tests |
 | Ch 6-8/6-11 | course description/time management | no module | Missing | EPIC-PLANNER-02 | new course description tests |

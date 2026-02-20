@@ -737,6 +737,138 @@ export const CalcMarkSetSummaryResultSchema = z.object({
     .optional()
 });
 
+const AnalyticsStudentScopeSchema = z.enum(["all", "active", "valid"]);
+
+export const AnalyticsFiltersOptionsResultSchema = z.object({
+  terms: z.array(z.number()),
+  categories: z.array(z.string()),
+  types: z.array(
+    z.object({
+      bit: z.number(),
+      key: z.string(),
+      label: z.string()
+    })
+  ),
+  studentScopes: z.array(AnalyticsStudentScopeSchema)
+});
+
+export const AnalyticsClassOpenResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  settings: z.object({
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  studentScope: AnalyticsStudentScopeSchema,
+  kpis: z.object({
+    classAverage: z.number().nullable(),
+    classMedian: z.number().nullable(),
+    studentCount: z.number(),
+    finalMarkCount: z.number(),
+    noMarkRate: z.number(),
+    zeroRate: z.number()
+  }),
+  distributions: z.object({
+    bins: z.array(
+      z.object({
+        label: z.string(),
+        min: z.number(),
+        max: z.number(),
+        count: z.number()
+      })
+    ),
+    noFinalMarkCount: z.number()
+  }),
+  perAssessment: z.array(CalcPerAssessmentSchema),
+  perCategory: z.array(CalcPerCategorySchema),
+  topBottom: z.object({
+    top: z.array(CalcPerStudentSchema),
+    bottom: z.array(CalcPerStudentSchema)
+  }),
+  rows: z.array(CalcPerStudentSchema)
+});
+
+export const AnalyticsStudentOpenResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  settings: z.object({
+    fullCode: z.string().nullable(),
+    room: z.string().nullable(),
+    day: z.string().nullable(),
+    period: z.string().nullable(),
+    weightMethod: z.number(),
+    calcMethod: z.number()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  studentScope: AnalyticsStudentScopeSchema.optional(),
+  student: CalcPerStudentSchema,
+  finalMark: z.number().nullable(),
+  counts: z.object({
+    noMark: z.number(),
+    zero: z.number(),
+    scored: z.number()
+  }),
+  categoryBreakdown: z.array(
+    z.object({
+      name: z.string(),
+      value: z.number().nullable(),
+      weight: z.number(),
+      hasData: z.boolean()
+    })
+  ),
+  assessmentTrail: z.array(
+    z.object({
+      assessmentId: z.string(),
+      idx: z.number(),
+      title: z.string(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      term: z.number().nullable(),
+      legacyType: z.number().nullable(),
+      weight: z.number(),
+      outOf: z.number(),
+      status: z.enum(["no_mark", "zero", "scored"]),
+      score: z.number().nullable(),
+      percent: z.number().nullable(),
+      classAvgRaw: z.number().nullable().optional(),
+      classAvgPercent: z.number().nullable().optional()
+    })
+  ),
+  attendanceSummary: z
+    .object({
+      monthsWithData: z.number(),
+      codedDays: z.number()
+    })
+    .optional()
+});
+
 export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;
 
 export const CalcConfigGetResultSchema = z.object({

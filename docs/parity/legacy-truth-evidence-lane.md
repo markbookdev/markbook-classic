@@ -16,3 +16,6 @@
 - Keep strict lane tests present in repo even when artifacts are missing.
 - Strict preflight must report exact missing files and expected paths.
 - Never weaken regression locks to mask true drift.
+- Strict CI enforcement is controlled by `fixtures/legacy/Sample25/expected/parity-manifest.json`:
+  - `strictReady: false` => strict lane optional/pending
+  - `strictReady: true` => strict lane required in CI (`quality-gates.yml`)
