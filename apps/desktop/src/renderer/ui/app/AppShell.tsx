@@ -3,7 +3,9 @@ import {
   ClassImportLegacyResultSchema,
   ClassesCreateResultSchema,
   ClassesDeleteResultSchema,
+  ClassesLegacyPreviewResultSchema,
   ClassesListResultSchema,
+  ClassesUpdateFromLegacyResultSchema,
   MarkSetsListResultSchema
 } from "@markbook/schema";
 import type { HealthState, Prefs, SidecarMeta } from "../state/workspace";
@@ -71,6 +73,10 @@ export function AppShell() {
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [legacyPreviewByClass, setLegacyPreviewByClass] = useState<{
+    classId: string;
+    data: any;
+  } | null>(null);
 
   const [markSets, setMarkSets] = useState<MarkSetRow[]>([]);
   const [selectedMarkSetId, setSelectedMarkSetId] = useState<string | null>(null);
@@ -238,6 +244,67 @@ export function AppShell() {
       );
       setSelectedClassId(res.classId);
       setScreen("students");
+      await refresh();
+    } catch (e: any) {
+      setSidecarError(e?.message ?? String(e));
+    }
+  }
+
+  async function previewLegacyUpdate(classId: string) {
+    setSidecarError(null);
+    try {
+      const folder = await window.markbook.selectLegacyClassFolder();
+      if (!folder) return;
+      const preview = await requestParsed(
+        "classes.legacyPreview",
+        { classId, legacyClassFolderPath: folder },
+        ClassesLegacyPreviewResultSchema
+      );
+      setLegacyPreviewByClass({
+        classId,
+        data: {
+          ...preview,
+          legacyClassFolderPath: folder
+        }
+      });
+    } catch (e: any) {
+      setSidecarError(e?.message ?? String(e));
+    }
+  }
+
+  async function updateFromLegacy(classId: string) {
+    setSidecarError(null);
+    try {
+      const existingFolder =
+        legacyPreviewByClass?.classId === classId
+          ? legacyPreviewByClass?.data?.legacyClassFolderPath
+          : null;
+      const folder =
+        typeof existingFolder === "string" && existingFolder.trim().length > 0
+          ? existingFolder
+          : await window.markbook.selectLegacyClassFolder();
+      if (!folder) return;
+
+      const res = await requestParsed(
+        "classes.updateFromLegacy",
+        {
+          classId,
+          legacyClassFolderPath: folder,
+          mode: "upsert_preserve",
+          collisionPolicy: "merge_existing",
+          preserveLocalValidity: true
+        },
+        ClassesUpdateFromLegacyResultSchema
+      );
+      setLegacyPreviewByClass({
+        classId,
+        data: {
+          ...(legacyPreviewByClass?.classId === classId ? legacyPreviewByClass.data : {}),
+          legacyClassFolderPath: folder,
+          lastUpdateResult: res
+        }
+      });
+      setSelectedClassId(classId);
       await refresh();
     } catch (e: any) {
       setSidecarError(e?.message ?? String(e));
@@ -554,6 +621,9 @@ export function AppShell() {
                 setClassWizardMode("edit");
                 setScreen("class_wizard");
               }}
+              onPreviewLegacyUpdate={previewLegacyUpdate}
+              onUpdateFromLegacy={updateFromLegacy}
+              legacyPreviewByClass={legacyPreviewByClass}
             />
           ) : screen === "class_wizard" ? (
             <ClassWizardScreen

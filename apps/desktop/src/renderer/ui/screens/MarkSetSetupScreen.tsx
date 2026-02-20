@@ -5,6 +5,7 @@ import {
   AssessmentsListResultSchema,
   AssessmentsReorderResultSchema,
   AssessmentsUpdateResultSchema,
+  ClassesListResultSchema,
   CategoriesCreateResultSchema,
   CategoriesDeleteResultSchema,
   CategoriesListResultSchema,
@@ -14,6 +15,8 @@ import {
   MarkSetsDeleteResultSchema,
   MarkSetsListResultSchema,
   MarkSetsSetDefaultResultSchema,
+  MarkSetsTransferApplyResultSchema,
+  MarkSetsTransferPreviewResultSchema,
   MarkSetsUndeleteResultSchema,
   MarkSetSettingsGetResultSchema,
   MarkSetSettingsUpdateResultSchema
@@ -47,6 +50,29 @@ type MarkSetManagerRow = {
   sortOrder: number;
   isDefault?: boolean;
   deletedAt?: string | null;
+};
+
+type TransferClassRow = {
+  id: string;
+  name: string;
+};
+
+type TransferPreview = {
+  sourceAssessmentCount: number;
+  candidateCount: number;
+  collisions: Array<{
+    sourceAssessmentId: string;
+    sourceIdx: number;
+    sourceTitle: string;
+    targetAssessmentId: string;
+    targetIdx: number;
+    key: string;
+  }>;
+  studentAlignment: {
+    sourceRows: number;
+    targetRows: number;
+    alignedRows: number;
+  };
 };
 
 function parseNullableNumber(s: string): number | null {
@@ -113,6 +139,16 @@ export function MarkSetSetupScreen(props: {
     cloneAssessments: boolean;
     cloneScores: boolean;
   } | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferClasses, setTransferClasses] = useState<TransferClassRow[]>([]);
+  const [transferSourceClassId, setTransferSourceClassId] = useState("");
+  const [transferSourceMarkSetId, setTransferSourceMarkSetId] = useState("");
+  const [transferSourceMarkSets, setTransferSourceMarkSets] = useState<MarkSetManagerRow[]>([]);
+  const [transferCollisionPolicy, setTransferCollisionPolicy] = useState<
+    "merge_existing" | "append_new" | "stop_on_collision"
+  >("merge_existing");
+  const [transferTitleMode, setTransferTitleMode] = useState<"same" | "appendTransfer">("same");
+  const [transferPreview, setTransferPreview] = useState<TransferPreview | null>(null);
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryWeight, setNewCategoryWeight] = useState("20");
@@ -477,6 +513,98 @@ export function MarkSetSetupScreen(props: {
     }
   }
 
+  async function loadTransferSourceMarkSets(sourceClassId: string) {
+    if (!sourceClassId) {
+      setTransferSourceMarkSets([]);
+      setTransferSourceMarkSetId("");
+      return;
+    }
+    try {
+      const list = await requestParsed(
+        "marksets.list",
+        { classId: sourceClassId, includeDeleted: false },
+        MarkSetsListResultSchema
+      );
+      setTransferSourceMarkSets(list.markSets as any);
+      setTransferSourceMarkSetId((cur) => {
+        if (cur && list.markSets.some((m) => m.id === cur)) return cur;
+        const fallback =
+          list.markSets.find((m) => m.id !== props.selectedMarkSetId)?.id ??
+          list.markSets[0]?.id ??
+          "";
+        return fallback;
+      });
+    } catch {
+      setTransferSourceMarkSets([]);
+      setTransferSourceMarkSetId("");
+    }
+  }
+
+  async function openTransferDialog() {
+    props.onError(null);
+    try {
+      const cls = await requestParsed("classes.list", {}, ClassesListResultSchema);
+      const rows = cls.classes.map((c) => ({ id: c.id, name: c.name }));
+      setTransferClasses(rows);
+      const preferredSource =
+        rows.find((c) => c.id !== props.selectedClassId)?.id ?? props.selectedClassId;
+      setTransferSourceClassId(preferredSource);
+      setTransferCollisionPolicy("merge_existing");
+      setTransferTitleMode("same");
+      setTransferPreview(null);
+      setTransferOpen(true);
+      await loadTransferSourceMarkSets(preferredSource);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function previewTransfer() {
+    if (!transferSourceClassId || !transferSourceMarkSetId) return;
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "marksets.transfer.preview",
+        {
+          sourceClassId: transferSourceClassId,
+          sourceMarkSetId: transferSourceMarkSetId,
+          targetClassId: props.selectedClassId,
+          targetMarkSetId: props.selectedMarkSetId
+        },
+        MarkSetsTransferPreviewResultSchema
+      );
+      setTransferPreview(res as TransferPreview);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+      setTransferPreview(null);
+    }
+  }
+
+  async function applyTransfer() {
+    if (!transferSourceClassId || !transferSourceMarkSetId) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "marksets.transfer.apply",
+        {
+          sourceClassId: transferSourceClassId,
+          sourceMarkSetId: transferSourceMarkSetId,
+          targetClassId: props.selectedClassId,
+          targetMarkSetId: props.selectedMarkSetId,
+          collisionPolicy: transferCollisionPolicy,
+          titleMode: transferTitleMode
+        },
+        MarkSetsTransferApplyResultSchema
+      );
+      setTransferOpen(false);
+      setTransferPreview(null);
+      await loadAll();
+      await props.onChanged?.();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
   const visibleMarkSets = useMemo(() => {
     const needle = managerSearch.trim().toLowerCase();
     const rows = markSetRows.filter((row) => {
@@ -650,6 +778,9 @@ export function MarkSetSetupScreen(props: {
           <div style={{ color: "#666", fontSize: 12, alignSelf: "center" }}>
             {visibleMarkSets.length} shown / {markSetRows.length} total
           </div>
+          <button data-testid="markset-transfer-open-btn" onClick={() => void openTransferDialog()}>
+            Transfer From Mark Set
+          </button>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -877,6 +1008,158 @@ export function MarkSetSetupScreen(props: {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {transferOpen ? (
+        <div
+          data-testid="markset-transfer-modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50
+          }}
+        >
+          <div
+            style={{
+              width: 760,
+              maxWidth: "96vw",
+              maxHeight: "90vh",
+              overflow: "auto",
+              background: "#fff",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              padding: 16
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Transfer Mark Set Content</div>
+            <div style={{ color: "#666", fontSize: 12, marginBottom: 12 }}>
+              Target: current class and selected mark set.
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                Source class
+                <select
+                  value={transferSourceClassId}
+                  onChange={(e) => {
+                    const next = e.currentTarget.value;
+                    setTransferSourceClassId(next);
+                    setTransferPreview(null);
+                    void loadTransferSourceMarkSets(next);
+                  }}
+                  style={inputStyle}
+                >
+                  {transferClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                Source mark set
+                <select
+                  value={transferSourceMarkSetId}
+                  onChange={(e) => {
+                    setTransferSourceMarkSetId(e.currentTarget.value);
+                    setTransferPreview(null);
+                  }}
+                  style={inputStyle}
+                >
+                  {transferSourceMarkSets.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.code}: {m.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                Collision policy
+                <select
+                  value={transferCollisionPolicy}
+                  onChange={(e) =>
+                    setTransferCollisionPolicy(
+                      (e.currentTarget.value as
+                        | "merge_existing"
+                        | "append_new"
+                        | "stop_on_collision") ?? "merge_existing"
+                    )
+                  }
+                  style={inputStyle}
+                >
+                  <option value="merge_existing">Merge existing (default)</option>
+                  <option value="append_new">Append new</option>
+                  <option value="stop_on_collision">Stop on collision</option>
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                Title mode
+                <select
+                  value={transferTitleMode}
+                  onChange={(e) =>
+                    setTransferTitleMode(
+                      (e.currentTarget.value as "same" | "appendTransfer") ?? "same"
+                    )
+                  }
+                  style={inputStyle}
+                >
+                  <option value="same">Keep titles</option>
+                  <option value="appendTransfer">Append "(Transfer)"</option>
+                </select>
+              </label>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button data-testid="markset-transfer-preview-btn" onClick={() => void previewTransfer()}>
+                Preview
+              </button>
+              <button
+                data-testid="markset-transfer-apply-btn"
+                onClick={() => void applyTransfer()}
+                disabled={!transferPreview}
+              >
+                Apply Transfer
+              </button>
+              <button
+                onClick={() => {
+                  setTransferOpen(false);
+                  setTransferPreview(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {transferPreview ? (
+              <div
+                data-testid="markset-transfer-preview-summary"
+                style={{
+                  marginTop: 12,
+                  border: "1px solid #eee",
+                  borderRadius: 8,
+                  background: "#fafafa",
+                  padding: 10,
+                  fontSize: 12
+                }}
+              >
+                <div>
+                  Source assessments: {transferPreview.sourceAssessmentCount}
+                </div>
+                <div>Candidate assessments: {transferPreview.candidateCount}</div>
+                <div>Collisions: {transferPreview.collisions.length}</div>
+                <div>
+                  Student alignment: source {transferPreview.studentAlignment.sourceRows}, target{" "}
+                  {transferPreview.studentAlignment.targetRows}, aligned{" "}
+                  {transferPreview.studentAlignment.alignedRows}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

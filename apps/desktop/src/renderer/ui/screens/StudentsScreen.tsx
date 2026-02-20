@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ClassesMetaGetResultSchema,
   StudentsCreateResultSchema,
   StudentsDeleteResultSchema,
   StudentsListResultSchema,
@@ -44,6 +45,13 @@ export function StudentsScreen(props: {
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [membershipMarkSets, setMembershipMarkSets] = useState<MembershipMarkSet[]>([]);
   const [membershipStudents, setMembershipStudents] = useState<MembershipStudent[]>([]);
+  const [importMeta, setImportMeta] = useState<{
+    legacyFolderPath?: string | null;
+    legacyClFile?: string | null;
+    legacyYearToken?: string | null;
+    lastImportedAt?: string | null;
+    lastImportWarningsCount?: number;
+  } | null>(null);
 
   const [newLastName, setNewLastName] = useState("");
   const [newFirstName, setNewFirstName] = useState("");
@@ -93,9 +101,29 @@ export function StudentsScreen(props: {
     }
   }
 
+  async function loadImportDiagnostics() {
+    try {
+      const res = await requestParsed(
+        "classes.meta.get",
+        { classId: props.selectedClassId },
+        ClassesMetaGetResultSchema
+      );
+      setImportMeta({
+        legacyFolderPath: res.meta.legacyFolderPath ?? null,
+        legacyClFile: res.meta.legacyClFile ?? null,
+        legacyYearToken: res.meta.legacyYearToken ?? null,
+        lastImportedAt: res.meta.lastImportedAt ?? null,
+        lastImportWarningsCount: res.meta.lastImportWarningsCount ?? 0
+      });
+    } catch {
+      setImportMeta(null);
+    }
+  }
+
   useEffect(() => {
     void loadRoster();
     void loadMembership();
+    void loadImportDiagnostics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.selectedClassId]);
 
@@ -300,6 +328,44 @@ export function StudentsScreen(props: {
             Mark Set Membership
           </button>
         </div>
+      </div>
+
+      <div
+        data-testid="students-import-diagnostics"
+        style={{
+          border: "1px solid #e5e5e5",
+          borderRadius: 10,
+          background: "#fafafa",
+          padding: 12,
+          marginBottom: 14,
+          fontSize: 12,
+          color: "#333"
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Legacy Import Diagnostics</div>
+        {importMeta?.legacyFolderPath ? (
+          <div style={{ display: "grid", gap: 3 }}>
+            <div>
+              <strong>Folder:</strong> {importMeta.legacyFolderPath}
+            </div>
+            <div>
+              <strong>CL file:</strong> {importMeta.legacyClFile ?? "—"}
+            </div>
+            <div>
+              <strong>Year token:</strong> {importMeta.legacyYearToken ?? "—"}
+            </div>
+            <div>
+              <strong>Last imported:</strong> {importMeta.lastImportedAt ?? "—"}
+            </div>
+            <div>
+              <strong>Warnings:</strong> {importMeta.lastImportWarningsCount ?? 0}
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: "#666" }}>
+            No update-from-legacy metadata recorded for this class yet.
+          </div>
+        )}
       </div>
 
       {tab === "roster" ? (

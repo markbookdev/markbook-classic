@@ -22,6 +22,9 @@ export function DashboardScreen(props: {
   onNavigate: (screen: string) => void;
   onOpenClassWizard: () => void;
   onOpenClassProfile: (classId: string) => void;
+  onPreviewLegacyUpdate: (classId: string) => Promise<void>;
+  onUpdateFromLegacy: (classId: string) => Promise<void>;
+  legacyPreviewByClass?: { classId: string; data: any } | null;
 }) {
   const [newClassName, setNewClassName] = useState("");
 
@@ -29,6 +32,12 @@ export function DashboardScreen(props: {
     () => props.classes.find((c) => c.id === props.selectedClassId) ?? null,
     [props.classes, props.selectedClassId]
   );
+  const selectedPreview =
+    selectedClass &&
+    props.legacyPreviewByClass &&
+    props.legacyPreviewByClass.classId === selectedClass.id
+      ? props.legacyPreviewByClass.data
+      : null;
 
   return (
     <div style={{ padding: 24, maxWidth: 920 }}>
@@ -128,6 +137,59 @@ export function DashboardScreen(props: {
                       Class Profile
                     </button>
                   </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button
+                      data-testid="class-legacy-preview-btn"
+                      onClick={() => void props.onPreviewLegacyUpdate(selectedClass.id)}
+                    >
+                      Preview Legacy Update
+                    </button>
+                    <button
+                      data-testid="class-update-from-legacy-btn"
+                      onClick={() => void props.onUpdateFromLegacy(selectedClass.id)}
+                    >
+                      Update From Legacy Folder
+                    </button>
+                    <div style={{ alignSelf: "center", fontSize: 12, color: "#666" }}>
+                      Default mode: Upsert Preserve
+                    </div>
+                  </div>
+                  {selectedPreview ? (
+                    <div
+                      data-testid="class-update-preview-summary"
+                      style={{
+                        marginTop: 10,
+                        border: "1px solid #eee",
+                        borderRadius: 8,
+                        background: "#fafafa",
+                        padding: 10,
+                        fontSize: 12,
+                        color: "#333"
+                      }}
+                    >
+                      <div>
+                        <strong>Preview:</strong> {selectedPreview.className ?? "Legacy class"}
+                      </div>
+                      <div>
+                        Students: incoming {selectedPreview.students?.incoming ?? 0}, matched{" "}
+                        {selectedPreview.students?.matched ?? 0}, new{" "}
+                        {selectedPreview.students?.new ?? 0}, ambiguous{" "}
+                        {selectedPreview.students?.ambiguous ?? 0}, local-only{" "}
+                        {selectedPreview.students?.localOnly ?? 0}
+                      </div>
+                      <div>
+                        Mark sets: incoming {selectedPreview.markSets?.incoming ?? 0}, matched{" "}
+                        {selectedPreview.markSets?.matched ?? 0}, new{" "}
+                        {selectedPreview.markSets?.new ?? 0}
+                      </div>
+                      <div>
+                        Warnings:{" "}
+                        {Array.isArray(selectedPreview.warnings)
+                          ? selectedPreview.warnings.length
+                          : 0}
+                      </div>
+                    </div>
+                  ) : null}
                   <div style={{ marginTop: 10 }}>
                     <button
                       onClick={() => void props.onDeleteClass(selectedClass.id)}
