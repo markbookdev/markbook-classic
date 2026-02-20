@@ -61,7 +61,7 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-ANALYTICS-01: Class analytics interactive tabs
 - Status:
-  - IN PROGRESS (2026-02-20): backend `analytics.class.open`/`analytics.filters.options` + read-only class analytics screen + report handoff wiring.
+  - DONE (2026-02-20): `analytics.class.open`/`analytics.filters.options` shipped with read-only class analytics screen + report handoff.
 - Objective:
   - deliver chapter-9 equivalent screen behaviors.
 - File targets:
@@ -72,13 +72,15 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-ANALYTICS-02: Student + combined analytics parity
 - Status:
-  - IN PROGRESS (2026-02-20): backend `analytics.student.open` + read-only student analytics screen shipped; combined analytics remains next slice.
+  - DONE (2026-02-20): `analytics.student.open`, `analytics.combined.options`, and `analytics.combined.open` shipped with read-only student/combined analytics screens and report alignment.
 - Objective:
   - deliver chapter 11/12 interactive parity.
 - Tests:
   - parity of values against report models and calc endpoints.
 
 ## EPIC-COMMENTS-01: Transfer-mode + compare/import/flood-fill
+- Status:
+  - DONE (2026-02-20): `comments.transfer.preview/apply/floodFill` shipped with setup transfer modal, flood-fill UX, fit/max-length enforcement, and diagnostics.
 - Objective:
   - close chapter-10 workflow gaps.
 - File targets:
@@ -86,7 +88,8 @@ Execution-ready chunk list for iterative delivery.
   - `apps/desktop/src/renderer/ui/screens/MarksScreen.tsx`
   - `rust/markbookd/src/ipc/handlers/comments.rs`
 - Tests:
-  - comments transfer-mode e2e and remark propagation checks.
+  - Rust: `comments_transfer_preview.rs`, `comments_transfer_apply_policies.rs`, `comments_flood_fill.rs`, `comments_fit_constraints.rs`
+  - Playwright: `comments-transfer-mode.e2e.spec.cjs`, `comments-flood-fill.e2e.spec.cjs`
 
 ## EPIC-PLANNER-01: Unit/lesson planner MVP
 - Objective:

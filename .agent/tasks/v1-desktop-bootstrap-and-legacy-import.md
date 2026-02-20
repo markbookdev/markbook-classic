@@ -305,3 +305,56 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:parity:regression` => PASS
   - `bun run test:e2e` => PASS (`38 passed`, `1 skipped packaged smoke`)
   - `bun run test:packaging` => PASS
+
+### EPIC-ANALYTICS-03 + EPIC-COMMENTS-01 Snapshot (2026-02-20, combined analytics + full comments transfer mode)
+- Backend shipped:
+  - added additive analytics endpoints:
+    - `analytics.combined.options`
+    - `analytics.combined.open`
+  - added additive report model endpoint:
+    - `reports.combinedAnalysisModel`
+  - combine semantics locked:
+    - weighted by `mark_sets.weight`
+    - uses only numeric per-markset finals
+    - falls back to equal-weight average when effective denominator is zero and at least one final exists
+  - student scope semantics shipped:
+    - `all`, `active`, `valid`
+  - added additive comments transfer endpoints:
+    - `comments.transfer.preview`
+    - `comments.transfer.apply`
+    - `comments.transfer.floodFill`
+  - transfer policies shipped:
+    - `replace`, `append`, `fill_blank`, `source_if_longer`
+  - fit/max-length enforcement shipped:
+    - deterministic cap by `maxChars`
+    - deterministic width/line overflow truncation with warnings
+- Renderer shipped:
+  - new screen:
+    - `apps/desktop/src/renderer/ui/screens/CombinedAnalyticsScreen.tsx`
+  - app shell route/nav updated for Combined Analytics.
+  - reports screen wired to export combined analysis using `reports.combinedAnalysisModel`.
+  - comments transfer-mode UI + flood-fill controls added in setup comments panel:
+    - preview/apply diagnostics
+    - policy/scope selectors
+    - row-target selection
+- Schema/tests/contracts shipped:
+  - added analytics/reports/comments transfer Zod schemas in `packages/schema/src/index.ts`.
+  - added Rust tests:
+    - `rust/markbookd/tests/analytics_combined_open.rs`
+    - `rust/markbookd/tests/analytics_combined_weight_fallback.rs`
+    - `rust/markbookd/tests/analytics_combined_reports_alignment.rs`
+    - `rust/markbookd/tests/comments_transfer_preview.rs`
+    - `rust/markbookd/tests/comments_transfer_apply_policies.rs`
+    - `rust/markbookd/tests/comments_flood_fill.rs`
+    - `rust/markbookd/tests/comments_fit_constraints.rs`
+  - added Playwright tests:
+    - `apps/desktop/e2e/combined-analytics.e2e.spec.cjs`
+    - `apps/desktop/e2e/combined-analytics-report-alignment.e2e.spec.cjs`
+    - `apps/desktop/e2e/comments-transfer-mode.e2e.spec.cjs`
+    - `apps/desktop/e2e/comments-flood-fill.e2e.spec.cjs`
+- Validation:
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`42 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS

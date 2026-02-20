@@ -27,8 +27,8 @@ Status rules:
 | GAP-001 | Planner + course description (ch6/tools) | Missing | 5 | 5 | 3 | 1 | 4 | 3 | 4 | 13 | Entire module family absent. |
 | GAP-002 | Class interactive analytics tabs (ch9) | Partial (read-only tab shipped) | 3 | 3 | 2 | 5 | 5 | 4 | 4 | 18 | Class analytics screen + backend model shipped; interactive deep actions still pending. |
 | GAP-003 | Student analytics tabs (ch11) | Partial (read-only tab shipped) | 3 | 3 | 2 | 5 | 4 | 4 | 4 | 16 | Student analytics screen shipped; compare/trend/combined actions pending. |
-| GAP-004 | Combined report analytics (ch12) | Partial | 4 | 4 | 2 | 5 | 4 | 4 | 4 | 17 | Requires combined set weighting workflows. |
-| GAP-005 | Comments transfer-mode UX parity | Partial | 3 | 4 | 2 | 2 | 5 | 3 | 3 | 15 | Back-end data present, UX/flows incomplete. |
+| GAP-004 | Combined report analytics (ch12) | Implemented (read-only) | 2 | 2 | 1 | 5 | 4 | 3 | 3 | 15 | Combined analytics screen + combined report model/export shipped; write actions intentionally deferred. |
+| GAP-005 | Comments transfer-mode UX parity | Implemented (core) | 1 | 1 | 1 | 2 | 5 | 2 | 3 | 11 | Compare/import/flood-fill transfer flows shipped with fit/max-length enforcement and diagnostics. |
 | GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |
 | GAP-007 | Class update-from-file/SIS deep parity | Partial (core shipped) | 1 | 1 | 2 | 1 | 4 | 2 | 2 | 10 | `classes.legacyPreview`, `classes.updateFromLegacy`, and mark set transfer shipped; SIS/attach nuances remain. |
 | GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial | 4 | 3 | 2 | 4 | 3 | 3 | 4 | 12 | scattered settings not fully exposed. |
@@ -41,12 +41,12 @@ Status rules:
 1. GAP-002
 2. GAP-012
 3. GAP-003
-4. GAP-004
-5. GAP-005
-6. GAP-001
-7. GAP-008
-8. GAP-006
-9. GAP-007
+4. GAP-001
+5. GAP-008
+6. GAP-004
+7. GAP-006
+8. GAP-007
+9. GAP-005
 10. GAP-009
 11. GAP-011
 12. GAP-010

@@ -9,11 +9,11 @@
 | Attendance | Implemented | monthly matrix + reports |
 | Seating | Implemented | assignments/blocked/auto-place |
 | Notes | Implemented | per-student notes |
-| Comments/Banks | Partial | baseline done, advanced transfer-mode flows pending |
+| Comments/Banks | Implemented (core) | baseline plus compare/import/flood-fill transfer-mode flows with fit constraints |
 | Learning Skills | Implemented | edit + report model/export |
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
-| Analytics screens | Partial | read-only class/student analytics tabs now implemented; combined analytics still pending |
+| Analytics screens | Implemented (read-only) | class + student + combined analytics shipped with report handoff |
 | Planner/Course Description | Missing | not yet implemented |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial | exchange done; chapter-13 breadth pending |
