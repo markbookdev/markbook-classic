@@ -109,6 +109,23 @@ test("students membership toggle affects calc and persists", async () => {
   const finalTxt2 = (await page.getByTestId("marks-results-final").innerText()).trim();
   expect(finalTxt2).toBe("—");
 
+  // Update from the same legacy folder and verify local membership override remains unchanged.
+  await page.evaluate(async ({ classId, legacyClassFolderPath }) => {
+    await window.markbook.request("classes.updateFromLegacy", {
+      classId,
+      legacyClassFolderPath,
+      mode: "upsert_preserve",
+      collisionPolicy: "merge_existing",
+      preserveLocalValidity: true
+    });
+  }, { classId: bootstrap.classId, legacyClassFolderPath });
+
+  await page.getByTestId("nav-students").click();
+  await page.waitForSelector('[data-testid="students-screen"]');
+  await page.getByTestId("students-membership-tab").click();
+  await page.waitForSelector('[data-testid="students-membership-table-wrap"]');
+  await expect(cell).not.toBeChecked();
+
   // Cleanup: bulk enable so other tests/users aren't surprised when reusing this workspace.
   await page.getByTestId("nav-students").click();
   await page.waitForSelector('[data-testid="students-screen"]');
