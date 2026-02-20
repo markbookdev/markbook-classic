@@ -3,6 +3,7 @@ import {
   renderAttendanceMonthlyReportHtml,
   renderClassListReportHtml,
   renderCategoryAnalysisReportHtml,
+  renderCombinedAnalysisReportHtml,
   renderLearningSkillsSummaryReportHtml,
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
@@ -13,6 +14,7 @@ import {
   ReportsAttendanceMonthlyModelResultSchema,
   ReportsClassListModelResultSchema,
   ReportsCategoryAnalysisModelResultSchema,
+  ReportsCombinedAnalysisModelResultSchema,
   ReportsLearningSkillsSummaryModelResultSchema,
   ReportsMarkSetGridModelResultSchema,
   ReportsMarkSetSummaryModelResultSchema,
@@ -33,12 +35,14 @@ export function ReportsScreen(props: {
     filters: { term: number | null; categoryName: string | null; typesMask: number | null };
     studentScope: "all" | "active" | "valid";
     studentId?: string | null;
+    markSetIds?: string[] | null;
   };
   contextVersion?: number;
 }) {
   const [exportingGridPdf, setExportingGridPdf] = useState(false);
   const [exportingSummaryPdf, setExportingSummaryPdf] = useState(false);
   const [exportingCategoryPdf, setExportingCategoryPdf] = useState(false);
+  const [exportingCombinedPdf, setExportingCombinedPdf] = useState(false);
   const [exportingStudentPdf, setExportingStudentPdf] = useState(false);
   const [exportingAttendancePdf, setExportingAttendancePdf] = useState(false);
   const [exportingClassListPdf, setExportingClassListPdf] = useState(false);
@@ -46,6 +50,7 @@ export function ReportsScreen(props: {
   const [students, setStudents] = useState<Array<{ id: string; displayName: string }>>([]);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [combinedMarkSetIds, setCombinedMarkSetIds] = useState<string[] | null>(null);
   const [studentScope, setStudentScope] = useState<"all" | "active" | "valid">("all");
   const [reportFilters, setReportFilters] = useState<{
     term: number | null;
@@ -124,6 +129,10 @@ export function ReportsScreen(props: {
     if (props.initialContext.studentId) {
       setSelectedStudentId(props.initialContext.studentId);
     }
+    const fromCombined = props.initialContext.markSetIds ?? null;
+    setCombinedMarkSetIds(
+      Array.isArray(fromCombined) && fromCombined.length > 0 ? [...fromCombined] : null
+    );
   }, [props.contextVersion, props.initialContext]);
 
   React.useEffect(() => {
@@ -212,6 +221,37 @@ export function ReportsScreen(props: {
       props.onError(e?.message ?? String(e));
     } finally {
       setExportingCategoryPdf(false);
+    }
+  }
+
+  async function exportCombinedAnalysisPdf() {
+    setExportingCombinedPdf(true);
+    props.onError(null);
+    try {
+      const markSetIds =
+        combinedMarkSetIds && combinedMarkSetIds.length > 0
+          ? combinedMarkSetIds
+          : [props.selectedMarkSetId];
+      const model = await requestParsed(
+        "reports.combinedAnalysisModel",
+        {
+          classId: props.selectedClassId,
+          markSetIds,
+          filters: reportFilters,
+          studentScope
+        },
+        ReportsCombinedAnalysisModelResultSchema
+      );
+      const html = renderCombinedAnalysisReportHtml(model);
+      const setCodes = (model.markSets ?? []).map((m) => m.code).join("-");
+      const defaultFilename = sanitizeFilename(
+        `${model.class.name} - Combined ${setCodes || "Analysis"}.pdf`
+      );
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingCombinedPdf(false);
     }
   }
 
@@ -413,7 +453,13 @@ export function ReportsScreen(props: {
       <button
         data-testid="export-markset-grid-pdf-btn"
         onClick={() => void exportMarkSetGridPdf()}
-        disabled={exportingGridPdf || exportingSummaryPdf || exportingCategoryPdf || exportingStudentPdf}
+        disabled={
+          exportingGridPdf ||
+          exportingSummaryPdf ||
+          exportingCategoryPdf ||
+          exportingCombinedPdf ||
+          exportingStudentPdf
+        }
       >
         {exportingGridPdf ? "Exporting..." : "Export Grid PDF"}
       </button>
@@ -421,7 +467,13 @@ export function ReportsScreen(props: {
       <button
         data-testid="export-markset-summary-pdf-btn"
         onClick={() => void exportMarkSetSummaryPdf()}
-        disabled={exportingGridPdf || exportingSummaryPdf || exportingCategoryPdf || exportingStudentPdf}
+        disabled={
+          exportingGridPdf ||
+          exportingSummaryPdf ||
+          exportingCategoryPdf ||
+          exportingCombinedPdf ||
+          exportingStudentPdf
+        }
       >
         {exportingSummaryPdf ? "Exporting..." : "Export Summary PDF"}
       </button>
@@ -429,10 +481,38 @@ export function ReportsScreen(props: {
       <button
         data-testid="export-category-analysis-pdf-btn"
         onClick={() => void exportCategoryAnalysisPdf()}
-        disabled={exportingGridPdf || exportingSummaryPdf || exportingCategoryPdf || exportingStudentPdf}
+        disabled={
+          exportingGridPdf ||
+          exportingSummaryPdf ||
+          exportingCategoryPdf ||
+          exportingCombinedPdf ||
+          exportingStudentPdf
+        }
       >
         {exportingCategoryPdf ? "Exporting..." : "Export Category Analysis PDF"}
       </button>
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Combined Analysis</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          data-testid="export-combined-analysis-pdf-btn"
+          onClick={() => void exportCombinedAnalysisPdf()}
+          disabled={
+            exportingGridPdf ||
+            exportingSummaryPdf ||
+            exportingCategoryPdf ||
+            exportingCombinedPdf ||
+            exportingStudentPdf
+          }
+        >
+          {exportingCombinedPdf ? "Exporting..." : "Export Combined Analysis PDF"}
+        </button>
+        <span style={{ color: "#666", fontSize: 12 }}>
+          Mark sets:{" "}
+          {combinedMarkSetIds && combinedMarkSetIds.length > 0
+            ? `${combinedMarkSetIds.length} selected from Combined Analytics`
+            : "current mark set only"}
+        </span>
+      </div>
 
       <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>
         Student Summary (selected student)
@@ -457,6 +537,7 @@ export function ReportsScreen(props: {
             exportingGridPdf ||
             exportingSummaryPdf ||
             exportingCategoryPdf ||
+            exportingCombinedPdf ||
             exportingStudentPdf
           }
         >

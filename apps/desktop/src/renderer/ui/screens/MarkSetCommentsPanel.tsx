@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ClassesListResultSchema,
   CommentsBanksCreateResultSchema,
   CommentsBanksEntryDeleteResultSchema,
   CommentsBanksEntryUpsertResultSchema,
@@ -8,10 +9,14 @@ import {
   CommentsBanksListResultSchema,
   CommentsBanksOpenResultSchema,
   CommentsBanksUpdateMetaResultSchema,
+  CommentsTransferApplyResultSchema,
+  CommentsTransferFloodFillResultSchema,
+  CommentsTransferPreviewResultSchema,
   CommentsSetsDeleteResultSchema,
   CommentsSetsListResultSchema,
   CommentsSetsOpenResultSchema,
-  CommentsSetsUpsertResultSchema
+  CommentsSetsUpsertResultSchema,
+  MarkSetsListResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -66,6 +71,28 @@ type BankEntry = {
   text: string;
 };
 
+type TransferClassRow = {
+  id: string;
+  name: string;
+};
+
+type TransferMarkSetRow = {
+  id: string;
+  code: string;
+  description: string;
+  sortOrder: number;
+};
+
+type TransferPreviewRow = {
+  sourceStudentId?: string;
+  targetStudentId?: string;
+  sourceDisplayName?: string;
+  targetDisplayName?: string;
+  sourceRemark: string;
+  targetRemark: string;
+  status: "same" | "different" | "source_only" | "target_only" | "unmatched";
+};
+
 export function MarkSetCommentsPanel(props: {
   selectedClassId: string;
   selectedMarkSetId: string;
@@ -92,6 +119,27 @@ export function MarkSetCommentsPanel(props: {
   const [importPath, setImportPath] = useState("");
   const [exportPath, setExportPath] = useState("");
   const [applyMode, setApplyMode] = useState<"append" | "replace">("append");
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [floodOpen, setFloodOpen] = useState(false);
+  const [transferClasses, setTransferClasses] = useState<TransferClassRow[]>([]);
+  const [transferSourceClassId, setTransferSourceClassId] = useState("");
+  const [transferSourceMarkSetId, setTransferSourceMarkSetId] = useState("");
+  const [transferSourceMarkSets, setTransferSourceMarkSets] = useState<TransferMarkSetRow[]>([]);
+  const [transferSourceSetNumber, setTransferSourceSetNumber] = useState<number | null>(null);
+  const [transferSourceSets, setTransferSourceSets] = useState<SetRow[]>([]);
+  const [transferMatchMode, setTransferMatchMode] = useState<
+    "student_no_then_name" | "name_only"
+  >("student_no_then_name");
+  const [transferPolicy, setTransferPolicy] = useState<
+    "replace" | "append" | "fill_blank" | "source_if_longer"
+  >("fill_blank");
+  const [transferSeparator, setTransferSeparator] = useState(" ");
+  const [transferScope, setTransferScope] = useState<"all_matched" | "selected_target_students">(
+    "all_matched"
+  );
+  const [transferPreviewRows, setTransferPreviewRows] = useState<TransferPreviewRow[]>([]);
+  const [transferPreviewCounts, setTransferPreviewCounts] = useState<any | null>(null);
+  const [transferSelectedTargetIds, setTransferSelectedTargetIds] = useState<string[]>([]);
 
   const selectedBankEntry = useMemo(() => {
     if (!bankEntries.length) return null;
@@ -461,6 +509,176 @@ export function MarkSetCommentsPanel(props: {
     if (chosen) setExportPath(chosen);
   }
 
+  async function loadTransferClasses() {
+    const res = await requestParsed("classes.list", {}, ClassesListResultSchema);
+    const next = (res.classes as TransferClassRow[]).slice();
+    setTransferClasses(next);
+    setTransferSourceClassId((cur) => {
+      if (cur && next.some((c) => c.id === cur)) return cur;
+      return next[0]?.id ?? "";
+    });
+  }
+
+  async function loadTransferMarkSets(classId: string) {
+    if (!classId) {
+      setTransferSourceMarkSets([]);
+      setTransferSourceMarkSetId("");
+      return;
+    }
+    const res = await requestParsed(
+      "marksets.list",
+      { classId, includeDeleted: false },
+      MarkSetsListResultSchema
+    );
+    const next = (res.markSets as TransferMarkSetRow[]).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    setTransferSourceMarkSets(next);
+    setTransferSourceMarkSetId((cur) => {
+      if (cur && next.some((m) => m.id === cur)) return cur;
+      return next[0]?.id ?? "";
+    });
+  }
+
+  async function loadTransferSets(classId: string, markSetId: string) {
+    if (!classId || !markSetId) {
+      setTransferSourceSets([]);
+      setTransferSourceSetNumber(null);
+      return;
+    }
+    const res = await requestParsed(
+      "comments.sets.list",
+      { classId, markSetId },
+      CommentsSetsListResultSchema
+    );
+    const next = (res.sets as SetRow[]).slice().sort((a, b) => a.setNumber - b.setNumber);
+    setTransferSourceSets(next);
+    setTransferSourceSetNumber((cur) => {
+      if (cur != null && next.some((s) => s.setNumber === cur)) return cur;
+      return next[0]?.setNumber ?? null;
+    });
+  }
+
+  async function openTransferMode() {
+    props.onError(null);
+    try {
+      await loadTransferClasses();
+      setTransferOpen(true);
+      setTransferPreviewRows([]);
+      setTransferPreviewCounts(null);
+      setTransferSelectedTargetIds([]);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function runTransferPreview() {
+    if (!transferSourceClassId || !transferSourceMarkSetId || transferSourceSetNumber == null) return;
+    if (selectedSetNumber == null) return;
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "comments.transfer.preview",
+        {
+          sourceClassId: transferSourceClassId,
+          sourceMarkSetId: transferSourceMarkSetId,
+          sourceSetNumber: transferSourceSetNumber,
+          targetClassId: props.selectedClassId,
+          targetMarkSetId: props.selectedMarkSetId,
+          targetSetNumber: selectedSetNumber,
+          studentMatchMode: transferMatchMode
+        },
+        CommentsTransferPreviewResultSchema
+      );
+      setTransferPreviewCounts(res.counts);
+      setTransferPreviewRows(res.rows as TransferPreviewRow[]);
+      setTransferSelectedTargetIds(
+        (res.rows as TransferPreviewRow[])
+          .filter((r) => !!r.targetStudentId && r.status !== "target_only")
+          .map((r) => r.targetStudentId as string)
+      );
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+      setTransferPreviewCounts(null);
+      setTransferPreviewRows([]);
+      setTransferSelectedTargetIds([]);
+    }
+  }
+
+  async function applyTransferPreview() {
+    if (!transferSourceClassId || !transferSourceMarkSetId || transferSourceSetNumber == null) return;
+    if (selectedSetNumber == null) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "comments.transfer.apply",
+        {
+          sourceClassId: transferSourceClassId,
+          sourceMarkSetId: transferSourceMarkSetId,
+          sourceSetNumber: transferSourceSetNumber,
+          targetClassId: props.selectedClassId,
+          targetMarkSetId: props.selectedMarkSetId,
+          targetSetNumber: selectedSetNumber,
+          studentMatchMode: transferMatchMode,
+          policy: transferPolicy,
+          separator: transferSeparator,
+          targetScope: transferScope,
+          selectedTargetStudentIds:
+            transferScope === "selected_target_students" ? transferSelectedTargetIds : undefined
+        },
+        CommentsTransferApplyResultSchema
+      );
+      await loadSet(selectedSetNumber);
+      await runTransferPreview();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  async function applyFloodFillFromSelected() {
+    if (!selectedStudentId || selectedSetNumber == null) return;
+    const targetIds =
+      transferSelectedTargetIds.length > 0
+        ? transferSelectedTargetIds.filter((id) => id !== selectedStudentId)
+        : remarks.map((r) => r.studentId).filter((id) => id !== selectedStudentId);
+    if (targetIds.length === 0) return;
+    props.onError(null);
+    try {
+      await requestParsed(
+        "comments.transfer.floodFill",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          setNumber: selectedSetNumber,
+          sourceStudentId: selectedStudentId,
+          targetStudentIds: targetIds,
+          policy: transferPolicy,
+          separator: transferSeparator
+        },
+        CommentsTransferFloodFillResultSchema
+      );
+      await loadSet(selectedSetNumber);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    }
+  }
+
+  useEffect(() => {
+    if (!transferOpen) return;
+    if (!transferSourceClassId) return;
+    void loadTransferMarkSets(transferSourceClassId).catch((e) =>
+      props.onError(e?.message ?? String(e))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferOpen, transferSourceClassId]);
+
+  useEffect(() => {
+    if (!transferOpen) return;
+    if (!transferSourceClassId || !transferSourceMarkSetId) return;
+    void loadTransferSets(transferSourceClassId, transferSourceMarkSetId).catch((e) =>
+      props.onError(e?.message ?? String(e))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferOpen, transferSourceClassId, transferSourceMarkSetId]);
+
   return (
     <div data-testid="comments-panel" style={{ display: "flex", gap: 16, minHeight: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -476,6 +694,15 @@ export function MarkSetCommentsPanel(props: {
           </button>
           <button data-testid="comments-set-save-btn" onClick={() => void saveSet()}>
             Save Set
+          </button>
+          <button data-testid="comments-transfer-open-btn" onClick={() => void openTransferMode()}>
+            Transfer Mode
+          </button>
+          <button
+            data-testid="comments-floodfill-open-btn"
+            onClick={() => setFloodOpen((v) => !v)}
+          >
+            {floodOpen ? "Hide Flood Fill" : "Flood Fill"}
           </button>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
@@ -593,6 +820,184 @@ export function MarkSetCommentsPanel(props: {
             Next Student
           </button>
         </div>
+        {transferOpen ? (
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8, marginBottom: 8 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Transfer Mode</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(140px, 1fr))", gap: 6 }}>
+              <label>
+                Source Class
+                <select
+                  value={transferSourceClassId}
+                  onChange={(e) => setTransferSourceClassId(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                >
+                  {transferClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Source Mark Set
+                <select
+                  value={transferSourceMarkSetId}
+                  onChange={(e) => setTransferSourceMarkSetId(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                >
+                  {transferSourceMarkSets.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.code}: {m.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Source Set
+                <select
+                  value={transferSourceSetNumber ?? ""}
+                  onChange={(e) => setTransferSourceSetNumber(Number(e.currentTarget.value))}
+                  style={{ width: "100%" }}
+                >
+                  {transferSourceSets.map((s) => (
+                    <option key={s.setNumber} value={s.setNumber}>
+                      {s.setNumber}: {s.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Match
+                <select
+                  value={transferMatchMode}
+                  onChange={(e) =>
+                    setTransferMatchMode(
+                      e.currentTarget.value === "name_only" ? "name_only" : "student_no_then_name"
+                    )
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="student_no_then_name">Student # then name</option>
+                  <option value="name_only">Name only</option>
+                </select>
+              </label>
+              <label>
+                Policy
+                <select
+                  data-testid="comments-transfer-policy"
+                  value={transferPolicy}
+                  onChange={(e) =>
+                    setTransferPolicy(
+                      e.currentTarget.value === "replace"
+                        ? "replace"
+                        : e.currentTarget.value === "append"
+                          ? "append"
+                          : e.currentTarget.value === "source_if_longer"
+                            ? "source_if_longer"
+                            : "fill_blank"
+                    )
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="fill_blank">Fill Blank</option>
+                  <option value="replace">Replace</option>
+                  <option value="append">Append</option>
+                  <option value="source_if_longer">Source If Longer</option>
+                </select>
+              </label>
+              <label>
+                Scope
+                <select
+                  value={transferScope}
+                  onChange={(e) =>
+                    setTransferScope(
+                      e.currentTarget.value === "selected_target_students"
+                        ? "selected_target_students"
+                        : "all_matched"
+                    )
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="all_matched">All matched</option>
+                  <option value="selected_target_students">Selected targets</option>
+                </select>
+              </label>
+              <label style={{ gridColumn: "1 / span 3" }}>
+                Separator
+                <input
+                  value={transferSeparator}
+                  onChange={(e) => setTransferSeparator(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button data-testid="comments-transfer-preview-btn" onClick={() => void runTransferPreview()}>
+                Preview
+              </button>
+              <button data-testid="comments-transfer-apply-btn" onClick={() => void applyTransferPreview()}>
+                Apply
+              </button>
+              <button onClick={() => setTransferOpen(false)}>Close</button>
+            </div>
+            {transferPreviewCounts ? (
+              <div data-testid="comments-transfer-preview-summary" style={{ marginTop: 6, fontSize: 12, color: "#555" }}>
+                matched {transferPreviewCounts.matched}, same {transferPreviewCounts.same}, different{" "}
+                {transferPreviewCounts.different}, source-only {transferPreviewCounts.sourceOnly}, target-only{" "}
+                {transferPreviewCounts.targetOnly}
+              </div>
+            ) : null}
+            {transferPreviewRows.length > 0 ? (
+              <div style={{ marginTop: 6, maxHeight: 180, overflow: "auto", border: "1px solid #eee" }}>
+                {transferPreviewRows.slice(0, 120).map((row, idx) => {
+                  const targetId = row.targetStudentId ?? "";
+                  const checked = targetId ? transferSelectedTargetIds.includes(targetId) : false;
+                  return (
+                    <div key={`${targetId || "none"}-${idx}`} style={{ display: "flex", gap: 8, padding: 4, borderBottom: "1px solid #f3f3f3" }}>
+                      {targetId ? (
+                        <input
+                          data-testid={`comments-transfer-row-select-${targetId}`}
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setTransferSelectedTargetIds((prev) => {
+                              if (e.currentTarget.checked) {
+                                if (prev.includes(targetId)) return prev;
+                                return [...prev, targetId];
+                              }
+                              return prev.filter((id) => id !== targetId);
+                            })
+                          }
+                        />
+                      ) : (
+                        <span style={{ width: 14 }} />
+                      )}
+                      <div style={{ fontSize: 12, minWidth: 80 }}>{row.status}</div>
+                      <div style={{ fontSize: 12, flex: 1 }}>
+                        {row.sourceDisplayName ?? "(none)"} → {row.targetDisplayName ?? "(none)"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {floodOpen ? (
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8, marginBottom: 8 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Flood Fill from Selected Student</div>
+            <div style={{ color: "#666", fontSize: 12, marginBottom: 6 }}>
+              Source: {selectedStudentId ? remarks.find((r) => r.studentId === selectedStudentId)?.displayName ?? selectedStudentId : "(select a student)"}
+            </div>
+            <button
+              data-testid="comments-floodfill-apply-btn"
+              disabled={!selectedStudentId}
+              onClick={() => void applyFloodFillFromSelected()}
+            >
+              Apply Flood Fill
+            </button>
+          </div>
+        ) : null}
         <div style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto", border: "1px solid #eee" }}>
           {remarks.map((r) => (
             <div

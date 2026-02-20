@@ -27,6 +27,7 @@ import { CalcSettingsScreen } from "../screens/CalcSettingsScreen";
 import { ClassWizardScreen } from "../screens/ClassWizardScreen";
 import { ClassAnalyticsScreen } from "../screens/ClassAnalyticsScreen";
 import { StudentAnalyticsScreen } from "../screens/StudentAnalyticsScreen";
+import { CombinedAnalyticsScreen } from "../screens/CombinedAnalyticsScreen";
 
 type Screen =
   | "dashboard"
@@ -35,6 +36,7 @@ type Screen =
   | "reports"
   | "class_analytics"
   | "student_analytics"
+  | "combined_analytics"
   | "students"
   | "markset_setup"
   | "attendance"
@@ -85,6 +87,7 @@ export function AppShell() {
     filters: { term: number | null; categoryName: string | null; typesMask: number | null };
     studentScope: "all" | "active" | "valid";
     studentId?: string | null;
+    markSetIds?: string[] | null;
     nonce: number;
   } | null>(null);
 
@@ -549,6 +552,12 @@ export function AppShell() {
                 Student Analytics
               </button>
               <button
+                data-testid="nav-combined-analytics"
+                onClick={() => setScreen("combined_analytics")}
+              >
+                Combined Analytics
+              </button>
+              <button
                 data-testid="delete-class-btn"
                 onClick={() => selectedClassId && void deleteClass(selectedClassId)}
                 style={{ color: "#b00020" }}
@@ -689,7 +698,8 @@ export function AppShell() {
                   ? {
                       filters: reportsPrefill.filters,
                       studentScope: reportsPrefill.studentScope,
-                      studentId: reportsPrefill.studentId ?? null
+                      studentId: reportsPrefill.studentId ?? null,
+                      markSetIds: reportsPrefill.markSetIds ?? null
                     }
                   : undefined
               }
@@ -705,6 +715,7 @@ export function AppShell() {
                   filters: ctx.filters,
                   studentScope: ctx.studentScope,
                   studentId: null,
+                  markSetIds: null,
                   nonce: Date.now()
                 });
                 setScreen("reports");
@@ -720,6 +731,22 @@ export function AppShell() {
                   filters: ctx.filters,
                   studentScope: ctx.studentScope,
                   studentId: ctx.studentId ?? null,
+                  markSetIds: null,
+                  nonce: Date.now()
+                });
+                setScreen("reports");
+              }}
+            />
+          ) : screen === "combined_analytics" ? (
+            <CombinedAnalyticsScreen
+              selectedClassId={selectedClassId}
+              onError={setSidecarError}
+              onOpenReports={(ctx) => {
+                setReportsPrefill({
+                  filters: ctx.filters,
+                  studentScope: ctx.studentScope,
+                  studentId: null,
+                  markSetIds: ctx.markSetIds,
                   nonce: Date.now()
                 });
                 setScreen("reports");

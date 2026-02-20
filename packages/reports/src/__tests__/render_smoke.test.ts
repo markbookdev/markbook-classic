@@ -3,6 +3,7 @@ import {
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
   renderCategoryAnalysisReportHtml,
+  renderCombinedAnalysisReportHtml,
   renderStudentSummaryReportHtml,
   renderAttendanceMonthlyReportHtml,
   renderClassListReportHtml,
@@ -123,6 +124,66 @@ describe("reports html render smoke", () => {
     expect(html).toContain("Student Summary");
   });
 
+  test("combined analysis includes print css", () => {
+    const html = renderCombinedAnalysisReportHtml({
+      class: { id: "c1", name: "8D (2025)" },
+      markSets: [
+        { id: "ms1", code: "MAT1", description: "Math 1", sortOrder: 0, weight: 50 },
+        { id: "ms2", code: "SNC1", description: "Science 1", sortOrder: 1, weight: 50 }
+      ],
+      filters: { term: null, categoryName: null, typesMask: null },
+      studentScope: "valid",
+      settingsApplied: { combineMethod: "weighted_markset", fallbackUsedCount: 0 },
+      kpis: {
+        classAverage: 75,
+        classMedian: 75,
+        studentCount: 1,
+        finalMarkCount: 1,
+        noCombinedFinalCount: 0
+      },
+      distributions: {
+        bins: [{ label: "70-79", min: 70, max: 79.9, count: 1 }],
+        noCombinedFinalCount: 0
+      },
+      perMarkSet: [
+        {
+          markSetId: "ms1",
+          code: "MAT1",
+          description: "Math 1",
+          weight: 50,
+          finalMarkCount: 1,
+          classAverage: 80,
+          classMedian: 80
+        }
+      ],
+      rows: [
+        {
+          studentId: "s1",
+          displayName: "Boyce, Daniella",
+          sortOrder: 0,
+          active: true,
+          combinedFinal: 75,
+          perMarkSet: [
+            {
+              markSetId: "ms1",
+              code: "MAT1",
+              description: "Math 1",
+              weight: 50,
+              valid: true,
+              finalMark: 80
+            }
+          ]
+        }
+      ],
+      topBottom: {
+        top: [{ studentId: "s1", displayName: "Boyce, Daniella", combinedFinal: 75 }],
+        bottom: [{ studentId: "s1", displayName: "Boyce, Daniella", combinedFinal: 75 }]
+      }
+    });
+    expectTablePrintCss(html);
+    expect(html).toContain("Combined Analytics");
+  });
+
   test("attendance includes print css", () => {
     const html = renderAttendanceMonthlyReportHtml({
       class: { id: "c1", name: "8D (2025)" },
@@ -169,4 +230,3 @@ describe("reports html render smoke", () => {
     expect(html).toContain("Learning Skills Summary");
   });
 });
-

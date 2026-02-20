@@ -5,7 +5,7 @@ use rusqlite::{params_from_iter, types::Value, Connection, OptionalExtension};
 use serde_json::json;
 use std::collections::HashMap;
 
-use super::{assets, attendance};
+use super::{analytics, assets, attendance};
 
 fn required_str(req: &Request, key: &str) -> Result<String, serde_json::Value> {
     req.params
@@ -511,6 +511,26 @@ fn handle_reports_learning_skills_summary_model(
     }
 }
 
+fn handle_reports_combined_analysis_model(
+    state: &mut AppState,
+    req: &Request,
+) -> serde_json::Value {
+    let proxy_req = Request {
+        id: req.id.clone(),
+        method: "analytics.combined.open".to_string(),
+        params: req.params.clone(),
+    };
+    match analytics::try_handle(state, &proxy_req) {
+        Some(resp) => resp,
+        None => err(
+            &req.id,
+            "server_error",
+            "analytics.combined.open handler missing",
+            None,
+        ),
+    }
+}
+
 fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> serde_json::Value {
     let conn = match db_conn(state, req) {
         Ok(v) => v,
@@ -821,6 +841,7 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "reports.learningSkillsSummaryModel" => {
             Some(handle_reports_learning_skills_summary_model(state, req))
         }
+        "reports.combinedAnalysisModel" => Some(handle_reports_combined_analysis_model(state, req)),
         "reports.markSetGridModel" => Some(handle_reports_mark_set_grid_model(state, req)),
         _ => None,
     }

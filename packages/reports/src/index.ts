@@ -548,6 +548,185 @@ export function renderCategoryAnalysisReportHtml(model: CategoryAnalysisReportMo
 </html>`;
 }
 
+export type CombinedAnalysisReportModel = {
+  class: { id: string; name: string };
+  markSets: Array<{
+    id: string;
+    code: string;
+    description: string;
+    sortOrder: number;
+    weight: number;
+  }>;
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  studentScope?: "all" | "active" | "valid";
+  settingsApplied?: {
+    combineMethod: string;
+    fallbackUsedCount: number;
+  };
+  kpis: {
+    classAverage: number | null;
+    classMedian: number | null;
+    studentCount: number;
+    finalMarkCount: number;
+    noCombinedFinalCount: number;
+  };
+  distributions: {
+    bins: Array<{ label: string; min: number; max: number; count: number }>;
+    noCombinedFinalCount: number;
+  };
+  perMarkSet: Array<{
+    markSetId: string;
+    code: string;
+    description: string;
+    weight: number;
+    finalMarkCount: number;
+    classAverage: number | null;
+    classMedian: number | null;
+  }>;
+  rows: Array<{
+    studentId: string;
+    displayName: string;
+    sortOrder: number;
+    active: boolean;
+    combinedFinal: number | null;
+    perMarkSet: Array<{
+      markSetId: string;
+      code: string;
+      description: string;
+      weight: number;
+      valid: boolean;
+      finalMark: number | null;
+    }>;
+  }>;
+  topBottom: {
+    top: Array<{ studentId: string; displayName: string; combinedFinal: number | null }>;
+    bottom: Array<{ studentId: string; displayName: string; combinedFinal: number | null }>;
+  };
+};
+
+export function renderCombinedAnalysisReportHtml(model: CombinedAnalysisReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const markSetHeaders = model.markSets
+    .map((ms) => `<th class="num">${escapeHtml(ms.code)}</th>`)
+    .join("");
+  const studentRows = model.rows
+    .map((r) => {
+      const perMap = new Map(
+        (r.perMarkSet ?? []).map((x) => [x.markSetId, x.finalMark] as const)
+      );
+      const perCells = model.markSets
+        .map((ms) => {
+          const v = perMap.get(ms.id);
+          return `<td class="num">${v == null ? "" : escapeHtml(v.toFixed(1))}</td>`;
+        })
+        .join("");
+      return `<tr>
+        <td class="left">${escapeHtml(r.displayName)}</td>
+        <td class="num">${r.combinedFinal == null ? "" : escapeHtml(r.combinedFinal.toFixed(1))}</td>
+        ${perCells}
+      </tr>`;
+    })
+    .join("");
+  const perMarkSetRows = model.perMarkSet
+    .map(
+      (ms) => `<tr>
+      <td class="left">${escapeHtml(ms.code)}</td>
+      <td class="left">${escapeHtml(ms.description)}</td>
+      <td class="num">${ms.weight.toFixed(1)}</td>
+      <td class="num">${ms.finalMarkCount}</td>
+      <td class="num">${ms.classAverage == null ? "" : ms.classAverage.toFixed(1)}</td>
+      <td class="num">${ms.classMedian == null ? "" : ms.classMedian.toFixed(1)}</td>
+    </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4 landscape; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      .cards { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)); gap: 8px; margin: 8px 0 10px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+      .break { page-break-before: always; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Combined Analytics</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Sets:</strong> ${escapeHtml(
+            model.markSets.map((m) => `${m.code}(${m.weight.toFixed(1)})`).join(", ")
+          )}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><strong>Class Avg:</strong> ${
+        model.kpis.classAverage == null ? "" : model.kpis.classAverage.toFixed(1)
+      }</div>
+      <div class="card"><strong>Class Median:</strong> ${
+        model.kpis.classMedian == null ? "" : model.kpis.classMedian.toFixed(1)
+      }</div>
+      <div class="card"><strong>Students:</strong> ${model.kpis.studentCount}</div>
+      <div class="card"><strong>Final Marks:</strong> ${model.kpis.finalMarkCount}</div>
+      <div class="card"><strong>No Combined Final:</strong> ${model.kpis.noCombinedFinalCount}</div>
+    </div>
+
+    <h2>Per Mark Set</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Code</th>
+          <th class="left">Description</th>
+          <th class="num">Weight</th>
+          <th class="num">Final Count</th>
+          <th class="num">Avg</th>
+          <th class="num">Median</th>
+        </tr>
+      </thead>
+      <tbody>${perMarkSetRows}</tbody>
+    </table>
+
+    <div class="break"></div>
+    <h2>Student Combined Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          <th class="num">Combined</th>
+          ${markSetHeaders}
+        </tr>
+      </thead>
+      <tbody>${studentRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
 export type StudentSummaryReportModel = {
   class: { id: string; name: string };
   markSet: { id: string; code: string; description: string };

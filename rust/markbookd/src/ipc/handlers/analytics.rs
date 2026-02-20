@@ -48,6 +48,166 @@ impl StudentScope {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CombinedMarkSetMeta {
+    id: String,
+    code: String,
+    description: String,
+    sort_order: i64,
+    weight: f64,
+    deleted_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ClassStudentRow {
+    id: String,
+    display_name: String,
+    sort_order: i64,
+    active: bool,
+    mask: String,
+}
+
+fn analytics_types_json() -> Vec<serde_json::Value> {
+    vec![
+        json!({ "bit": 0, "key": "summative", "label": "Summative" }),
+        json!({ "bit": 1, "key": "formative", "label": "Formative" }),
+        json!({ "bit": 2, "key": "diagnostic", "label": "Diagnostic" }),
+        json!({ "bit": 3, "key": "self", "label": "Self" }),
+        json!({ "bit": 4, "key": "peer", "label": "Peer" }),
+    ]
+}
+
+fn parse_mark_set_ids(req: &Request) -> Result<Vec<String>, serde_json::Value> {
+    let Some(raw) = req.params.get("markSetIds").and_then(|v| v.as_array()) else {
+        return Err(err(&req.id, "bad_params", "missing markSetIds", None));
+    };
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for v in raw {
+        let Some(id) = v.as_str() else {
+            return Err(err(
+                &req.id,
+                "bad_params",
+                "markSetIds must contain only strings",
+                None,
+            ));
+        };
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err(err(
+                &req.id,
+                "bad_params",
+                "markSetIds must not contain empty ids",
+                None,
+            ));
+        }
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            out.push(owned);
+        }
+    }
+    if out.is_empty() {
+        return Err(err(
+            &req.id,
+            "bad_params",
+            "markSetIds must contain at least one mark set id",
+            None,
+        ));
+    }
+    Ok(out)
+}
+
+fn load_class_students(conn: &Connection, class_id: &str) -> Result<Vec<ClassStudentRow>, calc::CalcError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, last_name, first_name, sort_order, active, COALESCE(mark_set_mask, 'TBA')
+             FROM students
+             WHERE class_id = ?
+             ORDER BY sort_order",
+        )
+        .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+    stmt.query_map([class_id], |r| {
+        let last: String = r.get(1)?;
+        let first: String = r.get(2)?;
+        Ok(ClassStudentRow {
+            id: r.get(0)?,
+            display_name: format!("{}, {}", last, first),
+            sort_order: r.get(3)?,
+            active: r.get::<_, i64>(4)? != 0,
+            mask: r.get(5)?,
+        })
+    })
+    .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))
+}
+
+fn load_mark_sets_for_class(
+    conn: &Connection,
+    class_id: &str,
+    mark_set_ids: Option<&[String]>,
+) -> Result<Vec<CombinedMarkSetMeta>, calc::CalcError> {
+    let mut out = Vec::new();
+    if let Some(ids) = mark_set_ids {
+        let placeholders = std::iter::repeat("?")
+            .take(ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, code, description, sort_order, weight, deleted_at
+             FROM mark_sets
+             WHERE class_id = ? AND id IN ({})
+             ORDER BY sort_order",
+            placeholders
+        );
+        let mut values: Vec<Value> = Vec::with_capacity(ids.len() + 1);
+        values.push(Value::Text(class_id.to_string()));
+        for id in ids {
+            values.push(Value::Text(id.clone()));
+        }
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+        let rows = stmt
+            .query_map(params_from_iter(values), |r| {
+                Ok(CombinedMarkSetMeta {
+                    id: r.get(0)?,
+                    code: r.get(1)?,
+                    description: r.get(2)?,
+                    sort_order: r.get(3)?,
+                    weight: r.get::<_, f64>(4).unwrap_or(0.0),
+                    deleted_at: r.get(5)?,
+                })
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+        out.extend(rows);
+    } else {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, code, description, sort_order, weight, deleted_at
+                 FROM mark_sets
+                 WHERE class_id = ? AND deleted_at IS NULL
+                 ORDER BY sort_order",
+            )
+            .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+        let rows = stmt
+            .query_map([class_id], |r| {
+                Ok(CombinedMarkSetMeta {
+                    id: r.get(0)?,
+                    code: r.get(1)?,
+                    description: r.get(2)?,
+                    sort_order: r.get(3)?,
+                    weight: r.get::<_, f64>(4).unwrap_or(0.0),
+                    deleted_at: r.get(5)?,
+                })
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            .map_err(|e| calc::CalcError::new("db_query_failed", e.to_string()))?;
+        out.extend(rows);
+    }
+    Ok(out)
+}
+
 fn parse_student_scope(req: &Request) -> Result<StudentScope, serde_json::Value> {
     match req
         .params
@@ -169,6 +329,335 @@ fn apply_scope(
     summary.per_student.clone()
 }
 
+fn combined_distribution_bins(rows: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let bins = vec![
+        ("0-49", 0.0_f64, 49.9_f64),
+        ("50-59", 50.0_f64, 59.9_f64),
+        ("60-69", 60.0_f64, 69.9_f64),
+        ("70-79", 70.0_f64, 79.9_f64),
+        ("80-89", 80.0_f64, 89.9_f64),
+        ("90-100", 90.0_f64, 100.0_f64),
+    ];
+    bins.iter()
+        .map(|(label, min, max)| {
+            let count = rows
+                .iter()
+                .filter_map(|r| r.get("combinedFinal").and_then(|v| v.as_f64()))
+                .filter(|v| *v >= *min && *v <= *max)
+                .count();
+            json!({
+                "label": label,
+                "min": min,
+                "max": max,
+                "count": count
+            })
+        })
+        .collect::<Vec<_>>()
+}
+
+fn selected_mark_set_validity(
+    student: &ClassStudentRow,
+    mark_sets: &[CombinedMarkSetMeta],
+) -> HashMap<String, bool> {
+    let mut out = HashMap::new();
+    for ms in mark_sets {
+        out.insert(
+            ms.id.clone(),
+            calc::is_valid_kid(student.active, &student.mask, ms.sort_order),
+        );
+    }
+    out
+}
+
+fn combined_student_is_in_scope(
+    student: &ClassStudentRow,
+    mark_sets: &[CombinedMarkSetMeta],
+    scope: StudentScope,
+) -> bool {
+    match scope {
+        StudentScope::All => true,
+        StudentScope::Active => student.active,
+        StudentScope::Valid => {
+            mark_sets
+                .iter()
+                .any(|ms| calc::is_valid_kid(student.active, &student.mask, ms.sort_order))
+        }
+    }
+}
+
+fn normalize_mark_set_selection(
+    req_id: &str,
+    selected_ids: &[String],
+    mark_sets: &[CombinedMarkSetMeta],
+) -> Result<(), serde_json::Value> {
+    if selected_ids.len() != mark_sets.len() {
+        let found_ids: HashSet<&str> = mark_sets.iter().map(|m| m.id.as_str()).collect();
+        let missing = selected_ids
+            .iter()
+            .filter(|id| !found_ids.contains(id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        return Err(err(
+            req_id,
+            "bad_params",
+            "markSetIds contains unknown mark set ids",
+            Some(json!({ "missingMarkSetIds": missing })),
+        ));
+    }
+    let deleted = mark_sets
+        .iter()
+        .filter_map(|m| {
+            if m.deleted_at.is_some() {
+                Some(json!({ "id": m.id, "code": m.code }))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if !deleted.is_empty() {
+        return Err(err(
+            req_id,
+            "bad_params",
+            "markSetIds must not include deleted mark sets",
+            Some(json!({ "deletedMarkSets": deleted })),
+        ));
+    }
+    Ok(())
+}
+
+fn combined_open_value(
+    conn: &Connection,
+    req_id: &str,
+    class_id: &str,
+    mark_set_ids: &[String],
+    filters: &calc::SummaryFilters,
+    student_scope: StudentScope,
+) -> Result<serde_json::Value, serde_json::Value> {
+    let mark_sets = load_mark_sets_for_class(conn, class_id, Some(mark_set_ids))
+        .map_err(|e| err(req_id, &e.code, e.message, e.details.map(|d| json!(d))))?;
+    if let Err(e) = normalize_mark_set_selection(req_id, mark_set_ids, &mark_sets) {
+        return Err(e);
+    }
+
+    if mark_sets.is_empty() {
+        return Err(err(
+            req_id,
+            "bad_params",
+            "markSetIds must contain at least one mark set id",
+            None,
+        ));
+    }
+
+    let class_name: String = conn
+        .query_row("SELECT name FROM classes WHERE id = ?", [class_id], |r| r.get(0))
+        .optional()
+        .map_err(|e| err(req_id, "db_query_failed", e.to_string(), None))?
+        .ok_or_else(|| err(req_id, "not_found", "class not found", None))?;
+
+    let students = load_class_students(conn, class_id)
+        .map_err(|e| err(req_id, &e.code, e.message, e.details.map(|d| json!(d))))?;
+
+    let mut summaries_by_mark_set: HashMap<String, calc::SummaryModel> = HashMap::new();
+    for ms in &mark_sets {
+        let summary = calc::compute_mark_set_summary(
+            &calc_context(conn, class_id, ms.id.as_str()),
+            filters,
+        )
+        .map_err(|e| err(req_id, &e.code, e.message, e.details.map(|d| json!(d))))?;
+        summaries_by_mark_set.insert(ms.id.clone(), summary);
+    }
+
+    let mut student_final_by_mark_set: HashMap<String, HashMap<String, Option<f64>>> = HashMap::new();
+    for (mark_set_id, summary) in &summaries_by_mark_set {
+        let mut map = HashMap::new();
+        for s in &summary.per_student {
+            map.insert(s.student_id.clone(), s.final_mark);
+        }
+        student_final_by_mark_set.insert(mark_set_id.clone(), map);
+    }
+
+    let mut rows = Vec::new();
+    let mut fallback_used_count = 0usize;
+    for s in &students {
+        if !combined_student_is_in_scope(s, &mark_sets, student_scope) {
+            continue;
+        }
+        let validity = selected_mark_set_validity(s, &mark_sets);
+        let mut per_set = Vec::new();
+        let mut weighted_sum = 0.0_f64;
+        let mut weighted_denom = 0.0_f64;
+        let mut equal_vals = Vec::new();
+
+        for ms in &mark_sets {
+            let valid = *validity.get(ms.id.as_str()).unwrap_or(&true);
+            let final_mark = if valid {
+                student_final_by_mark_set
+                    .get(ms.id.as_str())
+                    .and_then(|m| m.get(s.id.as_str()))
+                    .cloned()
+                    .unwrap_or(None)
+            } else {
+                None
+            };
+            if let Some(v) = final_mark {
+                equal_vals.push(v);
+                if ms.weight > 0.0 {
+                    weighted_sum += v * ms.weight;
+                    weighted_denom += ms.weight;
+                }
+            }
+            per_set.push(json!({
+                "markSetId": ms.id,
+                "code": ms.code,
+                "description": ms.description,
+                "weight": ms.weight,
+                "valid": valid,
+                "finalMark": final_mark
+            }));
+        }
+
+        let combined_final = if equal_vals.is_empty() {
+            None
+        } else if weighted_denom > 0.0 {
+            Some(calc::round_off_1_decimal(weighted_sum / weighted_denom))
+        } else {
+            fallback_used_count += 1;
+            Some(calc::round_off_1_decimal(
+                equal_vals.iter().sum::<f64>() / (equal_vals.len() as f64),
+            ))
+        };
+
+        rows.push(json!({
+            "studentId": s.id,
+            "displayName": s.display_name,
+            "sortOrder": s.sort_order,
+            "active": s.active,
+            "combinedFinal": combined_final,
+            "perMarkSet": per_set
+        }));
+    }
+
+    let mut combined_marks: Vec<f64> = rows
+        .iter()
+        .filter_map(|r| r.get("combinedFinal").and_then(|v| v.as_f64()))
+        .collect();
+    let final_mark_count = combined_marks.len();
+    let class_average = if combined_marks.is_empty() {
+        None
+    } else {
+        Some(calc::round_off_1_decimal(
+            combined_marks.iter().sum::<f64>() / (combined_marks.len() as f64),
+        ))
+    };
+    let class_median = median(combined_marks.as_mut_slice()).map(calc::round_off_1_decimal);
+    let no_final_mark_count = rows
+        .iter()
+        .filter(|r| r.get("combinedFinal").and_then(|v| v.as_f64()).is_none())
+        .count();
+
+    let mut ranked = rows
+        .iter()
+        .filter_map(|r| {
+            let mark = r.get("combinedFinal").and_then(|v| v.as_f64())?;
+            let sort_order = r.get("sortOrder").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
+            Some((mark, sort_order, r.clone()))
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.1.cmp(&b.1))
+    });
+    let top = ranked
+        .iter()
+        .take(5)
+        .map(|(_, _, row)| row.clone())
+        .collect::<Vec<_>>();
+    let bottom = ranked
+        .iter()
+        .rev()
+        .take(5)
+        .map(|(_, _, row)| row.clone())
+        .collect::<Vec<_>>();
+
+    let per_mark_set = mark_sets
+        .iter()
+        .map(|ms| {
+            let mut finals = rows
+                .iter()
+                .filter_map(|r| {
+                    let per = r.get("perMarkSet")?.as_array()?;
+                    let entry = per.iter().find(|e| {
+                        e.get("markSetId")
+                            .and_then(|v| v.as_str())
+                            .map(|id| id == ms.id.as_str())
+                            .unwrap_or(false)
+                    })?;
+                    entry.get("finalMark").and_then(|v| v.as_f64())
+                })
+                .collect::<Vec<_>>();
+            let class_avg = if finals.is_empty() {
+                None
+            } else {
+                Some(calc::round_off_1_decimal(
+                    finals.iter().sum::<f64>() / (finals.len() as f64),
+                ))
+            };
+            let class_median = median(finals.as_mut_slice()).map(calc::round_off_1_decimal);
+            json!({
+                "markSetId": ms.id,
+                "code": ms.code,
+                "description": ms.description,
+                "weight": ms.weight,
+                "finalMarkCount": finals.len(),
+                "classAverage": class_avg,
+                "classMedian": class_median
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mark_sets_json = mark_sets
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "code": m.code,
+                "description": m.description,
+                "sortOrder": m.sort_order,
+                "weight": m.weight
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(json!({
+        "class": { "id": class_id, "name": class_name },
+        "markSets": mark_sets_json,
+        "filters": filters,
+        "studentScope": student_scope.as_str(),
+        "settingsApplied": {
+            "combineMethod": "weighted_markset",
+            "fallbackUsedCount": fallback_used_count
+        },
+        "kpis": {
+            "classAverage": class_average,
+            "classMedian": class_median,
+            "studentCount": rows.len(),
+            "finalMarkCount": final_mark_count,
+            "noCombinedFinalCount": no_final_mark_count
+        },
+        "distributions": {
+            "bins": combined_distribution_bins(&rows),
+            "noCombinedFinalCount": no_final_mark_count
+        },
+        "perMarkSet": per_mark_set,
+        "rows": rows,
+        "topBottom": {
+            "top": top,
+            "bottom": bottom
+        }
+    }))
+}
+
 fn handle_analytics_filters_options(state: &mut AppState, req: &Request) -> serde_json::Value {
     let conn = match db_conn(state, req) {
         Ok(v) => v,
@@ -222,16 +711,116 @@ fn handle_analytics_filters_options(state: &mut AppState, req: &Request) -> serd
         json!({
             "terms": terms,
             "categories": categories,
-            "types": [
-                { "bit": 0, "key": "summative", "label": "Summative" },
-                { "bit": 1, "key": "formative", "label": "Formative" },
-                { "bit": 2, "key": "diagnostic", "label": "Diagnostic" },
-                { "bit": 3, "key": "self", "label": "Self" },
-                { "bit": 4, "key": "peer", "label": "Peer" }
-            ],
+            "types": analytics_types_json(),
             "studentScopes": ["all", "active", "valid"]
         }),
     )
+}
+
+fn handle_analytics_combined_options(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let mark_sets = match load_mark_sets_for_class(conn, &class_id, None) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+
+    let mut stmt = match conn.prepare(
+        "SELECT DISTINCT a.term, a.category_name
+         FROM assessments a
+         JOIN mark_sets ms ON ms.id = a.mark_set_id
+         WHERE ms.class_id = ? AND ms.deleted_at IS NULL
+         ORDER BY a.term, a.category_name",
+    ) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let rows = match stmt.query_map([&class_id], |r| {
+        let term: Option<i64> = r.get(0)?;
+        let category_name: Option<String> = r.get(1)?;
+        Ok((term, category_name))
+    }) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let mut terms_set: HashSet<i64> = HashSet::new();
+    let mut categories_set: HashSet<String> = HashSet::new();
+    for (term, category_name) in rows.flatten() {
+        if let Some(t) = term {
+            terms_set.insert(t);
+        }
+        if let Some(cat) = category_name {
+            let c = cat.trim();
+            if !c.is_empty() {
+                categories_set.insert(c.to_string());
+            }
+        }
+    }
+    let mut terms: Vec<i64> = terms_set.into_iter().collect();
+    terms.sort_unstable();
+    let mut categories: Vec<String> = categories_set.into_iter().collect();
+    categories.sort();
+
+    let mark_sets_json = mark_sets
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "code": m.code,
+                "description": m.description,
+                "sortOrder": m.sort_order,
+                "weight": m.weight,
+                "deletedAt": m.deleted_at
+            })
+        })
+        .collect::<Vec<_>>();
+
+    ok(
+        &req.id,
+        json!({
+            "markSets": mark_sets_json,
+            "terms": terms,
+            "categories": categories,
+            "types": analytics_types_json(),
+            "studentScopes": ["all", "active", "valid"]
+        }),
+    )
+}
+
+fn handle_analytics_combined_open(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let mark_set_ids = match parse_mark_set_ids(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let filters = match parse_filters(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    match combined_open_value(conn, &req.id, &class_id, &mark_set_ids, &filters, student_scope) {
+        Ok(v) => ok(&req.id, v),
+        Err(e) => e,
+    }
 }
 
 fn handle_analytics_class_open(state: &mut AppState, req: &Request) -> serde_json::Value {
@@ -564,6 +1153,8 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "analytics.class.open" => Some(handle_analytics_class_open(state, req)),
         "analytics.student.open" => Some(handle_analytics_student_open(state, req)),
         "analytics.filters.options" => Some(handle_analytics_filters_options(state, req)),
+        "analytics.combined.options" => Some(handle_analytics_combined_options(state, req)),
+        "analytics.combined.open" => Some(handle_analytics_combined_open(state, req)),
         _ => None,
     }
 }

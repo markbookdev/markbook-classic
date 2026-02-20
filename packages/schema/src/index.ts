@@ -869,6 +869,104 @@ export const AnalyticsStudentOpenResultSchema = z.object({
     .optional()
 });
 
+const AnalyticsCombinedMarkSetSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  description: z.string(),
+  sortOrder: z.number(),
+  weight: z.number()
+});
+
+const AnalyticsCombinedRowSchema = z.object({
+  studentId: z.string(),
+  displayName: z.string(),
+  sortOrder: z.number(),
+  active: z.boolean(),
+  combinedFinal: z.number().nullable(),
+  perMarkSet: z.array(
+    z.object({
+      markSetId: z.string(),
+      code: z.string(),
+      description: z.string(),
+      weight: z.number(),
+      valid: z.boolean(),
+      finalMark: z.number().nullable()
+    })
+  )
+});
+
+export const AnalyticsCombinedOptionsResultSchema = z.object({
+  markSets: z.array(
+    AnalyticsCombinedMarkSetSchema.extend({
+      deletedAt: z.string().nullable().optional()
+    })
+  ),
+  terms: z.array(z.number()),
+  categories: z.array(z.string()),
+  types: z.array(
+    z.object({
+      bit: z.number(),
+      key: z.string(),
+      label: z.string()
+    })
+  ),
+  studentScopes: z.array(AnalyticsStudentScopeSchema)
+});
+
+export const AnalyticsCombinedOpenResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSets: z.array(AnalyticsCombinedMarkSetSchema),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  studentScope: AnalyticsStudentScopeSchema,
+  settingsApplied: z
+    .object({
+      combineMethod: z.string(),
+      fallbackUsedCount: z.number()
+    })
+    .optional(),
+  kpis: z.object({
+    classAverage: z.number().nullable(),
+    classMedian: z.number().nullable(),
+    studentCount: z.number(),
+    finalMarkCount: z.number(),
+    noCombinedFinalCount: z.number()
+  }),
+  distributions: z.object({
+    bins: z.array(
+      z.object({
+        label: z.string(),
+        min: z.number(),
+        max: z.number(),
+        count: z.number()
+      })
+    ),
+    noCombinedFinalCount: z.number()
+  }),
+  perMarkSet: z.array(
+    z.object({
+      markSetId: z.string(),
+      code: z.string(),
+      description: z.string(),
+      weight: z.number(),
+      finalMarkCount: z.number(),
+      classAverage: z.number().nullable(),
+      classMedian: z.number().nullable()
+    })
+  ),
+  rows: z.array(AnalyticsCombinedRowSchema),
+  topBottom: z.object({
+    top: z.array(AnalyticsCombinedRowSchema),
+    bottom: z.array(AnalyticsCombinedRowSchema)
+  })
+});
+
 export const ReportsMarkSetSummaryModelResultSchema = CalcMarkSetSummaryResultSchema;
 
 export const CalcConfigGetResultSchema = z.object({
@@ -1044,6 +1142,45 @@ export const CommentsBanksExportBnkResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const CommentsTransferPreviewResultSchema = z.object({
+  counts: z.object({
+    sourceRows: z.number(),
+    targetRows: z.number(),
+    matched: z.number(),
+    unmatchedSource: z.number(),
+    unmatchedTarget: z.number(),
+    same: z.number(),
+    different: z.number(),
+    sourceOnly: z.number(),
+    targetOnly: z.number()
+  }),
+  rows: z.array(
+    z.object({
+      sourceStudentId: z.string().optional(),
+      targetStudentId: z.string().optional(),
+      sourceDisplayName: z.string().optional(),
+      targetDisplayName: z.string().optional(),
+      sourceRemark: z.string(),
+      targetRemark: z.string(),
+      status: z.enum(["same", "different", "source_only", "target_only", "unmatched"])
+    })
+  )
+});
+
+export const CommentsTransferApplyResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number(),
+  skipped: z.number(),
+  unchanged: z.number(),
+  warnings: z.array(z.record(z.string(), z.unknown())).optional()
+});
+
+export const CommentsTransferFloodFillResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number(),
+  skipped: z.number()
+});
+
 export const ReportsCategoryAnalysisModelResultSchema = z.object({
   class: z.object({
     id: z.string(),
@@ -1078,6 +1215,8 @@ export const ReportsCategoryAnalysisModelResultSchema = z.object({
   perAssessment: z.array(CalcPerAssessmentSchema),
   studentScope: z.enum(["all", "active", "valid"]).optional()
 });
+
+export const ReportsCombinedAnalysisModelResultSchema = AnalyticsCombinedOpenResultSchema;
 
 export const ReportsStudentSummaryModelResultSchema = z.object({
   class: z.object({

@@ -4,7 +4,7 @@ use crate::legacy;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, OptionalExtension};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -26,6 +26,25 @@ struct BasicStudent {
     display_name: String,
     sort_order: i64,
     active: bool,
+}
+
+#[derive(Debug, Clone)]
+struct StudentMatchRow {
+    id: String,
+    display_name: String,
+    sort_order: i64,
+    student_no: Option<String>,
+    last_name: String,
+    first_name: String,
+}
+
+#[derive(Debug, Clone)]
+struct CommentSetFitMeta {
+    set_id: String,
+    max_chars: usize,
+    fit_width: usize,
+    fit_lines: usize,
+    bank_short: Option<String>,
 }
 
 fn get_required_str(params: &serde_json::Value, key: &str) -> Result<String, HandlerErr> {
@@ -91,6 +110,277 @@ fn mark_set_exists(
         message: e.to_string(),
         details: None,
     })
+}
+
+fn list_student_match_rows(
+    conn: &Connection,
+    class_id: &str,
+) -> Result<Vec<StudentMatchRow>, HandlerErr> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, last_name, first_name, sort_order, student_no
+             FROM students
+             WHERE class_id = ?
+             ORDER BY sort_order",
+        )
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    stmt.query_map([class_id], |r| {
+        let last_name: String = r.get(1)?;
+        let first_name: String = r.get(2)?;
+        Ok(StudentMatchRow {
+            id: r.get(0)?,
+            display_name: format!("{}, {}", last_name, first_name),
+            sort_order: r.get(3)?,
+            student_no: r.get(4)?,
+            last_name,
+            first_name,
+        })
+    })
+    .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+    .map_err(|e| HandlerErr {
+        code: "db_query_failed",
+        message: e.to_string(),
+        details: None,
+    })
+}
+
+fn load_comment_set_fit_meta(
+    conn: &Connection,
+    class_id: &str,
+    mark_set_id: &str,
+    set_number: i64,
+) -> Result<CommentSetFitMeta, HandlerErr> {
+    let row: Option<CommentSetFitMeta> = conn
+        .query_row(
+            "SELECT id, max_chars, fit_width, fit_lines, bank_short
+             FROM comment_set_indexes
+             WHERE class_id = ? AND mark_set_id = ? AND set_number = ?",
+            (class_id, mark_set_id, set_number),
+            |r| {
+                let max_chars: i64 = r.get(1)?;
+                let fit_width: i64 = r.get(2)?;
+                let fit_lines: i64 = r.get(3)?;
+                Ok(CommentSetFitMeta {
+                    set_id: r.get(0)?,
+                    max_chars: max_chars.max(0) as usize,
+                    fit_width: fit_width.max(0) as usize,
+                    fit_lines: fit_lines.max(0) as usize,
+                    bank_short: r.get(4)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    row.ok_or_else(|| HandlerErr {
+        code: "not_found",
+        message: "comment set not found".to_string(),
+        details: None,
+    })
+}
+
+fn load_remarks_for_set(
+    conn: &Connection,
+    set_id: &str,
+) -> Result<HashMap<String, String>, HandlerErr> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT student_id, remark
+             FROM comment_set_remarks
+             WHERE comment_set_index_id = ?",
+        )
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    let rows = stmt
+        .query_map([set_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| HandlerErr {
+            code: "db_query_failed",
+            message: e.to_string(),
+            details: None,
+        })?;
+    Ok(HashMap::from_iter(rows))
+}
+
+fn normalize_key(s: &str) -> String {
+    s.trim().to_ascii_lowercase()
+}
+
+fn normalized_name_key(last: &str, first: &str) -> String {
+    format!("{}|{}", normalize_key(last), normalize_key(first))
+}
+
+fn non_empty_trimmed(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
+}
+
+fn parse_fit_profile(profile: &str) -> Option<(usize, usize)> {
+    let mut nums = Vec::new();
+    let mut cur = String::new();
+    for ch in profile.chars() {
+        if ch.is_ascii_digit() {
+            cur.push(ch);
+        } else if !cur.is_empty() {
+            if let Ok(v) = cur.parse::<usize>() {
+                nums.push(v);
+            }
+            cur.clear();
+        }
+    }
+    if !cur.is_empty() {
+        if let Ok(v) = cur.parse::<usize>() {
+            nums.push(v);
+        }
+    }
+    if nums.len() >= 2 && nums[0] > 0 && nums[1] > 0 {
+        Some((nums[0], nums[1]))
+    } else {
+        None
+    }
+}
+
+fn resolve_effective_fit_constraints(
+    conn: &Connection,
+    meta: &CommentSetFitMeta,
+) -> Result<(usize, usize, usize), HandlerErr> {
+    let mut fit_width = meta.fit_width;
+    let mut fit_lines = meta.fit_lines;
+    if let Some(bank_short) = meta.bank_short.as_deref().and_then(non_empty_trimmed) {
+        let profile: Option<Option<String>> = conn
+            .query_row(
+                "SELECT fit_profile FROM comment_banks WHERE UPPER(short_name) = UPPER(?)",
+                [&bank_short],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| HandlerErr {
+                code: "db_query_failed",
+                message: e.to_string(),
+                details: None,
+            })?;
+        if let Some(Some(p)) = profile {
+            if let Some((w, l)) = parse_fit_profile(&p) {
+                fit_width = w;
+                fit_lines = l;
+            }
+        }
+    }
+    Ok((meta.max_chars.max(1), fit_width, fit_lines))
+}
+
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+fn apply_fit_constraints(
+    text: &str,
+    max_chars: usize,
+    fit_width: usize,
+    fit_lines: usize,
+) -> (String, bool) {
+    let mut out = text.trim().to_string();
+    let mut truncated = false;
+
+    if max_chars > 0 && out.chars().count() > max_chars {
+        out = truncate_chars(&out, max_chars);
+        truncated = true;
+    }
+
+    if fit_width > 0 && fit_lines > 0 {
+        let cap = fit_width.saturating_mul(fit_lines);
+        if cap > 0 && out.chars().count() > cap {
+            out = truncate_chars(&out, cap);
+            truncated = true;
+        }
+    }
+
+    (out, truncated)
+}
+
+fn choose_transfer_target(
+    source: &StudentMatchRow,
+    used_targets: &HashSet<String>,
+    by_student_no: &HashMap<String, Vec<String>>,
+    by_name: &HashMap<String, Vec<String>>,
+    mode: &str,
+) -> Option<String> {
+    let pick_unique = |candidates: Option<&Vec<String>>| -> Option<String> {
+        let values = candidates?;
+        let mut free = values
+            .iter()
+            .filter(|id| !used_targets.contains(id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        free.dedup();
+        if free.len() == 1 {
+            free.into_iter().next()
+        } else {
+            None
+        }
+    };
+
+    if mode == "student_no_then_name" {
+        if let Some(student_no) = source.student_no.as_deref().and_then(non_empty_trimmed) {
+            if let Some(id) = pick_unique(by_student_no.get(normalize_key(&student_no).as_str())) {
+                return Some(id);
+            }
+        }
+    }
+
+    let name_key = normalized_name_key(&source.last_name, &source.first_name);
+    pick_unique(by_name.get(name_key.as_str()))
+}
+
+fn transfer_text_by_policy(
+    source: &str,
+    target: &str,
+    policy: &str,
+    separator: &str,
+) -> Option<String> {
+    let s = source.trim();
+    let t = target.trim();
+    match policy {
+        "replace" => Some(s.to_string()),
+        "append" => {
+            if s.is_empty() {
+                None
+            } else if t.is_empty() {
+                Some(s.to_string())
+            } else {
+                Some(format!("{t}{separator}{s}"))
+            }
+        }
+        "fill_blank" => {
+            if t.is_empty() && !s.is_empty() {
+                Some(s.to_string())
+            } else {
+                None
+            }
+        }
+        "source_if_longer" => {
+            if s.chars().count() > t.chars().count() {
+                Some(s.to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 fn comments_sets_list(
@@ -629,6 +919,551 @@ fn comments_remarks_upsert_one(
     }
 
     Ok(json!({ "ok": true }))
+}
+
+fn parse_student_match_mode(params: &serde_json::Value) -> Result<String, HandlerErr> {
+    let mode = params
+        .get("studentMatchMode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("student_no_then_name")
+        .trim()
+        .to_ascii_lowercase();
+    if mode == "student_no_then_name" || mode == "name_only" {
+        Ok(mode)
+    } else {
+        Err(HandlerErr {
+            code: "bad_params",
+            message: "studentMatchMode must be student_no_then_name or name_only".to_string(),
+            details: None,
+        })
+    }
+}
+
+fn parse_transfer_policy(params: &serde_json::Value) -> Result<String, HandlerErr> {
+    let policy = params
+        .get("policy")
+        .and_then(|v| v.as_str())
+        .unwrap_or("fill_blank")
+        .trim()
+        .to_ascii_lowercase();
+    if ["replace", "append", "fill_blank", "source_if_longer"]
+        .contains(&policy.as_str())
+    {
+        Ok(policy)
+    } else {
+        Err(HandlerErr {
+            code: "bad_params",
+            message: "policy must be replace|append|fill_blank|source_if_longer".to_string(),
+            details: None,
+        })
+    }
+}
+
+fn parse_transfer_scope(
+    params: &serde_json::Value,
+) -> Result<(&'static str, HashSet<String>), HandlerErr> {
+    let scope = params
+        .get("targetScope")
+        .and_then(|v| v.as_str())
+        .unwrap_or("all_matched")
+        .trim()
+        .to_ascii_lowercase();
+    let mut selected = HashSet::new();
+    if scope == "selected_target_students" {
+        let Some(arr) = params
+            .get("selectedTargetStudentIds")
+            .and_then(|v| v.as_array())
+        else {
+            return Err(HandlerErr {
+                code: "bad_params",
+                message:
+                    "selectedTargetStudentIds must be provided for targetScope=selected_target_students"
+                        .to_string(),
+                details: None,
+            });
+        };
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                if !s.trim().is_empty() {
+                    selected.insert(s.trim().to_string());
+                }
+            }
+        }
+        Ok(("selected_target_students", selected))
+    } else if scope == "all_matched" {
+        Ok(("all_matched", selected))
+    } else {
+        Err(HandlerErr {
+            code: "bad_params",
+            message: "targetScope must be all_matched or selected_target_students".to_string(),
+            details: None,
+        })
+    }
+}
+
+fn build_transfer_pairs(
+    source_students: &[StudentMatchRow],
+    target_students: &[StudentMatchRow],
+    match_mode: &str,
+) -> (Vec<(StudentMatchRow, Option<StudentMatchRow>)>, HashSet<String>) {
+    let mut by_student_no: HashMap<String, Vec<String>> = HashMap::new();
+    let mut by_name: HashMap<String, Vec<String>> = HashMap::new();
+    let mut target_by_id: HashMap<String, StudentMatchRow> = HashMap::new();
+    for t in target_students {
+        target_by_id.insert(t.id.clone(), t.clone());
+        if let Some(student_no) = t.student_no.as_deref().and_then(non_empty_trimmed) {
+            by_student_no
+                .entry(normalize_key(&student_no))
+                .or_default()
+                .push(t.id.clone());
+        }
+        by_name
+            .entry(normalized_name_key(&t.last_name, &t.first_name))
+            .or_default()
+            .push(t.id.clone());
+    }
+
+    let mut used_targets = HashSet::new();
+    let mut pairs = Vec::new();
+    for source in source_students {
+        let pick = choose_transfer_target(
+            source,
+            &used_targets,
+            &by_student_no,
+            &by_name,
+            match_mode,
+        );
+        let target = pick
+            .as_deref()
+            .and_then(|id| target_by_id.get(id))
+            .cloned();
+        if let Some(t) = target.as_ref() {
+            used_targets.insert(t.id.clone());
+        }
+        pairs.push((source.clone(), target));
+    }
+    (pairs, used_targets)
+}
+
+fn comments_transfer_preview(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
+    let source_class_id = get_required_str(params, "sourceClassId")?;
+    let source_mark_set_id = get_required_str(params, "sourceMarkSetId")?;
+    let source_set_number = params
+        .get("sourceSetNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing sourceSetNumber".to_string(),
+            details: None,
+        })?;
+    let target_class_id = get_required_str(params, "targetClassId")?;
+    let target_mark_set_id = get_required_str(params, "targetMarkSetId")?;
+    let target_set_number = params
+        .get("targetSetNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing targetSetNumber".to_string(),
+            details: None,
+        })?;
+    let match_mode = parse_student_match_mode(params)?;
+
+    if !mark_set_exists(conn, &source_class_id, &source_mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "source mark set not found".to_string(),
+            details: None,
+        });
+    }
+    if !mark_set_exists(conn, &target_class_id, &target_mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "target mark set not found".to_string(),
+            details: None,
+        });
+    }
+
+    let source_meta = load_comment_set_fit_meta(
+        conn,
+        &source_class_id,
+        &source_mark_set_id,
+        source_set_number,
+    )?;
+    let target_meta = load_comment_set_fit_meta(
+        conn,
+        &target_class_id,
+        &target_mark_set_id,
+        target_set_number,
+    )?;
+
+    let source_students = list_student_match_rows(conn, &source_class_id)?;
+    let target_students = list_student_match_rows(conn, &target_class_id)?;
+    let source_remarks = load_remarks_for_set(conn, &source_meta.set_id)?;
+    let target_remarks = load_remarks_for_set(conn, &target_meta.set_id)?;
+
+    let (pairs, used_targets) = build_transfer_pairs(&source_students, &target_students, &match_mode);
+    let mut matched = 0usize;
+    let mut same = 0usize;
+    let mut different = 0usize;
+    let mut rows = Vec::new();
+
+    for (source, target) in pairs {
+        let source_remark = source_remarks
+            .get(&source.id)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(target) = target {
+            matched += 1;
+            let target_remark = target_remarks
+                .get(&target.id)
+                .cloned()
+                .unwrap_or_default();
+            let status = if source_remark.trim() == target_remark.trim() {
+                same += 1;
+                "same"
+            } else {
+                different += 1;
+                "different"
+            };
+            rows.push(json!({
+                "sourceStudentId": source.id,
+                "targetStudentId": target.id,
+                "sourceDisplayName": source.display_name,
+                "targetDisplayName": target.display_name,
+                "sourceRemark": source_remark,
+                "targetRemark": target_remark,
+                "status": status
+            }));
+        } else {
+            rows.push(json!({
+                "sourceStudentId": source.id,
+                "sourceDisplayName": source.display_name,
+                "sourceRemark": source_remark,
+                "targetRemark": "",
+                "status": "source_only"
+            }));
+        }
+    }
+
+    let mut target_only = 0usize;
+    for target in &target_students {
+        if used_targets.contains(&target.id) {
+            continue;
+        }
+        target_only += 1;
+        rows.push(json!({
+            "targetStudentId": target.id,
+            "targetDisplayName": target.display_name,
+            "sourceRemark": "",
+            "targetRemark": target_remarks.get(&target.id).cloned().unwrap_or_default(),
+            "status": "target_only"
+        }));
+    }
+
+    let unmatched_source = source_students.len().saturating_sub(matched);
+    let unmatched_target = target_students.len().saturating_sub(matched);
+
+    Ok(json!({
+        "counts": {
+            "sourceRows": source_students.len(),
+            "targetRows": target_students.len(),
+            "matched": matched,
+            "unmatchedSource": unmatched_source,
+            "unmatchedTarget": unmatched_target,
+            "same": same,
+            "different": different,
+            "sourceOnly": unmatched_source,
+            "targetOnly": target_only
+        },
+        "rows": rows
+    }))
+}
+
+fn comments_transfer_apply(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
+    let source_class_id = get_required_str(params, "sourceClassId")?;
+    let source_mark_set_id = get_required_str(params, "sourceMarkSetId")?;
+    let source_set_number = params
+        .get("sourceSetNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing sourceSetNumber".to_string(),
+            details: None,
+        })?;
+    let target_class_id = get_required_str(params, "targetClassId")?;
+    let target_mark_set_id = get_required_str(params, "targetMarkSetId")?;
+    let target_set_number = params
+        .get("targetSetNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing targetSetNumber".to_string(),
+            details: None,
+        })?;
+    let match_mode = parse_student_match_mode(params)?;
+    let policy = parse_transfer_policy(params)?;
+    let separator = params
+        .get("separator")
+        .and_then(|v| v.as_str())
+        .unwrap_or(" ");
+    let (scope, selected_targets) = parse_transfer_scope(params)?;
+
+    if !mark_set_exists(conn, &source_class_id, &source_mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "source mark set not found".to_string(),
+            details: None,
+        });
+    }
+    if !mark_set_exists(conn, &target_class_id, &target_mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "target mark set not found".to_string(),
+            details: None,
+        });
+    }
+
+    let source_meta = load_comment_set_fit_meta(
+        conn,
+        &source_class_id,
+        &source_mark_set_id,
+        source_set_number,
+    )?;
+    let target_meta = load_comment_set_fit_meta(
+        conn,
+        &target_class_id,
+        &target_mark_set_id,
+        target_set_number,
+    )?;
+    let (max_chars, fit_width, fit_lines) = resolve_effective_fit_constraints(conn, &target_meta)?;
+
+    let source_students = list_student_match_rows(conn, &source_class_id)?;
+    let target_students = list_student_match_rows(conn, &target_class_id)?;
+    let source_remarks = load_remarks_for_set(conn, &source_meta.set_id)?;
+    let target_remarks = load_remarks_for_set(conn, &target_meta.set_id)?;
+    let (pairs, _used_targets) = build_transfer_pairs(&source_students, &target_students, &match_mode);
+
+    let tx = conn.unchecked_transaction().map_err(|e| HandlerErr {
+        code: "db_tx_failed",
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    let mut updated = 0usize;
+    let mut skipped = 0usize;
+    let mut unchanged = 0usize;
+    let mut warnings = Vec::new();
+
+    for (source, target) in pairs {
+        let Some(target) = target else {
+            skipped += 1;
+            continue;
+        };
+        if scope == "selected_target_students" && !selected_targets.contains(&target.id) {
+            skipped += 1;
+            continue;
+        }
+
+        let source_remark = source_remarks
+            .get(&source.id)
+            .cloned()
+            .unwrap_or_default();
+        let target_remark = target_remarks
+            .get(&target.id)
+            .cloned()
+            .unwrap_or_default();
+
+        let Some(next_text_raw) =
+            transfer_text_by_policy(&source_remark, &target_remark, &policy, separator)
+        else {
+            unchanged += 1;
+            continue;
+        };
+        let (next_text, truncated) =
+            apply_fit_constraints(&next_text_raw, max_chars, fit_width, fit_lines);
+
+        if next_text.trim() == target_remark.trim() {
+            unchanged += 1;
+            continue;
+        }
+
+        if next_text.trim().is_empty() {
+            tx.execute(
+                "DELETE FROM comment_set_remarks
+                 WHERE comment_set_index_id = ? AND student_id = ?",
+                (&target_meta.set_id, &target.id),
+            )
+            .map_err(|e| HandlerErr {
+                code: "db_delete_failed",
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_set_remarks" })),
+            })?;
+        } else {
+            let row_id = Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+                 VALUES(?, ?, ?, ?)
+                 ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+                   remark = excluded.remark",
+                (&row_id, &target_meta.set_id, &target.id, &next_text),
+            )
+            .map_err(|e| HandlerErr {
+                code: "db_insert_failed",
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_set_remarks" })),
+            })?;
+        }
+        if truncated {
+            warnings.push(json!({
+                "studentId": target.id,
+                "code": "fit_truncated",
+                "message": "remark truncated by fit/max length constraints"
+            }));
+        }
+        updated += 1;
+    }
+
+    tx.commit().map_err(|e| HandlerErr {
+        code: "db_commit_failed",
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    Ok(json!({
+        "ok": true,
+        "updated": updated,
+        "skipped": skipped,
+        "unchanged": unchanged,
+        "warnings": warnings
+    }))
+}
+
+fn comments_transfer_flood_fill(
+    conn: &Connection,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, HandlerErr> {
+    let class_id = get_required_str(params, "classId")?;
+    let mark_set_id = get_required_str(params, "markSetId")?;
+    let set_number = params
+        .get("setNumber")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing setNumber".to_string(),
+            details: None,
+        })?;
+    let source_student_id = get_required_str(params, "sourceStudentId")?;
+    let policy = parse_transfer_policy(params)?;
+    let separator = params
+        .get("separator")
+        .and_then(|v| v.as_str())
+        .unwrap_or(" ");
+    let target_student_ids = params
+        .get("targetStudentIds")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| HandlerErr {
+            code: "bad_params",
+            message: "missing targetStudentIds".to_string(),
+            details: None,
+        })?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+
+    if !mark_set_exists(conn, &class_id, &mark_set_id)? {
+        return Err(HandlerErr {
+            code: "not_found",
+            message: "mark set not found".to_string(),
+            details: None,
+        });
+    }
+
+    let meta = load_comment_set_fit_meta(conn, &class_id, &mark_set_id, set_number)?;
+    let (max_chars, fit_width, fit_lines) = resolve_effective_fit_constraints(conn, &meta)?;
+    let remarks = load_remarks_for_set(conn, &meta.set_id)?;
+    let source_remark = remarks
+        .get(&source_student_id)
+        .cloned()
+        .unwrap_or_default();
+
+    let students = list_student_match_rows(conn, &class_id)?;
+    let valid_targets = students
+        .into_iter()
+        .map(|s| s.id)
+        .collect::<HashSet<_>>();
+
+    let tx = conn.unchecked_transaction().map_err(|e| HandlerErr {
+        code: "db_tx_failed",
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    let mut updated = 0usize;
+    let mut skipped = 0usize;
+    for target_student_id in target_student_ids {
+        if target_student_id == source_student_id || !valid_targets.contains(&target_student_id) {
+            skipped += 1;
+            continue;
+        }
+        let target_remark = remarks
+            .get(&target_student_id)
+            .cloned()
+            .unwrap_or_default();
+        let Some(next_text_raw) =
+            transfer_text_by_policy(&source_remark, &target_remark, &policy, separator)
+        else {
+            skipped += 1;
+            continue;
+        };
+        let (next_text, _truncated) =
+            apply_fit_constraints(&next_text_raw, max_chars, fit_width, fit_lines);
+        if next_text.trim() == target_remark.trim() {
+            skipped += 1;
+            continue;
+        }
+        if next_text.trim().is_empty() {
+            tx.execute(
+                "DELETE FROM comment_set_remarks
+                 WHERE comment_set_index_id = ? AND student_id = ?",
+                (&meta.set_id, &target_student_id),
+            )
+            .map_err(|e| HandlerErr {
+                code: "db_delete_failed",
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_set_remarks" })),
+            })?;
+        } else {
+            let row_id = Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO comment_set_remarks(id, comment_set_index_id, student_id, remark)
+                 VALUES(?, ?, ?, ?)
+                 ON CONFLICT(comment_set_index_id, student_id) DO UPDATE SET
+                   remark = excluded.remark",
+                (&row_id, &meta.set_id, &target_student_id, &next_text),
+            )
+            .map_err(|e| HandlerErr {
+                code: "db_insert_failed",
+                message: e.to_string(),
+                details: Some(json!({ "table": "comment_set_remarks" })),
+            })?;
+        }
+        updated += 1;
+    }
+
+    tx.commit().map_err(|e| HandlerErr {
+        code: "db_commit_failed",
+        message: e.to_string(),
+        details: None,
+    })?;
+
+    Ok(json!({ "ok": true, "updated": updated, "skipped": skipped }))
 }
 
 fn comments_banks_list(conn: &Connection) -> Result<serde_json::Value, HandlerErr> {
@@ -1321,6 +2156,36 @@ fn handle_comments_banks_export_bnk(state: &mut AppState, req: &Request) -> serd
     }
 }
 
+fn handle_comments_transfer_preview(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    match comments_transfer_preview(conn, &req.params) {
+        Ok(v) => ok(&req.id, v),
+        Err(e) => e.response(&req.id),
+    }
+}
+
+fn handle_comments_transfer_apply(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    match comments_transfer_apply(conn, &req.params) {
+        Ok(v) => ok(&req.id, v),
+        Err(e) => e.response(&req.id),
+    }
+}
+
+fn handle_comments_transfer_flood_fill(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    match comments_transfer_flood_fill(conn, &req.params) {
+        Ok(v) => ok(&req.id, v),
+        Err(e) => e.response(&req.id),
+    }
+}
+
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
     match req.method.as_str() {
         "comments.sets.list" => Some(handle_comments_sets_list(state, req)),
@@ -1336,6 +2201,9 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "comments.banks.entryDelete" => Some(handle_comments_banks_entry_delete(state, req)),
         "comments.banks.importBnk" => Some(handle_comments_banks_import_bnk(state, req)),
         "comments.banks.exportBnk" => Some(handle_comments_banks_export_bnk(state, req)),
+        "comments.transfer.preview" => Some(handle_comments_transfer_preview(state, req)),
+        "comments.transfer.apply" => Some(handle_comments_transfer_apply(state, req)),
+        "comments.transfer.floodFill" => Some(handle_comments_transfer_flood_fill(state, req)),
         _ => None,
     }
 }

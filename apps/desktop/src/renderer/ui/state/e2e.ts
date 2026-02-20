@@ -6,6 +6,7 @@ import {
   renderAttendanceMonthlyReportHtml,
   renderClassListReportHtml,
   renderCategoryAnalysisReportHtml,
+  renderCombinedAnalysisReportHtml,
   renderLearningSkillsSummaryReportHtml,
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
@@ -115,6 +116,28 @@ t.exportStudentSummaryPdfToPath = async (
     ...(options?.studentScope ? { studentScope: options.studentScope } : {})
   });
   const html = renderStudentSummaryReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportCombinedAnalysisPdfToPath = async (
+  classId: string,
+  markSetIds: string[],
+  outPath: string,
+  options?: {
+    filters?: { term?: number | null; categoryName?: string | null; typesMask?: number | null };
+    studentScope?: "all" | "active" | "valid";
+  }
+) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.combinedAnalysisModel", {
+    classId,
+    markSetIds,
+    ...(options?.filters ? { filters: options.filters } : {}),
+    ...(options?.studentScope ? { studentScope: options.studentScope } : {})
+  });
+  const html = renderCombinedAnalysisReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
   return { ok: true };
 };
