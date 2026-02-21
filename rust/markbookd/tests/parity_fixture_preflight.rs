@@ -40,6 +40,19 @@ fn required_list(manifest: &Value, key: &str) -> Vec<String> {
         .collect()
 }
 
+fn duplicates(items: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut dup = std::collections::HashSet::new();
+    for item in items {
+        if !seen.insert(item.clone()) {
+            dup.insert(item.clone());
+        }
+    }
+    let mut out: Vec<String> = dup.into_iter().collect();
+    out.sort();
+    out
+}
+
 fn missing_files(base: &Path, rels: &[String]) -> Vec<String> {
     rels.iter()
         .filter(|rel| !base.join(rel).is_file())
@@ -118,7 +131,40 @@ fn parity_fixture_preflight() {
 
     let regression_required = required_list(&manifest, "regression");
     let strict_required = required_list(&manifest, "strict");
+    let strict_ready = manifest
+        .get("strictReady")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let checksums = checksum_map(&manifest);
+
+    let duplicate_regression = duplicates(&regression_required);
+    assert!(
+        duplicate_regression.is_empty(),
+        "duplicate entries in required.regression:\n{}",
+        duplicate_regression.join("\n")
+    );
+    let duplicate_strict = duplicates(&strict_required);
+    assert!(
+        duplicate_strict.is_empty(),
+        "duplicate entries in required.strict:\n{}",
+        duplicate_strict.join("\n")
+    );
+    if strict_ready {
+        assert!(
+            !strict_required.is_empty(),
+            "strictReady=true requires non-empty required.strict list"
+        );
+        let missing_strict_checksums: Vec<String> = strict_required
+            .iter()
+            .filter(|rel| !checksums.contains_key(rel.as_str()))
+            .cloned()
+            .collect();
+        assert!(
+            missing_strict_checksums.is_empty(),
+            "strictReady=true requires checksums for all required.strict paths:\n{}",
+            missing_strict_checksums.join("\n")
+        );
+    }
 
     let missing_regression = missing_files(&expected_dir, &regression_required);
     assert!(

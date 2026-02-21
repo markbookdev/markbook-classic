@@ -36,6 +36,10 @@ function main() {
   const outDir = path.join(appDir, "out");
   const binName = process.platform === "win32" ? "markbookd.exe" : "markbookd";
 
+  // Start from a clean staging output so repeated smoke runs do not trip over
+  // stale app bundles/symlinks from previous packaging attempts.
+  fs.rmSync(outDir, { recursive: true, force: true });
+
   console.log("smoke-packaged-dir: building (renderer + electron --dir)...");
   run("bun", ["run", "--cwd", appDir, "build"]);
 

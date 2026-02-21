@@ -1,21 +1,60 @@
 # Legacy-Truth Evidence Lane
 
-## Two-Lane Model
+## Two-lane model
 
-## Regression lane (always-on)
-- Purpose: detect drift quickly on every change.
-- Inputs: committed fixture behavior locks and expected files.
-- Gate: required on every merge.
+### Regression lane (always required)
+- Purpose: catch drift early on every PR.
+- Command: `bun run test:parity:regression`
+- Fixtures: `calc-behavior-locks.json`, `final-marks.json`
+- CI: always required.
 
-## Strict legacy-truth lane (conditional)
-- Purpose: assert exact match to fresh legacy outputs.
-- Inputs: freshly generated legacy exports placed in expected strict paths.
-- Gate: enabled as soon as fresh artifacts are available.
+### Strict truth lane (conditional until artifacts are ready)
+- Purpose: verify strict parity against fresh legacy outputs.
+- Command: `bun run test:parity:strict`
+- Readiness check: `bun run test:parity:truth` and `bun run test:parity:status:json`
+- CI: auto-required when manifest flips `strictReady` to `true`.
 
-## Operational Rules
-- Keep strict lane tests present in repo even when artifacts are missing.
-- Strict preflight must report exact missing files and expected paths.
-- Never weaken regression locks to mask true drift.
-- Strict CI enforcement is controlled by `fixtures/legacy/Sample25/expected/parity-manifest.json`:
-  - `strictReady: false` => strict lane optional/pending
-  - `strictReady: true` => strict lane required in CI (`quality-gates.yml`)
+## Strict-ready playbook
+
+1. Put fresh legacy files in these exact paths:
+   - `fixtures/legacy/Sample25/expected/fresh-final-marks.json`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT18D.Y25`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT28D.Y25`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT38D.Y25`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC18D.Y25`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC28D.Y25`
+   - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC38D.Y25`
+2. Generate SHA-256 checksums from repo root:
+   ```bash
+   shasum -a 256 \
+     fixtures/legacy/Sample25/expected/fresh-final-marks.json \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT18D.Y25 \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT28D.Y25 \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT38D.Y25 \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC18D.Y25 \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC28D.Y25 \
+     fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/SNC38D.Y25
+   ```
+3. Update `fixtures/legacy/Sample25/expected/parity-manifest.json`:
+   - add/update checksum entries under `checksums`
+   - set `strictReady` to `true`
+4. Verify preflight locally:
+   - `bun run test:parity:status`
+   - `bun run test:parity:truth`
+   - `bun run test:parity:strict`
+5. Commit fixtures + manifest together in one PR.
+
+## Machine-readable status contract
+
+- `bun run test:parity:status:json` emits manifest + lane readiness payload.
+- `bun run test:parity:truth` emits one JSON payload with:
+  - `mode: "ready" | "not-ready" | "checksum-mismatch" | "schema-mismatch"`
+  - `strictRequiredByManifest: boolean`
+  - `missing[]`
+  - `checksumMismatches[]`
+  - `suitesRan` and `suitesExitCode`
+
+## Rules
+- Keep strict tests committed even when strict artifacts are missing.
+- Never loosen regression-lock tests to hide drift.
+- Do not flip `strictReady` until all strict files and checksums are present.

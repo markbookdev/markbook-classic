@@ -60,9 +60,11 @@ function checksumMismatches(baseDir, relPaths, checksumMap) {
 function printHumanStatus(payload, expectedDir, manifestPath) {
   console.log("parity-status: Sample25 lanes");
   console.log(`- manifest: ${manifestPath}`);
+  console.log(`- status: ${payload.statusCode}`);
   console.log(`- regression required: ${payload.regression.requiredCount}`);
   console.log(`- strict required: ${payload.strict.requiredCount}`);
   console.log(`- strict configured: ${payload.strict.requiredByManifest ? "yes" : "no"}`);
+  console.log(`- strict truth status: ${payload.strictTruth.status}`);
 
   if (payload.regression.missing.length > 0) {
     console.error("parity-status: regression lane missing required files:");
@@ -123,9 +125,32 @@ function main() {
   const strictFilesReady = strictMissing.length === 0 && strictChecksumMismatches.length === 0;
   const strictReady = !strictRequiredByManifest || strictFilesReady;
   const overallReady = !staleSchemaVersion && regressionReady && strictReady;
+  let statusCode = "ready";
+  if (staleSchemaVersion) {
+    statusCode = "schema-mismatch";
+  } else if (
+    regressionChecksumMismatches.length > 0 ||
+    (strictRequiredByManifest && strictChecksumMismatches.length > 0)
+  ) {
+    statusCode = "checksum-mismatch";
+  } else if (!overallReady) {
+    statusCode = "not-ready";
+  }
+
+  // Strict-truth lane status is intentionally independent from strictReady/requiredByManifest.
+  // This gives an operator-readable "can we flip now?" signal at any time.
+  let strictTruthStatus = "ready";
+  if (staleSchemaVersion) {
+    strictTruthStatus = "schema-mismatch";
+  } else if (strictChecksumMismatches.length > 0) {
+    strictTruthStatus = "checksum-mismatch";
+  } else if (strictMissing.length > 0) {
+    strictTruthStatus = "not-ready";
+  }
 
   const payload = {
     mode: overallReady ? "ready" : "not-ready",
+    statusCode,
     manifestPath,
     manifest: {
       version: manifestVersion,
@@ -151,6 +176,11 @@ function main() {
       requiredCount: strictRequired.length,
       filesReady: strictFilesReady,
       ready: strictReady,
+      missing: strictMissing,
+      checksumMismatches: strictChecksumMismatches
+    },
+    strictTruth: {
+      status: strictTruthStatus,
       missing: strictMissing,
       checksumMismatches: strictChecksumMismatches
     }
