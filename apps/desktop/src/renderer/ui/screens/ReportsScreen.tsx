@@ -18,6 +18,7 @@ import {
   PlannerLessonsListResultSchema,
   PlannerUnitsListResultSchema,
   MarkSetOpenResultSchema,
+  SetupGetResultSchema,
   ReportsClassAssessmentDrilldownModelResultSchema,
   ReportsAttendanceMonthlyModelResultSchema,
   ReportsClassListModelResultSchema,
@@ -109,12 +110,21 @@ export function ReportsScreen(props: {
     new Date().toISOString().slice(0, 7)
   );
   const [learningSkillsTerm, setLearningSkillsTerm] = useState<number>(1);
+  const [reportDefaults, setReportDefaults] = useState<{
+    showFiltersInHeaderByDefault: boolean;
+    repeatHeadersByDefault: boolean;
+    defaultPageMargins: { topMm: number; rightMm: number; bottomMm: number; leftMm: number };
+  }>({
+    showFiltersInHeaderByDefault: true,
+    repeatHeadersByDefault: true,
+    defaultPageMargins: { topMm: 12, rightMm: 12, bottomMm: 12, leftMm: 12 }
+  });
 
   React.useEffect(() => {
     let cancelled = false;
     async function loadStudents() {
       try {
-        const [open, unitsRes, lessonsRes] = await Promise.all([
+        const [open, unitsRes, lessonsRes, setupRes] = await Promise.all([
           requestParsed(
             "markset.open",
             { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
@@ -129,7 +139,8 @@ export function ReportsScreen(props: {
             "planner.lessons.list",
             { classId: props.selectedClassId, includeArchived: false },
             PlannerLessonsListResultSchema
-          )
+          ),
+          requestParsed("setup.get", {}, SetupGetResultSchema)
         ]);
         if (cancelled) return;
         setStudents(open.students.map((s) => ({ id: s.id, displayName: s.displayName })));
@@ -156,6 +167,14 @@ export function ReportsScreen(props: {
           if (cur && open.students.some((s) => s.id === cur)) return cur;
           return open.students[0]?.id ?? null;
         });
+        setReportDefaults({
+          showFiltersInHeaderByDefault: setupRes.reports.showFiltersInHeaderByDefault,
+          repeatHeadersByDefault: setupRes.reports.repeatHeadersByDefault,
+          defaultPageMargins: setupRes.reports.defaultPageMargins
+        });
+        if (!props.initialContext) {
+          setStudentScope(setupRes.reports.defaultAnalyticsScope);
+        }
       } catch {
         if (cancelled) return;
         setStudents([]);
@@ -165,6 +184,11 @@ export function ReportsScreen(props: {
         setSelectedPlannerLessonId(null);
         setCategoryOptions([]);
         setSelectedStudentId(null);
+        setReportDefaults({
+          showFiltersInHeaderByDefault: true,
+          repeatHeadersByDefault: true,
+          defaultPageMargins: { topMm: 12, rightMm: 12, bottomMm: 12, leftMm: 12 }
+        });
       }
     }
     void loadStudents();
@@ -623,6 +647,12 @@ export function ReportsScreen(props: {
               {label}
             </label>
           ))}
+        </div>
+        <div style={{ color: "#666", fontSize: 12 }}>
+          Defaults: filters in header {reportDefaults.showFiltersInHeaderByDefault ? "on" : "off"}
+          , repeat headers {reportDefaults.repeatHeadersByDefault ? "on" : "off"}, margins{" "}
+          {reportDefaults.defaultPageMargins.topMm}/{reportDefaults.defaultPageMargins.rightMm}/
+          {reportDefaults.defaultPageMargins.bottomMm}/{reportDefaults.defaultPageMargins.leftMm} mm.
         </div>
       </div>
 

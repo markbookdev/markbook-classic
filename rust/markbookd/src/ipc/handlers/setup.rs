@@ -91,6 +91,9 @@ fn default_section(section: SetupSection) -> Value {
         }),
         SetupSection::Comments => json!({
             "defaultTransferPolicy": "fill_blank",
+            "defaultSetNumber": 1,
+            "defaultAppendSeparator": " ",
+            "enforceMaxCharsByDefault": true,
             "appendSeparator": " ",
             "enforceFit": true,
             "enforceMaxChars": true,
@@ -101,7 +104,9 @@ fn default_section(section: SetupSection) -> Value {
             "landscapeWideTables": true,
             "repeatHeaders": true,
             "showGeneratedAt": true,
-            "defaultMarginMm": 12
+            "defaultMarginMm": 12,
+            "defaultPaperSize": "letter",
+            "defaultOrientation": "portrait"
         }),
         SetupSection::Integrations => json!({
             "defaultSisProfile": "sis_roster_v1",
@@ -127,10 +132,18 @@ fn default_section(section: SetupSection) -> Value {
             "showGeneratedAt": true,
             "defaultStudentScope": "valid",
             "defaultAnalyticsScope": "valid",
-            "showFiltersInHeaderByDefault": true
+            "showFiltersInHeaderByDefault": true,
+            "repeatHeadersByDefault": true,
+            "defaultPageMargins": {
+                "topMm": 12,
+                "rightMm": 12,
+                "bottomMm": 12,
+                "leftMm": 12
+            }
         }),
         SetupSection::Security => json!({
             "passwordEnabled": false,
+            "requireWorkspacePassword": false,
             "passwordHint": null,
             "confirmDeletes": true,
             "autoLockMinutes": 0
@@ -294,12 +307,21 @@ fn merge_section_patch(
                     }
                     obj.insert(k.clone(), Value::String(p));
                 }
-                "appendSeparator" => {
-                    let s = parse_string_max(v, k, 8)?;
-                    obj.insert(k.clone(), Value::String(s));
+                "defaultSetNumber" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 1, 20)?));
                 }
-                "enforceFit" | "enforceMaxChars" => {
+                "appendSeparator" | "defaultAppendSeparator" => {
+                    let s = parse_string_max(v, k, 8)?;
+                    obj.insert("appendSeparator".to_string(), Value::String(s.clone()));
+                    obj.insert("defaultAppendSeparator".to_string(), Value::String(s));
+                }
+                "enforceFit" => {
                     obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                "enforceMaxChars" | "enforceMaxCharsByDefault" => {
+                    let b = parse_bool(v, k)?;
+                    obj.insert("enforceMaxChars".to_string(), Value::Bool(b));
+                    obj.insert("enforceMaxCharsByDefault".to_string(), Value::Bool(b));
                 }
                 "defaultMaxChars" => {
                     obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 80, 5000)?));
@@ -315,6 +337,24 @@ fn merge_section_patch(
                 }
                 "defaultMarginMm" => {
                     obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 5, 30)?));
+                }
+                "defaultPaperSize" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "letter" && s != "legal" && s != "a4" {
+                        return Err(
+                            "defaultPaperSize must be one of: letter, legal, a4".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
+                }
+                "defaultOrientation" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "portrait" && s != "landscape" {
+                        return Err(
+                            "defaultOrientation must be one of: portrait, landscape".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
                 }
                 _ => return Err(format!("unknown printer field: {}", k)),
             },
@@ -439,10 +479,64 @@ fn merge_section_patch(
                 "showFiltersInHeaderByDefault" => {
                     obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
                 }
+                "repeatHeadersByDefault" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                "defaultPageMargins" => {
+                    let Some(margins) = v.as_object() else {
+                        return Err("defaultPageMargins must be an object".into());
+                    };
+                    let top = parse_i64_range(
+                        margins
+                            .get("topMm")
+                            .ok_or_else(|| "defaultPageMargins.topMm is required".to_string())?,
+                        "defaultPageMargins.topMm",
+                        0,
+                        40,
+                    )?;
+                    let right = parse_i64_range(
+                        margins
+                            .get("rightMm")
+                            .ok_or_else(|| "defaultPageMargins.rightMm is required".to_string())?,
+                        "defaultPageMargins.rightMm",
+                        0,
+                        40,
+                    )?;
+                    let bottom = parse_i64_range(
+                        margins
+                            .get("bottomMm")
+                            .ok_or_else(|| "defaultPageMargins.bottomMm is required".to_string())?,
+                        "defaultPageMargins.bottomMm",
+                        0,
+                        40,
+                    )?;
+                    let left = parse_i64_range(
+                        margins
+                            .get("leftMm")
+                            .ok_or_else(|| "defaultPageMargins.leftMm is required".to_string())?,
+                        "defaultPageMargins.leftMm",
+                        0,
+                        40,
+                    )?;
+                    obj.insert(
+                        "defaultPageMargins".to_string(),
+                        json!({
+                            "topMm": top,
+                            "rightMm": right,
+                            "bottomMm": bottom,
+                            "leftMm": left
+                        }),
+                    );
+                }
                 _ => return Err(format!("unknown reports field: {}", k)),
             },
             SetupSection::Security => match k.as_str() {
-                "passwordEnabled" | "confirmDeletes" => {
+                "passwordEnabled" | "requireWorkspacePassword" => {
+                    let enabled = parse_bool(v, k)?;
+                    obj.insert("passwordEnabled".to_string(), Value::Bool(enabled));
+                    obj.insert("requireWorkspacePassword".to_string(), Value::Bool(enabled));
+                }
+                "confirmDeletes" => {
                     obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
                 }
                 "passwordHint" => {

@@ -33,6 +33,9 @@ type SetupState = {
   };
   comments: {
     defaultTransferPolicy: "replace" | "append" | "fill_blank" | "source_if_longer";
+    defaultSetNumber: number;
+    defaultAppendSeparator: string;
+    enforceMaxCharsByDefault: boolean;
     appendSeparator: string;
     enforceFit: boolean;
     enforceMaxChars: boolean;
@@ -44,6 +47,8 @@ type SetupState = {
     repeatHeaders: boolean;
     showGeneratedAt: boolean;
     defaultMarginMm: number;
+    defaultPaperSize: "letter" | "legal" | "a4";
+    defaultOrientation: "portrait" | "landscape";
   };
   integrations: {
     defaultSisProfile: "mb_exchange_v1" | "sis_roster_v1" | "sis_marks_v1";
@@ -70,9 +75,17 @@ type SetupState = {
     defaultStudentScope: "all" | "active" | "valid";
     defaultAnalyticsScope: "all" | "active" | "valid";
     showFiltersInHeaderByDefault: boolean;
+    repeatHeadersByDefault: boolean;
+    defaultPageMargins: {
+      topMm: number;
+      rightMm: number;
+      bottomMm: number;
+      leftMm: number;
+    };
   };
   security: {
     passwordEnabled: boolean;
+    requireWorkspacePassword: boolean;
     passwordHint: string | null;
     confirmDeletes: boolean;
     autoLockMinutes: number;
@@ -117,6 +130,9 @@ const DEFAULT_STATE: SetupState = {
   },
   comments: {
     defaultTransferPolicy: "fill_blank",
+    defaultSetNumber: 1,
+    defaultAppendSeparator: " ",
+    enforceMaxCharsByDefault: true,
     appendSeparator: " ",
     enforceFit: true,
     enforceMaxChars: true,
@@ -127,7 +143,9 @@ const DEFAULT_STATE: SetupState = {
     landscapeWideTables: true,
     repeatHeaders: true,
     showGeneratedAt: true,
-    defaultMarginMm: 12
+    defaultMarginMm: 12,
+    defaultPaperSize: "letter",
+    defaultOrientation: "portrait"
   },
   integrations: {
     defaultSisProfile: "sis_roster_v1",
@@ -153,10 +171,18 @@ const DEFAULT_STATE: SetupState = {
     showGeneratedAt: true,
     defaultStudentScope: "valid",
     defaultAnalyticsScope: "valid",
-    showFiltersInHeaderByDefault: true
+    showFiltersInHeaderByDefault: true,
+    repeatHeadersByDefault: true,
+    defaultPageMargins: {
+      topMm: 12,
+      rightMm: 12,
+      bottomMm: 12,
+      leftMm: 12
+    }
   },
   security: {
     passwordEnabled: false,
+    requireWorkspacePassword: false,
     passwordHint: null,
     confirmDeletes: true,
     autoLockMinutes: 0
@@ -217,6 +243,9 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
         },
         comments: {
           defaultTransferPolicy: res.comments.defaultTransferPolicy,
+          defaultSetNumber: res.comments.defaultSetNumber,
+          defaultAppendSeparator: res.comments.defaultAppendSeparator,
+          enforceMaxCharsByDefault: res.comments.enforceMaxCharsByDefault,
           appendSeparator: res.comments.appendSeparator,
           enforceFit: res.comments.enforceFit,
           enforceMaxChars: res.comments.enforceMaxChars,
@@ -227,7 +256,9 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           landscapeWideTables: res.printer.landscapeWideTables,
           repeatHeaders: res.printer.repeatHeaders,
           showGeneratedAt: res.printer.showGeneratedAt,
-          defaultMarginMm: res.printer.defaultMarginMm
+          defaultMarginMm: res.printer.defaultMarginMm,
+          defaultPaperSize: res.printer.defaultPaperSize,
+          defaultOrientation: res.printer.defaultOrientation
         },
         integrations: {
           defaultSisProfile: res.integrations.defaultSisProfile,
@@ -253,10 +284,13 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           showGeneratedAt: res.reports.showGeneratedAt,
           defaultStudentScope: res.reports.defaultStudentScope,
           defaultAnalyticsScope: res.reports.defaultAnalyticsScope,
-          showFiltersInHeaderByDefault: res.reports.showFiltersInHeaderByDefault
+          showFiltersInHeaderByDefault: res.reports.showFiltersInHeaderByDefault,
+          repeatHeadersByDefault: res.reports.repeatHeadersByDefault,
+          defaultPageMargins: res.reports.defaultPageMargins
         },
         security: {
           passwordEnabled: res.security.passwordEnabled,
+          requireWorkspacePassword: res.security.requireWorkspacePassword,
           passwordHint: res.security.passwordHint,
           confirmDeletes: res.security.confirmDeletes,
           autoLockMinutes: res.security.autoLockMinutes
@@ -770,15 +804,37 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
             </select>
           </label>
           <label style={{ display: "block", marginBottom: 8 }}>
+            Default set number
+            <input
+              data-testid="setup-comments-default-set-number"
+              value={String(setup.comments.defaultSetNumber)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  comments: {
+                    ...s.comments,
+                    defaultSetNumber: parseIntOr(s.comments.defaultSetNumber, e.currentTarget.value, 1, 20)
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
             Append separator
             <input
-              value={setup.comments.appendSeparator}
+              data-testid="setup-comments-append-separator"
+              value={setup.comments.defaultAppendSeparator}
               onChange={(e) =>
                 {
                   const value = e.currentTarget.value;
                   setSetup((s) => ({
                     ...s,
-                    comments: { ...s.comments, appendSeparator: value }
+                    comments: {
+                      ...s.comments,
+                      defaultAppendSeparator: value,
+                      appendSeparator: value
+                    }
                   }));
                 }
               }
@@ -803,14 +859,19 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           </label>
           <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
             <input
+              data-testid="setup-comments-enforce-max-default"
               type="checkbox"
-              checked={setup.comments.enforceMaxChars}
+              checked={setup.comments.enforceMaxCharsByDefault}
               onChange={(e) =>
                 {
                   const checked = e.currentTarget.checked;
                   setSetup((s) => ({
                     ...s,
-                    comments: { ...s.comments, enforceMaxChars: checked }
+                    comments: {
+                      ...s.comments,
+                      enforceMaxCharsByDefault: checked,
+                      enforceMaxChars: checked
+                    }
                   }));
                 }
               }
@@ -924,6 +985,44 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
               style={{ display: "block", marginTop: 4, width: 100 }}
             />
           </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default paper size
+            <select
+              data-testid="setup-printer-paper-size"
+              value={setup.printer.defaultPaperSize}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["printer"]["defaultPaperSize"];
+                setSetup((s) => ({
+                  ...s,
+                  printer: { ...s.printer, defaultPaperSize: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="letter">letter</option>
+              <option value="legal">legal</option>
+              <option value="a4">a4</option>
+            </select>
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default orientation
+            <select
+              data-testid="setup-printer-orientation"
+              value={setup.printer.defaultOrientation}
+              onChange={(e) => {
+                const value =
+                  e.currentTarget.value as SetupState["printer"]["defaultOrientation"];
+                setSetup((s) => ({
+                  ...s,
+                  printer: { ...s.printer, defaultOrientation: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="portrait">portrait</option>
+              <option value="landscape">landscape</option>
+            </select>
+          </label>
           <button data-testid="setup-save-printer" onClick={() => void saveSection("printer")} disabled={saving || loading}>
             Save Printer
           </button>
@@ -933,19 +1032,24 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Security Defaults</div>
           <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
             <input
+              data-testid="setup-security-require-workspace-password"
               type="checkbox"
-              checked={setup.security.passwordEnabled}
+              checked={setup.security.requireWorkspacePassword}
               onChange={(e) =>
                 {
                   const checked = e.currentTarget.checked;
                   setSetup((s) => ({
                     ...s,
-                    security: { ...s.security, passwordEnabled: checked }
+                    security: {
+                      ...s.security,
+                      requireWorkspacePassword: checked,
+                      passwordEnabled: checked
+                    }
                   }));
                 }
               }
             />
-            Enable password prompt
+            Require workspace password
           </label>
           <label style={{ display: "block", marginBottom: 8 }}>
             Password hint (optional)
@@ -1370,6 +1474,103 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
             />
             Show filter metadata in report headers
           </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              data-testid="setup-reports-repeat-headers"
+              type="checkbox"
+              checked={setup.reports.repeatHeadersByDefault}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, repeatHeadersByDefault: checked }
+                }));
+              }}
+            />
+            Repeat table headers by default
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <label>
+              Margin top (mm)
+              <input
+                data-testid="setup-reports-margin-top"
+                value={String(setup.reports.defaultPageMargins.topMm)}
+                onChange={(e) =>
+                  setSetup((s) => ({
+                    ...s,
+                    reports: {
+                      ...s.reports,
+                      defaultPageMargins: {
+                        ...s.reports.defaultPageMargins,
+                        topMm: parseIntOr(s.reports.defaultPageMargins.topMm, e.currentTarget.value, 0, 40)
+                      }
+                    }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%" }}
+              />
+            </label>
+            <label>
+              Margin right (mm)
+              <input
+                data-testid="setup-reports-margin-right"
+                value={String(setup.reports.defaultPageMargins.rightMm)}
+                onChange={(e) =>
+                  setSetup((s) => ({
+                    ...s,
+                    reports: {
+                      ...s.reports,
+                      defaultPageMargins: {
+                        ...s.reports.defaultPageMargins,
+                        rightMm: parseIntOr(s.reports.defaultPageMargins.rightMm, e.currentTarget.value, 0, 40)
+                      }
+                    }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%" }}
+              />
+            </label>
+            <label>
+              Margin bottom (mm)
+              <input
+                data-testid="setup-reports-margin-bottom"
+                value={String(setup.reports.defaultPageMargins.bottomMm)}
+                onChange={(e) =>
+                  setSetup((s) => ({
+                    ...s,
+                    reports: {
+                      ...s.reports,
+                      defaultPageMargins: {
+                        ...s.reports.defaultPageMargins,
+                        bottomMm: parseIntOr(s.reports.defaultPageMargins.bottomMm, e.currentTarget.value, 0, 40)
+                      }
+                    }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%" }}
+              />
+            </label>
+            <label>
+              Margin left (mm)
+              <input
+                data-testid="setup-reports-margin-left"
+                value={String(setup.reports.defaultPageMargins.leftMm)}
+                onChange={(e) =>
+                  setSetup((s) => ({
+                    ...s,
+                    reports: {
+                      ...s.reports,
+                      defaultPageMargins: {
+                        ...s.reports.defaultPageMargins,
+                        leftMm: parseIntOr(s.reports.defaultPageMargins.leftMm, e.currentTarget.value, 0, 40)
+                      }
+                    }
+                  }))
+                }
+                style={{ display: "block", marginTop: 4, width: "100%" }}
+              />
+            </label>
+          </div>
           <button
             data-testid="setup-save-reports"
             onClick={() => void saveSection("reports")}

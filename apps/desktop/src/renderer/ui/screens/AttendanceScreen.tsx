@@ -3,7 +3,8 @@ import {
   AttendanceBulkStampDayResultSchema,
   AttendanceMonthOpenResultSchema,
   AttendanceSetStudentDayResultSchema,
-  AttendanceSetTypeOfDayResultSchema
+  AttendanceSetTypeOfDayResultSchema,
+  SetupGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -102,6 +103,24 @@ export function AttendanceScreen(props: {
     void loadMonth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.selectedClassId, month]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDefaults() {
+      try {
+        const setup = await requestParsed("setup.get", {}, SetupGetResultSchema);
+        if (cancelled) return;
+        setBulkCode((setup.attendance.presentCode || "P").slice(0, 1).toUpperCase());
+        setMonth(String(setup.attendance.schoolYearStartMonth || 9));
+      } catch {
+        if (cancelled) return;
+      }
+    }
+    void loadDefaults();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.selectedClassId]);
 
   async function saveTypeOfDay(day: number, value: string) {
     const code = value.trim().slice(0, 1).toUpperCase();
@@ -334,4 +353,3 @@ export function AttendanceScreen(props: {
     </div>
   );
 }
-

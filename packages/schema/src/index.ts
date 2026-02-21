@@ -1190,6 +1190,11 @@ export const PlannerUnitsArchiveResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const PlannerUnitsCloneResultSchema = z.object({
+  ok: z.literal(true),
+  unitId: z.string()
+});
+
 export const PlannerLessonSchema = z.object({
   id: z.string(),
   unitId: z.string().nullable(),
@@ -1228,6 +1233,16 @@ export const PlannerLessonsReorderResultSchema = z.object({
 
 export const PlannerLessonsArchiveResultSchema = z.object({
   ok: z.literal(true)
+});
+
+export const PlannerLessonsCopyForwardResultSchema = z.object({
+  ok: z.literal(true),
+  createdLessonIds: z.array(z.string())
+});
+
+export const PlannerLessonsBulkAssignUnitResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number()
 });
 
 export const PlannerPublishedArtifactSchema = z.object({
@@ -1296,6 +1311,13 @@ export const CourseDescriptionModelResultSchema = z.object({
     strands: z.array(z.unknown()),
     policyText: z.string()
   }),
+  resources: z.array(z.unknown()).optional(),
+  assessmentPlan: z
+    .object({
+      markSetCount: z.number(),
+      assessmentCount: z.number()
+    })
+    .optional(),
   schedule: z.object({
     periodMinutes: z.number(),
     periodsPerWeek: z.number(),
@@ -1345,6 +1367,9 @@ export const SetupGetResultSchema = z.object({
   }),
   comments: z.object({
     defaultTransferPolicy: z.enum(["replace", "append", "fill_blank", "source_if_longer"]),
+    defaultSetNumber: z.number(),
+    defaultAppendSeparator: z.string(),
+    enforceMaxCharsByDefault: z.boolean(),
     appendSeparator: z.string(),
     enforceFit: z.boolean(),
     enforceMaxChars: z.boolean(),
@@ -1355,7 +1380,9 @@ export const SetupGetResultSchema = z.object({
     landscapeWideTables: z.boolean(),
     repeatHeaders: z.boolean(),
     showGeneratedAt: z.boolean(),
-    defaultMarginMm: z.number()
+    defaultMarginMm: z.number(),
+    defaultPaperSize: z.enum(["letter", "legal", "a4"]),
+    defaultOrientation: z.enum(["portrait", "landscape"])
   }),
   integrations: z.object({
     defaultSisProfile: z.enum(["mb_exchange_v1", "sis_roster_v1", "sis_marks_v1"]),
@@ -1393,10 +1420,18 @@ export const SetupGetResultSchema = z.object({
     showGeneratedAt: z.boolean(),
     defaultStudentScope: z.enum(["all", "active", "valid"]),
     defaultAnalyticsScope: z.enum(["all", "active", "valid"]),
-    showFiltersInHeaderByDefault: z.boolean()
+    showFiltersInHeaderByDefault: z.boolean(),
+    repeatHeadersByDefault: z.boolean(),
+    defaultPageMargins: z.object({
+      topMm: z.number(),
+      rightMm: z.number(),
+      bottomMm: z.number(),
+      leftMm: z.number()
+    })
   }),
   security: z.object({
     passwordEnabled: z.boolean(),
+    requireWorkspacePassword: z.boolean(),
     passwordHint: z.string().nullable(),
     confirmDeletes: z.boolean(),
     autoLockMinutes: z.number()

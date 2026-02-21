@@ -16,6 +16,7 @@ import {
   CommentsSetsListResultSchema,
   CommentsSetsOpenResultSchema,
   CommentsSetsUpsertResultSchema,
+  SetupGetResultSchema,
   MarkSetsListResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
@@ -140,6 +141,13 @@ export function MarkSetCommentsPanel(props: {
   const [transferPreviewRows, setTransferPreviewRows] = useState<TransferPreviewRow[]>([]);
   const [transferPreviewCounts, setTransferPreviewCounts] = useState<any | null>(null);
   const [transferSelectedTargetIds, setTransferSelectedTargetIds] = useState<string[]>([]);
+  const [commentsDefaults, setCommentsDefaults] = useState({
+    defaultSetNumber: 1,
+    defaultTransferPolicy: "fill_blank" as "replace" | "append" | "fill_blank" | "source_if_longer",
+    defaultAppendSeparator: " ",
+    enforceMaxCharsByDefault: true,
+    defaultMaxChars: 600
+  });
 
   const selectedBankEntry = useMemo(() => {
     if (!bankEntries.length) return null;
@@ -214,7 +222,20 @@ export function MarkSetCommentsPanel(props: {
   async function refreshAll() {
     props.onError(null);
     try {
-      await Promise.all([loadSets(), loadBanks()]);
+      const [, , setupRes] = await Promise.all([
+        loadSets(),
+        loadBanks(),
+        requestParsed("setup.get", {}, SetupGetResultSchema)
+      ]);
+      setCommentsDefaults({
+        defaultSetNumber: setupRes.comments.defaultSetNumber,
+        defaultTransferPolicy: setupRes.comments.defaultTransferPolicy,
+        defaultAppendSeparator: setupRes.comments.defaultAppendSeparator,
+        enforceMaxCharsByDefault: setupRes.comments.enforceMaxCharsByDefault,
+        defaultMaxChars: setupRes.comments.defaultMaxChars
+      });
+      setTransferPolicy(setupRes.comments.defaultTransferPolicy);
+      setTransferSeparator(setupRes.comments.defaultAppendSeparator);
     } catch (e: any) {
       props.onError(e?.message ?? String(e));
       setSets([]);
@@ -283,18 +304,26 @@ export function MarkSetCommentsPanel(props: {
     props.onError(null);
     try {
       const title = `Comment Set ${sets.length + 1}`;
+      const requestedSetNumber =
+        sets.length === 0 ||
+        !sets.some((s) => s.setNumber === commentsDefaults.defaultSetNumber)
+          ? commentsDefaults.defaultSetNumber
+          : undefined;
       const res = await requestParsed(
         "comments.sets.upsert",
         {
           classId: props.selectedClassId,
           markSetId: props.selectedMarkSetId,
+          setNumber: requestedSetNumber,
           title,
           fitMode: 0,
           fitFontSize: 9,
           fitWidth: 83,
           fitLines: 12,
           fitSubj: "",
-          maxChars: 100,
+          maxChars: commentsDefaults.enforceMaxCharsByDefault
+            ? commentsDefaults.defaultMaxChars
+            : 100,
           isDefault: sets.length === 0,
           remarksByStudent: []
         },
@@ -561,6 +590,8 @@ export function MarkSetCommentsPanel(props: {
     props.onError(null);
     try {
       await loadTransferClasses();
+      setTransferPolicy(commentsDefaults.defaultTransferPolicy);
+      setTransferSeparator(commentsDefaults.defaultAppendSeparator);
       setTransferOpen(true);
       setTransferPreviewRows([]);
       setTransferPreviewCounts(null);
