@@ -92,6 +92,12 @@ fn setup_get_update_roundtrip_and_validation() {
     );
     assert_eq!(
         initial
+            .pointer("/analysis/defaultSortBy")
+            .and_then(|v| v.as_str()),
+        Some("sortOrder")
+    );
+    assert_eq!(
+        initial
             .pointer("/printer/fontScale")
             .and_then(|v| v.as_i64()),
         Some(100)
@@ -106,7 +112,9 @@ fn setup_get_update_roundtrip_and_validation() {
             "section": "analysis",
             "patch": {
                 "defaultStudentScope": "active",
-                "histogramBins": 12
+                "histogramBins": 12,
+                "defaultSortBy": "displayName",
+                "defaultTopBottomCount": 8
             }
         }),
     );
@@ -136,6 +144,18 @@ fn setup_get_update_roundtrip_and_validation() {
             .pointer("/analysis/histogramBins")
             .and_then(|v| v.as_i64()),
         Some(12)
+    );
+    assert_eq!(
+        updated
+            .pointer("/analysis/defaultSortBy")
+            .and_then(|v| v.as_str()),
+        Some("displayName")
+    );
+    assert_eq!(
+        updated
+            .pointer("/analysis/defaultTopBottomCount")
+            .and_then(|v| v.as_i64()),
+        Some(8)
     );
     assert_eq!(
         updated.pointer("/printer/fontScale").and_then(|v| v.as_i64()),

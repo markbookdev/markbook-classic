@@ -228,6 +228,214 @@ fn parse_student_scope(req: &Request) -> Result<StudentScope, serde_json::Value>
     }
 }
 
+#[derive(Debug, Clone)]
+struct ClassRowsQuery {
+    search: Option<String>,
+    sort_by: String,
+    sort_dir: String,
+    page: usize,
+    page_size: usize,
+    final_min: Option<f64>,
+    final_max: Option<f64>,
+    include_no_final: bool,
+}
+
+#[derive(Debug, Clone)]
+struct DrilldownQuery {
+    search: Option<String>,
+    sort_by: String,
+    sort_dir: String,
+    page: usize,
+    page_size: usize,
+}
+
+fn parse_search(v: Option<&serde_json::Value>) -> Result<Option<String>, String> {
+    let Some(value) = v else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let Some(raw) = value.as_str() else {
+        return Err("query.search must be string or null".to_string());
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(trimmed.to_ascii_lowercase()))
+}
+
+fn parse_sort_by(v: Option<&serde_json::Value>, allowed: &[&str], default: &str) -> Result<String, String> {
+    let Some(value) = v else {
+        return Ok(default.to_string());
+    };
+    let Some(raw) = value.as_str() else {
+        return Err("query.sortBy must be a string".to_string());
+    };
+    if allowed.iter().any(|a| *a == raw) {
+        Ok(raw.to_string())
+    } else {
+        Err(format!("query.sortBy must be one of: {}", allowed.join(", ")))
+    }
+}
+
+fn parse_sort_dir(v: Option<&serde_json::Value>) -> Result<String, String> {
+    let Some(value) = v else {
+        return Ok("asc".to_string());
+    };
+    let Some(raw) = value.as_str() else {
+        return Err("query.sortDir must be a string".to_string());
+    };
+    if raw.eq_ignore_ascii_case("asc") {
+        Ok("asc".to_string())
+    } else if raw.eq_ignore_ascii_case("desc") {
+        Ok("desc".to_string())
+    } else {
+        Err("query.sortDir must be one of: asc, desc".to_string())
+    }
+}
+
+fn parse_page(v: Option<&serde_json::Value>) -> Result<usize, String> {
+    let Some(value) = v else {
+        return Ok(1);
+    };
+    let Some(page) = value.as_u64() else {
+        return Err("query.page must be a positive integer".to_string());
+    };
+    if page == 0 {
+        return Err("query.page must be >= 1".to_string());
+    }
+    Ok(page as usize)
+}
+
+fn parse_page_size(v: Option<&serde_json::Value>) -> Result<usize, String> {
+    let Some(value) = v else {
+        return Ok(50);
+    };
+    let Some(size) = value.as_u64() else {
+        return Err("query.pageSize must be a positive integer".to_string());
+    };
+    if size == 0 || size > 500 {
+        return Err("query.pageSize must be in range 1..=500".to_string());
+    }
+    Ok(size as usize)
+}
+
+fn parse_class_rows_query(req: &Request) -> Result<ClassRowsQuery, serde_json::Value> {
+    let query = req
+        .params
+        .get("query")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let cohort = query
+        .get("cohort")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+
+    let search = match parse_search(query.get("search")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let sort_by = match parse_sort_by(
+        query.get("sortBy"),
+        &[
+            "sortOrder",
+            "displayName",
+            "finalMark",
+            "scoredCount",
+            "zeroCount",
+            "noMarkCount",
+        ],
+        "sortOrder",
+    ) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let sort_dir = match parse_sort_dir(query.get("sortDir")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let page = match parse_page(query.get("page")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let page_size = match parse_page_size(query.get("pageSize")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+
+    let final_min = cohort.get("finalMin").and_then(|v| v.as_f64());
+    let final_max = cohort.get("finalMax").and_then(|v| v.as_f64());
+    if let (Some(min), Some(max)) = (final_min, final_max) {
+        if min > max {
+            return Err(err(
+                &req.id,
+                "bad_params",
+                "query.cohort.finalMin must be <= query.cohort.finalMax",
+                None,
+            ));
+        }
+    }
+    let include_no_final = cohort
+        .get("includeNoFinal")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    Ok(ClassRowsQuery {
+        search,
+        sort_by,
+        sort_dir,
+        page,
+        page_size,
+        final_min,
+        final_max,
+        include_no_final,
+    })
+}
+
+fn parse_drilldown_query(req: &Request) -> Result<DrilldownQuery, serde_json::Value> {
+    let query = req
+        .params
+        .get("query")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let search = match parse_search(query.get("search")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let sort_by = match parse_sort_by(
+        query.get("sortBy"),
+        &["sortOrder", "displayName", "status", "raw", "percent", "finalMark"],
+        "sortOrder",
+    ) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let sort_dir = match parse_sort_dir(query.get("sortDir")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let page = match parse_page(query.get("page")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    let page_size = match parse_page_size(query.get("pageSize")) {
+        Ok(v) => v,
+        Err(msg) => return Err(err(&req.id, "bad_params", msg, None)),
+    };
+    Ok(DrilldownQuery {
+        search,
+        sort_by,
+        sort_dir,
+        page,
+        page_size,
+    })
+}
+
 fn student_id_scope_filter(
     conn: &Connection,
     class_id: &str,
@@ -327,6 +535,24 @@ fn apply_scope(
         }
     }
     summary.per_student.clone()
+}
+
+fn paginate_values<T: Clone>(items: &[T], page: usize, page_size: usize) -> Vec<T> {
+    let start = (page.saturating_sub(1)) * page_size;
+    if start >= items.len() {
+        return Vec::new();
+    }
+    let end = std::cmp::min(start + page_size, items.len());
+    items[start..end].to_vec()
+}
+
+fn status_rank(status: &str) -> i64 {
+    match status {
+        "no_mark" => 0,
+        "zero" => 1,
+        "scored" => 2,
+        _ => 3,
+    }
 }
 
 fn combined_distribution_bins(rows: &[serde_json::Value]) -> Vec<serde_json::Value> {
@@ -1148,10 +1374,792 @@ fn handle_analytics_student_open(state: &mut AppState, req: &Request) -> serde_j
     ok(&req.id, payload)
 }
 
+fn handle_analytics_class_rows(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let mark_set_id = match required_str(req, "markSetId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let filters = match parse_filters(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let query = match parse_class_rows_query(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let mut summary = match calc::compute_mark_set_summary(
+        &calc_context(conn, &class_id, &mark_set_id),
+        &filters,
+    ) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    let allowed = match student_id_scope_filter(conn, &class_id, &mark_set_id, student_scope) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    let mut rows = apply_scope(&mut summary, allowed.as_ref());
+
+    if let Some(search) = query.search.as_ref() {
+        rows.retain(|r| r.display_name.to_ascii_lowercase().contains(search));
+    }
+    if query.final_min.is_some() || query.final_max.is_some() || !query.include_no_final {
+        rows.retain(|r| {
+            if let Some(v) = r.final_mark {
+                let min_ok = query.final_min.map(|m| v >= m).unwrap_or(true);
+                let max_ok = query.final_max.map(|m| v <= m).unwrap_or(true);
+                min_ok && max_ok
+            } else {
+                query.include_no_final
+            }
+        });
+    }
+
+    rows.sort_by(|a, b| {
+        let ord = match query.sort_by.as_str() {
+            "displayName" => a
+                .display_name
+                .to_ascii_lowercase()
+                .cmp(&b.display_name.to_ascii_lowercase()),
+            "finalMark" => {
+                let a_none = a.final_mark.is_none();
+                let b_none = b.final_mark.is_none();
+                a_none
+                    .cmp(&b_none)
+                    .then_with(|| match (a.final_mark, b.final_mark) {
+                        (Some(x), Some(y)) => x
+                            .partial_cmp(&y)
+                            .unwrap_or(std::cmp::Ordering::Equal),
+                        _ => std::cmp::Ordering::Equal,
+                    })
+            }
+            "scoredCount" => a.scored_count.cmp(&b.scored_count),
+            "zeroCount" => a.zero_count.cmp(&b.zero_count),
+            "noMarkCount" => a.no_mark_count.cmp(&b.no_mark_count),
+            _ => a.sort_order.cmp(&b.sort_order),
+        };
+        let ord = if query.sort_dir == "desc" {
+            ord.reverse()
+        } else {
+            ord
+        };
+        ord.then_with(|| a.sort_order.cmp(&b.sort_order))
+    });
+
+    let total_rows = rows.len();
+    let paged = paginate_values(&rows, query.page, query.page_size);
+
+    ok(
+        &req.id,
+        json!({
+            "rows": paged,
+            "totalRows": total_rows,
+            "page": query.page,
+            "pageSize": query.page_size,
+            "sortBy": query.sort_by,
+            "sortDir": query.sort_dir,
+            "appliedCohort": {
+                "finalMin": query.final_min,
+                "finalMax": query.final_max,
+                "includeNoFinal": query.include_no_final
+            }
+        }),
+    )
+}
+
+fn handle_analytics_class_assessment_drilldown(
+    state: &mut AppState,
+    req: &Request,
+) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let mark_set_id = match required_str(req, "markSetId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let assessment_id = match required_str(req, "assessmentId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let filters = match parse_filters(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let query = match parse_drilldown_query(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let mut summary = match calc::compute_mark_set_summary(
+        &calc_context(conn, &class_id, &mark_set_id),
+        &filters,
+    ) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    let allowed = match student_id_scope_filter(conn, &class_id, &mark_set_id, student_scope) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    let rows = apply_scope(&mut summary, allowed.as_ref());
+
+    let Some(assessment) = summary
+        .assessments
+        .iter()
+        .find(|a| a.assessment_id == assessment_id)
+        .cloned()
+    else {
+        return err(&req.id, "not_found", "assessment not found for current filters", None);
+    };
+
+    let class_stats = summary
+        .per_assessment
+        .iter()
+        .find(|a| a.assessment_id == assessment_id)
+        .cloned()
+        .unwrap_or(calc::AssessmentStats {
+            assessment_id: assessment.assessment_id.clone(),
+            idx: assessment.idx,
+            date: assessment.date.clone(),
+            category_name: assessment.category_name.clone(),
+            title: assessment.title.clone(),
+            out_of: assessment.out_of,
+            avg_raw: 0.0,
+            avg_percent: 0.0,
+            median_percent: 0.0,
+            scored_count: 0,
+            zero_count: 0,
+            no_mark_count: 0,
+        });
+
+    let mut score_map: HashMap<String, (Option<f64>, String)> = HashMap::new();
+    if !rows.is_empty() {
+        let placeholders = std::iter::repeat("?")
+            .take(rows.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT student_id, raw_value, status
+             FROM scores
+             WHERE assessment_id = ? AND student_id IN ({})",
+            placeholders
+        );
+        let mut values: Vec<Value> = Vec::with_capacity(rows.len() + 1);
+        values.push(Value::Text(assessment_id.clone()));
+        for r in &rows {
+            values.push(Value::Text(r.student_id.clone()));
+        }
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+        let score_rows = match stmt.query_map(params_from_iter(values), |r| {
+            let student_id: String = r.get(0)?;
+            let raw_value: Option<f64> = r.get(1)?;
+            let status: String = r.get(2)?;
+            Ok((student_id, raw_value, status))
+        }) {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+        for (student_id, raw_value, status) in score_rows.flatten() {
+            score_map.insert(student_id, (raw_value, status));
+        }
+    }
+
+    let mut drill_rows = rows
+        .iter()
+        .map(|s| {
+            let (raw_value, status) = score_map
+                .get(s.student_id.as_str())
+                .cloned()
+                .unwrap_or((None, "no_mark".to_string()));
+            let raw = match status.as_str() {
+                "no_mark" => None,
+                "zero" => Some(0.0),
+                "scored" => raw_value,
+                _ => raw_value,
+            };
+            let percent = raw.map(|v| {
+                if assessment.out_of > 0.0 {
+                    calc::round_off_1_decimal((v * 100.0) / assessment.out_of)
+                } else {
+                    0.0
+                }
+            });
+            json!({
+                "studentId": s.student_id,
+                "displayName": s.display_name,
+                "sortOrder": s.sort_order,
+                "active": s.active,
+                "status": status,
+                "raw": raw,
+                "percent": percent,
+                "finalMark": s.final_mark
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(search) = query.search.as_ref() {
+        drill_rows.retain(|r| {
+            r.get("displayName")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_ascii_lowercase().contains(search))
+                .unwrap_or(false)
+        });
+    }
+
+    drill_rows.sort_by(|a, b| {
+        let ord = match query.sort_by.as_str() {
+            "displayName" => a
+                .get("displayName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .cmp(
+                    &b.get("displayName")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
+                ),
+            "status" => status_rank(
+                a.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+            )
+            .cmp(&status_rank(
+                b.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+            )),
+            "raw" => {
+                let a_none = a.get("raw").is_none() || a.get("raw").map(|v| v.is_null()).unwrap_or(true);
+                let b_none = b.get("raw").is_none() || b.get("raw").map(|v| v.is_null()).unwrap_or(true);
+                a_none
+                    .cmp(&b_none)
+                    .then_with(|| {
+                        let av = a.get("raw").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let bv = b.get("raw").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            }
+            "percent" => {
+                let a_none = a
+                    .get("percent")
+                    .is_none()
+                    || a.get("percent").map(|v| v.is_null()).unwrap_or(true);
+                let b_none = b
+                    .get("percent")
+                    .is_none()
+                    || b.get("percent").map(|v| v.is_null()).unwrap_or(true);
+                a_none
+                    .cmp(&b_none)
+                    .then_with(|| {
+                        let av = a.get("percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let bv = b.get("percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            }
+            "finalMark" => {
+                let a_none = a
+                    .get("finalMark")
+                    .is_none()
+                    || a.get("finalMark").map(|v| v.is_null()).unwrap_or(true);
+                let b_none = b
+                    .get("finalMark")
+                    .is_none()
+                    || b.get("finalMark").map(|v| v.is_null()).unwrap_or(true);
+                a_none
+                    .cmp(&b_none)
+                    .then_with(|| {
+                        let av = a.get("finalMark").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let bv = b.get("finalMark").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            }
+            _ => a
+                .get("sortOrder")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(i64::MAX)
+                .cmp(&b.get("sortOrder").and_then(|v| v.as_i64()).unwrap_or(i64::MAX)),
+        };
+        let ord = if query.sort_dir == "desc" {
+            ord.reverse()
+        } else {
+            ord
+        };
+        ord.then_with(|| {
+            a.get("sortOrder")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(i64::MAX)
+                .cmp(&b.get("sortOrder").and_then(|v| v.as_i64()).unwrap_or(i64::MAX))
+        })
+    });
+
+    let total_rows = drill_rows.len();
+    let paged_rows = paginate_values(&drill_rows, query.page, query.page_size);
+
+    ok(
+        &req.id,
+        json!({
+            "class": summary.class,
+            "markSet": summary.mark_set,
+            "filters": summary.filters,
+            "studentScope": student_scope.as_str(),
+            "assessment": assessment,
+            "rows": paged_rows,
+            "totalRows": total_rows,
+            "page": query.page,
+            "pageSize": query.page_size,
+            "sortBy": query.sort_by,
+            "sortDir": query.sort_dir,
+            "classStats": class_stats
+        }),
+    )
+}
+
+fn handle_analytics_student_compare(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let mark_set_id = match required_str(req, "markSetId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_id = match required_str(req, "studentId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let filters = match parse_filters(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_scope = match parse_student_scope(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let mut summary = match calc::compute_mark_set_summary(
+        &calc_context(conn, &class_id, &mark_set_id),
+        &filters,
+    ) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    let allowed = match student_id_scope_filter(conn, &class_id, &mark_set_id, student_scope) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    apply_scope(&mut summary, allowed.as_ref());
+
+    let Some(student) = summary
+        .per_student
+        .iter()
+        .find(|s| s.student_id == student_id)
+        .cloned()
+    else {
+        return err(&req.id, "not_found", "student not found in mark set", None);
+    };
+
+    let mut cohort_marks = summary
+        .per_student
+        .iter()
+        .filter_map(|s| s.final_mark)
+        .collect::<Vec<_>>();
+    let class_average = if cohort_marks.is_empty() {
+        None
+    } else {
+        Some(calc::round_off_1_decimal(
+            cohort_marks.iter().sum::<f64>() / (cohort_marks.len() as f64),
+        ))
+    };
+    let class_median = median(cohort_marks.as_mut_slice()).map(calc::round_off_1_decimal);
+    let final_mark_delta = match (student.final_mark, class_average) {
+        (Some(a), Some(b)) => Some(calc::round_off_1_decimal(a - b)),
+        _ => None,
+    };
+    let percentile = if let Some(v) = student.final_mark {
+        if cohort_marks.is_empty() {
+            None
+        } else {
+            let le = cohort_marks.iter().filter(|m| **m <= v).count();
+            Some(calc::round_off_1_decimal(
+                (100.0 * le as f64) / (cohort_marks.len() as f64),
+            ))
+        }
+    } else {
+        None
+    };
+
+    let mut category_for_student: HashMap<String, calc::StudentCategoryValue> = HashMap::new();
+    if let Some(rows) = summary.per_student_categories.as_ref() {
+        if let Some(found) = rows.iter().find(|r| r.student_id == student_id) {
+            for c in &found.categories {
+                category_for_student.insert(c.name.to_ascii_lowercase(), c.clone());
+            }
+        }
+    }
+    let class_category_map = summary
+        .per_category
+        .iter()
+        .map(|c| (c.name.to_ascii_lowercase(), c))
+        .collect::<HashMap<_, _>>();
+
+    let category_comparison = summary
+        .categories
+        .iter()
+        .map(|c| {
+            let key = c.name.to_ascii_lowercase();
+            let student_row = category_for_student.get(&key);
+            let class_row = class_category_map.get(&key);
+            json!({
+                "name": c.name,
+                "weight": c.weight,
+                "studentValue": student_row.and_then(|v| v.value),
+                "classAvg": class_row.map(|v| v.class_avg),
+                "hasData": student_row.map(|v| v.has_data).unwrap_or(false)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut class_stats_by_assessment: HashMap<&str, &calc::AssessmentStats> = HashMap::new();
+    for stat in &summary.per_assessment {
+        class_stats_by_assessment.insert(stat.assessment_id.as_str(), stat);
+    }
+    let mut score_by_assessment: HashMap<String, (Option<f64>, String)> = HashMap::new();
+    if !summary.assessments.is_empty() {
+        let placeholders = std::iter::repeat("?")
+            .take(summary.assessments.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT assessment_id, raw_value, status
+             FROM scores
+             WHERE student_id = ? AND assessment_id IN ({})",
+            placeholders
+        );
+        let mut values: Vec<Value> = Vec::with_capacity(summary.assessments.len() + 1);
+        values.push(Value::Text(student_id.clone()));
+        for a in &summary.assessments {
+            values.push(Value::Text(a.assessment_id.clone()));
+        }
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+        let rows = match stmt.query_map(params_from_iter(values), |r| {
+            let assessment_id: String = r.get(0)?;
+            let raw_value: Option<f64> = r.get(1)?;
+            let status: String = r.get(2)?;
+            Ok((assessment_id, raw_value, status))
+        }) {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+        for (assessment_id, raw_value, status) in rows.flatten() {
+            score_by_assessment.insert(assessment_id, (raw_value, status));
+        }
+    }
+
+    let assessment_comparison = summary
+        .assessments
+        .iter()
+        .map(|a| {
+            let (raw_value, status) = score_by_assessment
+                .get(a.assessment_id.as_str())
+                .cloned()
+                .unwrap_or((None, "no_mark".to_string()));
+            let raw = match status.as_str() {
+                "no_mark" => None,
+                "zero" => Some(0.0),
+                "scored" => raw_value,
+                _ => raw_value,
+            };
+            let percent = raw.map(|v| {
+                if a.out_of > 0.0 {
+                    calc::round_off_1_decimal((v * 100.0) / a.out_of)
+                } else {
+                    0.0
+                }
+            });
+            let class_stats = class_stats_by_assessment.get(a.assessment_id.as_str());
+            json!({
+                "assessmentId": a.assessment_id,
+                "idx": a.idx,
+                "title": a.title,
+                "date": a.date,
+                "categoryName": a.category_name,
+                "term": a.term,
+                "legacyType": a.legacy_type,
+                "weight": a.weight,
+                "outOf": a.out_of,
+                "status": status,
+                "raw": raw,
+                "percent": percent,
+                "classAvgRaw": class_stats.map(|s| s.avg_raw),
+                "classAvgPercent": class_stats.map(|s| s.avg_percent),
+                "classMedianPercent": class_stats.map(|s| s.median_percent)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    ok(
+        &req.id,
+        json!({
+            "class": summary.class,
+            "markSet": summary.mark_set,
+            "filters": summary.filters,
+            "studentScope": student_scope.as_str(),
+            "student": student,
+            "cohort": {
+                "studentCount": summary.per_student.len(),
+                "finalMarkCount": cohort_marks.len(),
+                "classAverage": class_average,
+                "classMedian": class_median
+            },
+            "finalMarkDelta": final_mark_delta,
+            "percentile": percentile,
+            "categoryComparison": category_comparison,
+            "assessmentComparison": assessment_comparison
+        }),
+    )
+}
+
+fn parse_optional_mark_set_ids(req: &Request) -> Result<Option<Vec<String>>, serde_json::Value> {
+    let Some(raw) = req.params.get("markSetIds") else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    let Some(arr) = raw.as_array() else {
+        return Err(err(
+            &req.id,
+            "bad_params",
+            "markSetIds must be an array of strings",
+            None,
+        ));
+    };
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for v in arr {
+        let Some(id) = v.as_str() else {
+            return Err(err(
+                &req.id,
+                "bad_params",
+                "markSetIds must contain only strings",
+                None,
+            ));
+        };
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err(err(
+                &req.id,
+                "bad_params",
+                "markSetIds must not include empty ids",
+                None,
+            ));
+        }
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            out.push(owned);
+        }
+    }
+    if out.is_empty() {
+        return Err(err(
+            &req.id,
+            "bad_params",
+            "markSetIds must contain at least one id",
+            None,
+        ));
+    }
+    Ok(Some(out))
+}
+
+fn handle_analytics_student_trend(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let student_id = match required_str(req, "studentId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let selected_mark_set_ids = match parse_optional_mark_set_ids(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let filters = match parse_filters(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let student_row: Option<(String, String, i64, String)> = match conn
+        .query_row(
+            "SELECT last_name, first_name, active, COALESCE(mark_set_mask, 'TBA')
+             FROM students
+             WHERE class_id = ? AND id = ?",
+            (&class_id, &student_id),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            },
+        )
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let Some((last_name, first_name, active, mark_set_mask)) = student_row else {
+        return err(&req.id, "not_found", "student not found", None);
+    };
+    let active = active != 0;
+
+    let mark_sets = match load_mark_sets_for_class(
+        conn,
+        &class_id,
+        selected_mark_set_ids.as_ref().map(|v| v.as_slice()),
+    ) {
+        Ok(v) => v,
+        Err(e) => return calc_err(req, e),
+    };
+    if let Some(selected) = selected_mark_set_ids.as_ref() {
+        if let Err(e) = normalize_mark_set_selection(&req.id, selected, &mark_sets) {
+            return e;
+        }
+    }
+    if mark_sets.is_empty() {
+        return err(&req.id, "bad_params", "no mark sets selected for trend", None);
+    }
+
+    let mut points = Vec::new();
+    for ms in &mark_sets {
+        let summary = match calc::compute_mark_set_summary(
+            &calc_context(conn, &class_id, ms.id.as_str()),
+            &filters,
+        ) {
+            Ok(v) => v,
+            Err(e) => return calc_err(req, e),
+        };
+        let student_final = summary
+            .per_student
+            .iter()
+            .find(|s| s.student_id == student_id)
+            .and_then(|s| s.final_mark);
+        let mut finals = summary
+            .per_student
+            .iter()
+            .filter_map(|s| s.final_mark)
+            .collect::<Vec<_>>();
+        let class_average = if finals.is_empty() {
+            None
+        } else {
+            Some(calc::round_off_1_decimal(
+                finals.iter().sum::<f64>() / finals.len() as f64,
+            ))
+        };
+        let class_median = median(finals.as_mut_slice()).map(calc::round_off_1_decimal);
+        points.push(json!({
+            "markSetId": ms.id,
+            "code": ms.code,
+            "sortOrder": ms.sort_order,
+            "finalMark": student_final,
+            "classAverage": class_average,
+            "classMedian": class_median,
+            "validForSet": calc::is_valid_kid(active, &mark_set_mask, ms.sort_order)
+        }));
+    }
+
+    points.sort_by(|a, b| {
+        a.get("sortOrder")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(i64::MAX)
+            .cmp(&b.get("sortOrder").and_then(|v| v.as_i64()).unwrap_or(i64::MAX))
+    });
+
+    let finals = points
+        .iter()
+        .filter_map(|p| p.get("finalMark").and_then(|v| v.as_f64()))
+        .collect::<Vec<_>>();
+    let average_final = if finals.is_empty() {
+        None
+    } else {
+        Some(calc::round_off_1_decimal(
+            finals.iter().sum::<f64>() / finals.len() as f64,
+        ))
+    };
+    let best_final = finals
+        .iter()
+        .cloned()
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let worst_final = finals
+        .iter()
+        .cloned()
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    ok(
+        &req.id,
+        json!({
+            "student": {
+                "id": student_id,
+                "displayName": format!("{}, {}", last_name, first_name),
+                "active": active
+            },
+            "filters": filters,
+            "points": points,
+            "summary": {
+                "selectedMarkSetCount": mark_sets.len(),
+                "finalMarkCount": finals.len(),
+                "averageFinal": average_final,
+                "bestFinal": best_final,
+                "worstFinal": worst_final
+            }
+        }),
+    )
+}
+
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
     match req.method.as_str() {
         "analytics.class.open" => Some(handle_analytics_class_open(state, req)),
+        "analytics.class.rows" => Some(handle_analytics_class_rows(state, req)),
+        "analytics.class.assessmentDrilldown" => {
+            Some(handle_analytics_class_assessment_drilldown(state, req))
+        }
         "analytics.student.open" => Some(handle_analytics_student_open(state, req)),
+        "analytics.student.compare" => Some(handle_analytics_student_compare(state, req)),
+        "analytics.student.trend" => Some(handle_analytics_student_trend(state, req)),
         "analytics.filters.options" => Some(handle_analytics_filters_options(state, req)),
         "analytics.combined.options" => Some(handle_analytics_combined_options(state, req)),
         "analytics.combined.open" => Some(handle_analytics_combined_open(state, req)),

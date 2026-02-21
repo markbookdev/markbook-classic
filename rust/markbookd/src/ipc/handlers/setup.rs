@@ -9,6 +9,9 @@ enum SetupSection {
     Attendance,
     Comments,
     Printer,
+    Planner,
+    CourseDescription,
+    Reports,
     Security,
     Email,
 }
@@ -20,6 +23,9 @@ impl SetupSection {
             "attendance" => Some(Self::Attendance),
             "comments" => Some(Self::Comments),
             "printer" => Some(Self::Printer),
+            "planner" => Some(Self::Planner),
+            "courseDescription" => Some(Self::CourseDescription),
+            "reports" => Some(Self::Reports),
             "security" => Some(Self::Security),
             "email" => Some(Self::Email),
             _ => None,
@@ -32,6 +38,9 @@ impl SetupSection {
             Self::Attendance => "setup.attendance",
             Self::Comments => "setup.comments",
             Self::Printer => "setup.printer",
+            Self::Planner => "setup.planner",
+            Self::CourseDescription => "setup.courseDescription",
+            Self::Reports => "setup.reports",
             Self::Security => "setup.security",
             Self::Email => "setup.email",
         }
@@ -44,37 +53,61 @@ fn default_section(section: SetupSection) -> Value {
             "defaultStudentScope": "valid",
             "showInactiveStudents": false,
             "showDeletedEntries": false,
-            "histogramBins": 10
+            "histogramBins": 10,
+            "defaultSortBy": "sortOrder",
+            "defaultTopBottomCount": 5
         }),
         SetupSection::Attendance => json!({
             "schoolYearStartMonth": 9,
             "presentCode": "P",
             "absentCode": "A",
             "lateCode": "L",
-            "excusedCode": "E"
+            "excusedCode": "E",
+            "tardyThresholdMinutes": 10
         }),
         SetupSection::Comments => json!({
             "defaultTransferPolicy": "fill_blank",
             "appendSeparator": " ",
             "enforceFit": true,
-            "enforceMaxChars": true
+            "enforceMaxChars": true,
+            "defaultMaxChars": 600
         }),
         SetupSection::Printer => json!({
             "fontScale": 100,
             "landscapeWideTables": true,
             "repeatHeaders": true,
-            "showGeneratedAt": true
+            "showGeneratedAt": true,
+            "defaultMarginMm": 12
+        }),
+        SetupSection::Planner => json!({
+            "defaultLessonDurationMinutes": 75,
+            "defaultPublishStatus": "draft",
+            "showArchivedByDefault": false,
+            "defaultUnitTitlePrefix": "Unit"
+        }),
+        SetupSection::CourseDescription => json!({
+            "defaultPeriodMinutes": 75,
+            "defaultPeriodsPerWeek": 5,
+            "defaultTotalWeeks": 36,
+            "includePolicyByDefault": true
+        }),
+        SetupSection::Reports => json!({
+            "plannerHeaderStyle": "classic",
+            "showGeneratedAt": true,
+            "defaultStudentScope": "valid"
         }),
         SetupSection::Security => json!({
             "passwordEnabled": false,
             "passwordHint": null,
-            "confirmDeletes": true
+            "confirmDeletes": true,
+            "autoLockMinutes": 0
         }),
         SetupSection::Email => json!({
             "enabled": false,
             "fromName": "",
             "replyTo": "",
-            "subjectPrefix": "MarkBook"
+            "subjectPrefix": "MarkBook",
+            "defaultCc": ""
         }),
     }
 }
@@ -139,6 +172,26 @@ fn merge_section_patch(
                 "histogramBins" => {
                     obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 4, 20)?));
                 }
+                "defaultSortBy" => {
+                    let s = parse_string_max(v, k, 24)?.to_ascii_lowercase();
+                    if s != "sortorder" && s != "displayname" && s != "finalmark" {
+                        return Err(
+                            "defaultSortBy must be one of: sortOrder, displayName, finalMark"
+                                .into(),
+                        );
+                    }
+                    let canonical = if s == "sortorder" {
+                        "sortOrder"
+                    } else if s == "displayname" {
+                        "displayName"
+                    } else {
+                        "finalMark"
+                    };
+                    obj.insert(k.clone(), Value::String(canonical.to_string()));
+                }
+                "defaultTopBottomCount" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 3, 20)?));
+                }
                 _ => return Err(format!("unknown analysis field: {}", k)),
             },
             SetupSection::Attendance => match k.as_str() {
@@ -151,6 +204,9 @@ fn merge_section_patch(
                         return Err(format!("{} must not be empty", k));
                     }
                     obj.insert(k.clone(), Value::String(s.to_ascii_uppercase()));
+                }
+                "tardyThresholdMinutes" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 0, 120)?));
                 }
                 _ => return Err(format!("unknown attendance field: {}", k)),
             },
@@ -176,6 +232,9 @@ fn merge_section_patch(
                 "enforceFit" | "enforceMaxChars" => {
                     obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
                 }
+                "defaultMaxChars" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 80, 5000)?));
+                }
                 _ => return Err(format!("unknown comments field: {}", k)),
             },
             SetupSection::Printer => match k.as_str() {
@@ -185,7 +244,71 @@ fn merge_section_patch(
                 "landscapeWideTables" | "repeatHeaders" | "showGeneratedAt" => {
                     obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
                 }
+                "defaultMarginMm" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 5, 30)?));
+                }
                 _ => return Err(format!("unknown printer field: {}", k)),
+            },
+            SetupSection::Planner => match k.as_str() {
+                "defaultLessonDurationMinutes" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 15, 240)?));
+                }
+                "defaultPublishStatus" => {
+                    let p = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if p != "draft" && p != "published" && p != "archived" {
+                        return Err(
+                            "defaultPublishStatus must be one of: draft, published, archived"
+                                .into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(p));
+                }
+                "showArchivedByDefault" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                "defaultUnitTitlePrefix" => {
+                    obj.insert(k.clone(), Value::String(parse_string_max(v, k, 32)?));
+                }
+                _ => return Err(format!("unknown planner field: {}", k)),
+            },
+            SetupSection::CourseDescription => match k.as_str() {
+                "defaultPeriodMinutes" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 1, 300)?));
+                }
+                "defaultPeriodsPerWeek" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 1, 14)?));
+                }
+                "defaultTotalWeeks" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 1, 60)?));
+                }
+                "includePolicyByDefault" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                _ => return Err(format!("unknown courseDescription field: {}", k)),
+            },
+            SetupSection::Reports => match k.as_str() {
+                "plannerHeaderStyle" => {
+                    let style = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if style != "compact" && style != "classic" && style != "minimal" {
+                        return Err(
+                            "plannerHeaderStyle must be one of: compact, classic, minimal".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(style));
+                }
+                "showGeneratedAt" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                "defaultStudentScope" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "all" && s != "active" && s != "valid" {
+                        return Err(
+                            "defaultStudentScope must be one of: all, active, valid".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
+                }
+                _ => return Err(format!("unknown reports field: {}", k)),
             },
             SetupSection::Security => match k.as_str() {
                 "passwordEnabled" | "confirmDeletes" => {
@@ -193,6 +316,9 @@ fn merge_section_patch(
                 }
                 "passwordHint" => {
                     obj.insert(k.clone(), parse_nullable_string_max(v, k, 120)?);
+                }
+                "autoLockMinutes" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 0, 240)?));
                 }
                 _ => return Err(format!("unknown security field: {}", k)),
             },
@@ -208,6 +334,9 @@ fn merge_section_patch(
                 }
                 "subjectPrefix" => {
                     obj.insert(k.clone(), Value::String(parse_string_max(v, k, 80)?));
+                }
+                "defaultCc" => {
+                    obj.insert(k.clone(), Value::String(parse_string_max(v, k, 200)?));
                 }
                 _ => return Err(format!("unknown email field: {}", k)),
             },
@@ -250,6 +379,18 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
+    let planner = match load_section(conn, SetupSection::Planner) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let course_description = match load_section(conn, SetupSection::CourseDescription) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let reports = match load_section(conn, SetupSection::Reports) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
     let security = match load_section(conn, SetupSection::Security) {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
@@ -266,6 +407,9 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
             "attendance": attendance,
             "comments": comments,
             "printer": printer,
+            "planner": planner,
+            "courseDescription": course_description,
+            "reports": reports,
             "security": security,
             "email": email
         }),

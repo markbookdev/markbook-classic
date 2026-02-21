@@ -29,6 +29,8 @@ import { ClassAnalyticsScreen } from "../screens/ClassAnalyticsScreen";
 import { StudentAnalyticsScreen } from "../screens/StudentAnalyticsScreen";
 import { CombinedAnalyticsScreen } from "../screens/CombinedAnalyticsScreen";
 import { SetupAdminScreen } from "../screens/SetupAdminScreen";
+import { PlannerScreen } from "../screens/PlannerScreen";
+import { CourseDescriptionScreen } from "../screens/CourseDescriptionScreen";
 
 type Screen =
   | "dashboard"
@@ -38,6 +40,8 @@ type Screen =
   | "class_analytics"
   | "student_analytics"
   | "combined_analytics"
+  | "planner"
+  | "course_description"
   | "students"
   | "markset_setup"
   | "attendance"
@@ -90,6 +94,16 @@ export function AppShell() {
     studentScope: "all" | "active" | "valid";
     studentId?: string | null;
     markSetIds?: string[] | null;
+    drilldown?: {
+      assessmentId: string;
+      query?: {
+        search?: string | null;
+        sortBy?: "sortOrder" | "displayName" | "status" | "raw" | "percent" | "finalMark";
+        sortDir?: "asc" | "desc";
+        page?: number;
+        pageSize?: number;
+      };
+    } | null;
     nonce: number;
   } | null>(null);
 
@@ -508,6 +522,15 @@ export function AppShell() {
               <button data-testid="nav-notes" onClick={() => setScreen("notes")}>
                 Notes
               </button>
+              <button data-testid="nav-planner" onClick={() => setScreen("planner")}>
+                Planner
+              </button>
+              <button
+                data-testid="nav-course-description"
+                onClick={() => setScreen("course_description")}
+              >
+                Course Description
+              </button>
               <button data-testid="nav-seating" onClick={() => setScreen("seating_plan")}>
                 Seating Plan
               </button>
@@ -578,7 +601,10 @@ export function AppShell() {
           <div style={{ fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
             Legacy Menus
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+          <div
+            data-testid="legacy-menu-groups"
+            style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}
+          >
             <details>
               <summary>File</summary>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
@@ -609,6 +635,18 @@ export function AppShell() {
               </div>
             </details>
             <details>
+              <summary>Class</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("students")}>Class List</button>
+                <button onClick={() => setScreen("attendance")}>Attendance</button>
+                <button onClick={() => setScreen("seating_plan")}>Seating</button>
+                <button onClick={() => setScreen("notes")}>Student Notes</button>
+                <button disabled title="Not implemented yet">
+                  Email Class List
+                </button>
+              </div>
+            </details>
+            <details>
               <summary>Mark Sets</summary>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                 <button onClick={() => setScreen("markset_setup")}>Make a New Mark Set</button>
@@ -625,9 +663,25 @@ export function AppShell() {
                 <button onClick={() => setScreen("markset_setup")}>Entry Heading</button>
                 <button onClick={() => setScreen("marks")}>Edit Marks</button>
                 <button onClick={() => setScreen("reports")}>Display/Print</button>
-                <button disabled title="Not implemented yet">
-                  Clone Entry
-                </button>
+                <button onClick={() => setScreen("marks")}>Clone Entry</button>
+              </div>
+            </details>
+            <details>
+              <summary>Reports</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("reports")}>Mark Set Reports</button>
+                <button onClick={() => setScreen("class_analytics")}>Class Analytics</button>
+                <button onClick={() => setScreen("student_analytics")}>Student Analytics</button>
+                <button onClick={() => setScreen("combined_analytics")}>Combined Analytics</button>
+              </div>
+            </details>
+            <details>
+              <summary>Comments</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("marks")}>Remarks in Marks</button>
+                <button onClick={() => setScreen("markset_setup")}>Comment Sets</button>
+                <button onClick={() => setScreen("markset_setup")}>Comment Banks</button>
+                <button onClick={() => setScreen("markset_setup")}>Transfer Mode</button>
               </div>
             </details>
             <details>
@@ -635,6 +689,7 @@ export function AppShell() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                 <button onClick={() => setScreen("setup_admin")}>Analysis/Report Options</button>
                 <button onClick={() => setScreen("calc_settings")}>Calculation Setup</button>
+                <button onClick={() => setScreen("planner")}>Planner Setup</button>
                 <button onClick={() => setScreen("setup_admin")}>Comments Setup</button>
                 <button onClick={() => setScreen("setup_admin")}>Printer Options</button>
                 <button onClick={() => setScreen("setup_admin")}>Password + Email Setup</button>
@@ -717,7 +772,8 @@ export function AppShell() {
                       filters: reportsPrefill.filters,
                       studentScope: reportsPrefill.studentScope,
                       studentId: reportsPrefill.studentId ?? null,
-                      markSetIds: reportsPrefill.markSetIds ?? null
+                      markSetIds: reportsPrefill.markSetIds ?? null,
+                      drilldown: reportsPrefill.drilldown ?? null
                     }
                   : undefined
               }
@@ -734,6 +790,7 @@ export function AppShell() {
                   studentScope: ctx.studentScope,
                   studentId: null,
                   markSetIds: null,
+                  drilldown: ctx.drilldown ?? null,
                   nonce: Date.now()
                 });
                 setScreen("reports");
@@ -750,6 +807,7 @@ export function AppShell() {
                   studentScope: ctx.studentScope,
                   studentId: ctx.studentId ?? null,
                   markSetIds: null,
+                  drilldown: null,
                   nonce: Date.now()
                 });
                 setScreen("reports");
@@ -765,6 +823,7 @@ export function AppShell() {
                   studentScope: ctx.studentScope,
                   studentId: null,
                   markSetIds: ctx.markSetIds,
+                  drilldown: null,
                   nonce: Date.now()
                 });
                 setScreen("reports");
@@ -788,6 +847,10 @@ export function AppShell() {
             <AttendanceScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "notes" ? (
             <NotesScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "planner" ? (
+            <PlannerScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "course_description" ? (
+            <CourseDescriptionScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "seating_plan" ? (
             <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "learning_skills" ? (

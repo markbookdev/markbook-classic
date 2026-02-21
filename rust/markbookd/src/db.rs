@@ -415,6 +415,112 @@ pub fn open_db(workspace: &Path) -> anyhow::Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS planner_units(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            sort_order INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            summary TEXT NOT NULL DEFAULT '',
+            expectations_json TEXT NOT NULL DEFAULT '[]',
+            resources_json TEXT NOT NULL DEFAULT '[]',
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_units_class_sort ON planner_units(class_id, sort_order)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_units_class_archived ON planner_units(class_id, archived)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS planner_lessons(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            unit_id TEXT,
+            sort_order INTEGER NOT NULL,
+            lesson_date TEXT,
+            title TEXT NOT NULL,
+            outline TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            follow_up TEXT NOT NULL DEFAULT '',
+            homework TEXT NOT NULL DEFAULT '',
+            duration_minutes INTEGER,
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(unit_id) REFERENCES planner_units(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_lessons_class_sort ON planner_lessons(class_id, sort_order)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_lessons_unit_sort ON planner_lessons(unit_id, sort_order)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_lessons_class_archived ON planner_lessons(class_id, archived)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS planner_publish(
+            id TEXT PRIMARY KEY,
+            class_id TEXT NOT NULL,
+            artifact_kind TEXT NOT NULL,
+            source_id TEXT,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            version INTEGER NOT NULL DEFAULT 1,
+            model_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_publish_class ON planner_publish(class_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_publish_class_kind ON planner_publish(class_id, artifact_kind)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_publish_class_status ON planner_publish(class_id, status)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS course_description_profiles(
+            class_id TEXT PRIMARY KEY,
+            course_title TEXT NOT NULL DEFAULT '',
+            grade_label TEXT NOT NULL DEFAULT '',
+            period_minutes INTEGER NOT NULL DEFAULT 75,
+            periods_per_week INTEGER NOT NULL DEFAULT 5,
+            total_weeks INTEGER NOT NULL DEFAULT 36,
+            strands_json TEXT NOT NULL DEFAULT '[]',
+            policy_text TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )",
+        [],
+    )?;
+
     // Migrate older workspaces to the expanded mark-state semantics:
     // - "missing" (raw_value NULL) => "zero"
     // - "scored" with raw_value=0 => "no_mark"

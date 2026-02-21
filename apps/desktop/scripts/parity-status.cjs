@@ -2,6 +2,7 @@
 /* eslint-disable no-console */
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -17,6 +18,45 @@ function missingFiles(baseDir, relPaths) {
   return relPaths.filter((rel) => !fs.existsSync(path.join(baseDir, rel)));
 }
 
+function sha256File(absPath) {
+  const hash = crypto.createHash("sha256");
+  hash.update(fs.readFileSync(absPath));
+  return hash.digest("hex");
+}
+
+function collectChecksums(manifest) {
+  const raw = manifest?.checksums;
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [rel, expected] of Object.entries(raw)) {
+    if (typeof rel !== "string" || typeof expected !== "string") continue;
+    const key = rel.trim();
+    const val = expected.trim().toLowerCase();
+    if (!key || !val) continue;
+    out[key] = val;
+  }
+  return out;
+}
+
+function checksumMismatches(baseDir, relPaths, checksumMap) {
+  const out = [];
+  for (const rel of relPaths) {
+    const expected = checksumMap[rel];
+    if (!expected) continue;
+    const abs = path.join(baseDir, rel);
+    if (!fs.existsSync(abs)) continue;
+    const actual = sha256File(abs).toLowerCase();
+    if (actual !== expected) {
+      out.push({
+        path: rel,
+        expectedSha256: expected,
+        actualSha256: actual
+      });
+    }
+  }
+  return out;
+}
+
 function printHumanStatus(payload, expectedDir, manifestPath) {
   console.log("parity-status: Sample25 lanes");
   console.log(`- manifest: ${manifestPath}`);
@@ -29,15 +69,27 @@ function printHumanStatus(payload, expectedDir, manifestPath) {
     for (const rel of payload.regression.missing) {
       console.error(`  - ${path.join(expectedDir, rel)}`);
     }
+  } else if (payload.regression.checksumMismatches.length > 0) {
+    console.error("parity-status: regression lane checksum mismatches:");
+    for (const mismatch of payload.regression.checksumMismatches) {
+      console.error(
+        `  - ${path.join(expectedDir, mismatch.path)} expected=${mismatch.expectedSha256} actual=${mismatch.actualSha256}`
+      );
+    }
   } else {
     console.log("- regression lane: READY");
   }
 
-  if (payload.strict.missing.length > 0) {
+  if (payload.strict.missing.length > 0 || payload.strict.checksumMismatches.length > 0) {
     const tag = payload.strict.requiredByManifest ? "NOT READY" : "PENDING (missing files)";
     console.log(`- strict lane: ${tag}`);
     for (const rel of payload.strict.missing) {
       console.log(`  - ${path.join(expectedDir, rel)}`);
+    }
+    for (const mismatch of payload.strict.checksumMismatches) {
+      console.log(
+        `  - ${path.join(expectedDir, mismatch.path)} expected=${mismatch.expectedSha256} actual=${mismatch.actualSha256}`
+      );
     }
   } else {
     console.log("- strict lane: READY");
@@ -59,27 +111,35 @@ function main() {
   const strictRequiredByManifest = manifest?.strictReady === true;
   const regressionRequired = requiredList(manifest, "regression");
   const strictRequired = requiredList(manifest, "strict");
+  const checksums = collectChecksums(manifest);
   const regressionMissing = missingFiles(expectedDir, regressionRequired);
   const strictMissing = missingFiles(expectedDir, strictRequired);
-  const regressionReady = regressionMissing.length === 0;
-  const strictFilesReady = strictMissing.length === 0;
+  const regressionChecksumMismatches = checksumMismatches(expectedDir, regressionRequired, checksums);
+  const strictChecksumMismatches = checksumMismatches(expectedDir, strictRequired, checksums);
+  const regressionReady = regressionMissing.length === 0 && regressionChecksumMismatches.length === 0;
+  const strictFilesReady = strictMissing.length === 0 && strictChecksumMismatches.length === 0;
   const strictReady = !strictRequiredByManifest || strictFilesReady;
   const overallReady = regressionReady && strictReady;
 
   const payload = {
     mode: overallReady ? "ready" : "not-ready",
     manifestPath,
+    checksums: {
+      configuredCount: Object.keys(checksums).length
+    },
     regression: {
       requiredCount: regressionRequired.length,
       ready: regressionReady,
-      missing: regressionMissing
+      missing: regressionMissing,
+      checksumMismatches: regressionChecksumMismatches
     },
     strict: {
       requiredByManifest: strictRequiredByManifest,
       requiredCount: strictRequired.length,
       filesReady: strictFilesReady,
       ready: strictReady,
-      missing: strictMissing
+      missing: strictMissing,
+      checksumMismatches: strictChecksumMismatches
     }
   };
 

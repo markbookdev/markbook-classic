@@ -8,6 +8,8 @@ type SetupState = {
     showInactiveStudents: boolean;
     showDeletedEntries: boolean;
     histogramBins: number;
+    defaultSortBy: "sortOrder" | "displayName" | "finalMark";
+    defaultTopBottomCount: number;
   };
   attendance: {
     schoolYearStartMonth: number;
@@ -15,29 +17,51 @@ type SetupState = {
     absentCode: string;
     lateCode: string;
     excusedCode: string;
+    tardyThresholdMinutes: number;
   };
   comments: {
     defaultTransferPolicy: "replace" | "append" | "fill_blank" | "source_if_longer";
     appendSeparator: string;
     enforceFit: boolean;
     enforceMaxChars: boolean;
+    defaultMaxChars: number;
   };
   printer: {
     fontScale: number;
     landscapeWideTables: boolean;
     repeatHeaders: boolean;
     showGeneratedAt: boolean;
+    defaultMarginMm: number;
+  };
+  planner: {
+    defaultLessonDurationMinutes: number;
+    defaultPublishStatus: "draft" | "published" | "archived";
+    showArchivedByDefault: boolean;
+    defaultUnitTitlePrefix: string;
+  };
+  courseDescription: {
+    defaultPeriodMinutes: number;
+    defaultPeriodsPerWeek: number;
+    defaultTotalWeeks: number;
+    includePolicyByDefault: boolean;
+  };
+  reports: {
+    plannerHeaderStyle: "compact" | "classic" | "minimal";
+    showGeneratedAt: boolean;
+    defaultStudentScope: "all" | "active" | "valid";
   };
   security: {
     passwordEnabled: boolean;
     passwordHint: string | null;
     confirmDeletes: boolean;
+    autoLockMinutes: number;
   };
   email: {
     enabled: boolean;
     fromName: string;
     replyTo: string;
     subjectPrefix: string;
+    defaultCc: string;
   };
 };
 
@@ -46,37 +70,61 @@ const DEFAULT_STATE: SetupState = {
     defaultStudentScope: "valid",
     showInactiveStudents: false,
     showDeletedEntries: false,
-    histogramBins: 10
+    histogramBins: 10,
+    defaultSortBy: "sortOrder",
+    defaultTopBottomCount: 5
   },
   attendance: {
     schoolYearStartMonth: 9,
     presentCode: "P",
     absentCode: "A",
     lateCode: "L",
-    excusedCode: "E"
+    excusedCode: "E",
+    tardyThresholdMinutes: 10
   },
   comments: {
     defaultTransferPolicy: "fill_blank",
     appendSeparator: " ",
     enforceFit: true,
-    enforceMaxChars: true
+    enforceMaxChars: true,
+    defaultMaxChars: 600
   },
   printer: {
     fontScale: 100,
     landscapeWideTables: true,
     repeatHeaders: true,
-    showGeneratedAt: true
+    showGeneratedAt: true,
+    defaultMarginMm: 12
+  },
+  planner: {
+    defaultLessonDurationMinutes: 75,
+    defaultPublishStatus: "draft",
+    showArchivedByDefault: false,
+    defaultUnitTitlePrefix: "Unit"
+  },
+  courseDescription: {
+    defaultPeriodMinutes: 75,
+    defaultPeriodsPerWeek: 5,
+    defaultTotalWeeks: 36,
+    includePolicyByDefault: true
+  },
+  reports: {
+    plannerHeaderStyle: "classic",
+    showGeneratedAt: true,
+    defaultStudentScope: "valid"
   },
   security: {
     passwordEnabled: false,
     passwordHint: null,
-    confirmDeletes: true
+    confirmDeletes: true,
+    autoLockMinutes: 0
   },
   email: {
     enabled: false,
     fromName: "",
     replyTo: "",
-    subjectPrefix: "MarkBook"
+    subjectPrefix: "MarkBook",
+    defaultCc: ""
   }
 };
 
@@ -101,37 +149,61 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           defaultStudentScope: res.analysis.defaultStudentScope,
           showInactiveStudents: res.analysis.showInactiveStudents,
           showDeletedEntries: res.analysis.showDeletedEntries,
-          histogramBins: res.analysis.histogramBins
+          histogramBins: res.analysis.histogramBins,
+          defaultSortBy: res.analysis.defaultSortBy,
+          defaultTopBottomCount: res.analysis.defaultTopBottomCount
         },
         attendance: {
           schoolYearStartMonth: res.attendance.schoolYearStartMonth,
           presentCode: res.attendance.presentCode,
           absentCode: res.attendance.absentCode,
           lateCode: res.attendance.lateCode,
-          excusedCode: res.attendance.excusedCode
+          excusedCode: res.attendance.excusedCode,
+          tardyThresholdMinutes: res.attendance.tardyThresholdMinutes
         },
         comments: {
           defaultTransferPolicy: res.comments.defaultTransferPolicy,
           appendSeparator: res.comments.appendSeparator,
           enforceFit: res.comments.enforceFit,
-          enforceMaxChars: res.comments.enforceMaxChars
+          enforceMaxChars: res.comments.enforceMaxChars,
+          defaultMaxChars: res.comments.defaultMaxChars
         },
         printer: {
           fontScale: res.printer.fontScale,
           landscapeWideTables: res.printer.landscapeWideTables,
           repeatHeaders: res.printer.repeatHeaders,
-          showGeneratedAt: res.printer.showGeneratedAt
+          showGeneratedAt: res.printer.showGeneratedAt,
+          defaultMarginMm: res.printer.defaultMarginMm
+        },
+        planner: {
+          defaultLessonDurationMinutes: res.planner.defaultLessonDurationMinutes,
+          defaultPublishStatus: res.planner.defaultPublishStatus,
+          showArchivedByDefault: res.planner.showArchivedByDefault,
+          defaultUnitTitlePrefix: res.planner.defaultUnitTitlePrefix
+        },
+        courseDescription: {
+          defaultPeriodMinutes: res.courseDescription.defaultPeriodMinutes,
+          defaultPeriodsPerWeek: res.courseDescription.defaultPeriodsPerWeek,
+          defaultTotalWeeks: res.courseDescription.defaultTotalWeeks,
+          includePolicyByDefault: res.courseDescription.includePolicyByDefault
+        },
+        reports: {
+          plannerHeaderStyle: res.reports.plannerHeaderStyle,
+          showGeneratedAt: res.reports.showGeneratedAt,
+          defaultStudentScope: res.reports.defaultStudentScope
         },
         security: {
           passwordEnabled: res.security.passwordEnabled,
           passwordHint: res.security.passwordHint,
-          confirmDeletes: res.security.confirmDeletes
+          confirmDeletes: res.security.confirmDeletes,
+          autoLockMinutes: res.security.autoLockMinutes
         },
         email: {
           enabled: res.email.enabled,
           fromName: res.email.fromName,
           replyTo: res.email.replyTo,
-          subjectPrefix: res.email.subjectPrefix
+          subjectPrefix: res.email.subjectPrefix,
+          defaultCc: res.email.defaultCc
         }
       });
     } catch (e: any) {
@@ -174,6 +246,9 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
         "attendance",
         "comments",
         "printer",
+        "planner",
+        "courseDescription",
+        "reports",
         "security",
         "email"
       ] as const) {
@@ -295,6 +370,45 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
               style={{ display: "block", marginTop: 4, width: 100 }}
             />
           </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default sort by
+            <select
+              value={setup.analysis.defaultSortBy}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["analysis"]["defaultSortBy"];
+                setSetup((s) => ({
+                  ...s,
+                  analysis: { ...s.analysis, defaultSortBy: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="sortOrder">sortOrder</option>
+              <option value="displayName">displayName</option>
+              <option value="finalMark">finalMark</option>
+            </select>
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default top/bottom count
+            <input
+              value={String(setup.analysis.defaultTopBottomCount)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  analysis: {
+                    ...s.analysis,
+                    defaultTopBottomCount: parseIntOr(
+                      s.analysis.defaultTopBottomCount,
+                      e.currentTarget.value,
+                      3,
+                      20
+                    )
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 100 }}
+            />
+          </label>
           <button data-testid="setup-save-analysis" onClick={() => void saveSection("analysis")} disabled={saving || loading}>
             Save Analysis
           </button>
@@ -392,6 +506,27 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
               />
             </label>
           </div>
+          <label style={{ display: "block", marginTop: 8, marginBottom: 8 }}>
+            Tardy threshold (minutes)
+            <input
+              value={String(setup.attendance.tardyThresholdMinutes)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  attendance: {
+                    ...s.attendance,
+                    tardyThresholdMinutes: parseIntOr(
+                      s.attendance.tardyThresholdMinutes,
+                      e.currentTarget.value,
+                      0,
+                      120
+                    )
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
           <div style={{ marginTop: 8 }}>
             <button data-testid="setup-save-attendance" onClick={() => void saveSection("attendance")} disabled={saving || loading}>
               Save Attendance
@@ -475,6 +610,22 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
             />
             Enforce max chars
           </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default max chars
+            <input
+              value={String(setup.comments.defaultMaxChars)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  comments: {
+                    ...s.comments,
+                    defaultMaxChars: parseIntOr(s.comments.defaultMaxChars, e.currentTarget.value, 80, 5000)
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
           <button data-testid="setup-save-comments" onClick={() => void saveSection("comments")} disabled={saving || loading}>
             Save Comments
           </button>
@@ -550,6 +701,22 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
             />
             Include generated timestamp
           </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default margin (mm)
+            <input
+              value={String(setup.printer.defaultMarginMm)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  printer: {
+                    ...s.printer,
+                    defaultMarginMm: parseIntOr(s.printer.defaultMarginMm, e.currentTarget.value, 5, 30)
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 100 }}
+            />
+          </label>
           <button data-testid="setup-save-printer" onClick={() => void saveSection("printer")} disabled={saving || loading}>
             Save Printer
           </button>
@@ -608,8 +775,265 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
             />
             Confirm destructive actions
           </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Auto-lock after inactivity (minutes)
+            <input
+              value={String(setup.security.autoLockMinutes)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  security: {
+                    ...s.security,
+                    autoLockMinutes: parseIntOr(s.security.autoLockMinutes, e.currentTarget.value, 0, 240)
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
           <button data-testid="setup-save-security" onClick={() => void saveSection("security")} disabled={saving || loading}>
             Save Security
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Planner Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default lesson duration (minutes)
+            <input
+              data-testid="setup-planner-duration"
+              value={String(setup.planner.defaultLessonDurationMinutes)}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setSetup((s) => ({
+                  ...s,
+                  planner: {
+                    ...s.planner,
+                    defaultLessonDurationMinutes: parseIntOr(
+                      s.planner.defaultLessonDurationMinutes,
+                      value,
+                      15,
+                      240
+                    )
+                  }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default publish status
+            <select
+              data-testid="setup-planner-publish-status"
+              value={setup.planner.defaultPublishStatus}
+              onChange={(e) => {
+                const value =
+                  e.currentTarget.value as SetupState["planner"]["defaultPublishStatus"];
+                setSetup((s) => ({
+                  ...s,
+                  planner: { ...s.planner, defaultPublishStatus: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="draft">draft</option>
+              <option value="published">published</option>
+              <option value="archived">archived</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={setup.planner.showArchivedByDefault}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  planner: { ...s.planner, showArchivedByDefault: checked }
+                }));
+              }}
+            />
+            Show archived records by default
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Unit title prefix
+            <input
+              value={setup.planner.defaultUnitTitlePrefix}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setSetup((s) => ({
+                  ...s,
+                  planner: { ...s.planner, defaultUnitTitlePrefix: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4, width: 160 }}
+            />
+          </label>
+          <button
+            data-testid="setup-save-planner"
+            onClick={() => void saveSection("planner")}
+            disabled={saving || loading}
+          >
+            Save Planner
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Course Description Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default period minutes
+            <input
+              value={String(setup.courseDescription.defaultPeriodMinutes)}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setSetup((s) => ({
+                  ...s,
+                  courseDescription: {
+                    ...s.courseDescription,
+                    defaultPeriodMinutes: parseIntOr(
+                      s.courseDescription.defaultPeriodMinutes,
+                      value,
+                      1,
+                      300
+                    )
+                  }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default periods per week
+            <input
+              data-testid="setup-course-periods"
+              value={String(setup.courseDescription.defaultPeriodsPerWeek)}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setSetup((s) => ({
+                  ...s,
+                  courseDescription: {
+                    ...s.courseDescription,
+                    defaultPeriodsPerWeek: parseIntOr(
+                      s.courseDescription.defaultPeriodsPerWeek,
+                      value,
+                      1,
+                      14
+                    )
+                  }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default total weeks
+            <input
+              data-testid="setup-course-weeks"
+              value={String(setup.courseDescription.defaultTotalWeeks)}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setSetup((s) => ({
+                  ...s,
+                  courseDescription: {
+                    ...s.courseDescription,
+                    defaultTotalWeeks: parseIntOr(
+                      s.courseDescription.defaultTotalWeeks,
+                      value,
+                      1,
+                      60
+                    )
+                  }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={setup.courseDescription.includePolicyByDefault}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  courseDescription: {
+                    ...s.courseDescription,
+                    includePolicyByDefault: checked
+                  }
+                }));
+              }}
+            />
+            Include policy text by default
+          </label>
+          <button
+            data-testid="setup-save-course-description"
+            onClick={() => void saveSection("courseDescription")}
+            disabled={saving || loading}
+          >
+            Save Course Description
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Report Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Planner header style
+            <select
+              data-testid="setup-reports-planner-header-style"
+              value={setup.reports.plannerHeaderStyle}
+              onChange={(e) => {
+                const value =
+                  e.currentTarget.value as SetupState["reports"]["plannerHeaderStyle"];
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, plannerHeaderStyle: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="classic">classic</option>
+              <option value="compact">compact</option>
+              <option value="minimal">minimal</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={setup.reports.showGeneratedAt}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, showGeneratedAt: checked }
+                }));
+              }}
+            />
+            Include generated timestamp on reports
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default report student scope
+            <select
+              value={setup.reports.defaultStudentScope}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["reports"]["defaultStudentScope"];
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, defaultStudentScope: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="all">all</option>
+              <option value="active">active</option>
+              <option value="valid">valid</option>
+            </select>
+          </label>
+          <button
+            data-testid="setup-save-reports"
+            onClick={() => void saveSection("reports")}
+            disabled={saving || loading}
+          >
+            Save Reports
           </button>
         </section>
 
@@ -675,6 +1099,19 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
                     email: { ...s.email, subjectPrefix: value }
                   }));
                 }
+              }
+              style={{ display: "block", marginTop: 4, width: "100%" }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default CC
+            <input
+              value={setup.email.defaultCc}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  email: { ...s.email, defaultCc: e.currentTarget.value }
+                }))
               }
               style={{ display: "block", marginTop: 4, width: "100%" }}
             />

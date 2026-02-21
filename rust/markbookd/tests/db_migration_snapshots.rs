@@ -206,6 +206,10 @@ fn v0_snapshot_migrates_and_supports_legacy_import() {
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
     assert!(table_exists(&conn, "workspace_settings"));
     assert!(table_exists(&conn, "class_meta"));
+    assert!(table_exists(&conn, "planner_units"));
+    assert!(table_exists(&conn, "planner_lessons"));
+    assert!(table_exists(&conn, "planner_publish"));
+    assert!(table_exists(&conn, "course_description_profiles"));
     assert!(table_has_column(&conn, "students", "sort_order"));
     assert!(table_has_column(&conn, "students", "updated_at"));
     assert!(table_has_column(&conn, "students", "mark_set_mask"));
@@ -263,6 +267,10 @@ fn v1_snapshot_migrates_statuses_and_keeps_core_reads_working() {
 
     // Migration should convert old score statuses.
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
+    assert!(table_exists(&conn, "planner_units"));
+    assert!(table_exists(&conn, "planner_lessons"));
+    assert!(table_exists(&conn, "planner_publish"));
+    assert!(table_exists(&conn, "course_description_profiles"));
     let missing_now: String = conn
         .query_row(
             "SELECT status FROM scores WHERE id = 'sc_old_v1_missing'",
@@ -322,6 +330,10 @@ fn v2_snapshot_migrates_and_preserves_core_reads_writes() {
     let conn = Connection::open(workspace.join("markbook.sqlite3")).expect("open migrated db");
     assert!(table_exists(&conn, "workspace_settings"));
     assert!(table_exists(&conn, "class_meta"));
+    assert!(table_exists(&conn, "planner_units"));
+    assert!(table_exists(&conn, "planner_lessons"));
+    assert!(table_exists(&conn, "planner_publish"));
+    assert!(table_exists(&conn, "course_description_profiles"));
     assert!(table_has_column(&conn, "students", "mark_set_mask"));
     assert!(table_has_column(&conn, "scores", "remark"));
     assert!(table_has_column(&conn, "assessments", "legacy_type"));

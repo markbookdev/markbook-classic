@@ -16,5 +16,9 @@
       "fresh-markfiles/MB8D25/SNC28D.Y25",
       "fresh-markfiles/MB8D25/SNC38D.Y25"
     ]
+  },
+  "checksums": {
+    "calc-behavior-locks.json": "9417f8b5ac8ba65982c14cbf49a933885ed6328aa39375bd4e2621d3a05fed50",
+    "final-marks.json": "7000291725c62221467c9a77c570b04c7499d9914e1464c7fc65a59cad3a36af"
   }
 }

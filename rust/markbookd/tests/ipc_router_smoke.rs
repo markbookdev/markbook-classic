@@ -100,6 +100,39 @@ fn router_dispatch_smoke_covers_handler_families() {
     let _ = request(
         &mut stdin,
         &mut reader,
+        "4b",
+        "planner.units.list",
+        json!({ "classId": class_id.clone() }),
+    );
+    let created_unit = request(
+        &mut stdin,
+        &mut reader,
+        "4c",
+        "planner.units.create",
+        json!({ "classId": class_id.clone(), "input": { "title": "Router Smoke Unit" } }),
+    );
+    let created_unit_id = created_unit
+        .get("result")
+        .and_then(|v| v.get("unitId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !created_unit_id.is_empty() {
+        let _ = request(
+            &mut stdin,
+            &mut reader,
+            "4d",
+            "planner.publish.preview",
+            json!({
+                "classId": class_id.clone(),
+                "artifactKind": "unit",
+                "sourceId": created_unit_id
+            }),
+        );
+    }
+    let _ = request(
+        &mut stdin,
+        &mut reader,
         "5",
         "class.importLegacy",
         json!({}),
@@ -254,27 +287,41 @@ fn router_dispatch_smoke_covers_handler_families() {
         &mut stdin,
         &mut reader,
         "17",
+        "exchange.previewClassCsv",
+        json!({ "classId": class_id, "inPath": csv_out.to_string_lossy(), "mode": "upsert" }),
+    );
+    let _ = request(
+        &mut stdin,
+        &mut reader,
+        "18",
+        "exchange.applyClassCsv",
+        json!({ "classId": class_id, "inPath": csv_out.to_string_lossy(), "mode": "upsert" }),
+    );
+    let _ = request(
+        &mut stdin,
+        &mut reader,
+        "19",
         "loaned.list",
         json!({ "classId": class_id }),
     );
     let _ = request(
         &mut stdin,
         &mut reader,
-        "18",
+        "20",
         "devices.list",
         json!({ "classId": class_id }),
     );
     let _ = request(
         &mut stdin,
         &mut reader,
-        "19",
+        "21",
         "learningSkills.open",
         json!({ "classId": class_id }),
     );
     let _ = request(
         &mut stdin,
         &mut reader,
-        "20",
+        "22",
         "classes.delete",
         json!({ "classId": class_id }),
     );

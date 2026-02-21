@@ -5,7 +5,7 @@ use rusqlite::{params_from_iter, types::Value, Connection, OptionalExtension};
 use serde_json::json;
 use std::collections::HashMap;
 
-use super::{analytics, assets, attendance};
+use super::{analytics, assets, attendance, planner};
 
 fn required_str(req: &Request, key: &str) -> Result<String, serde_json::Value> {
     req.params
@@ -531,6 +531,26 @@ fn handle_reports_combined_analysis_model(
     }
 }
 
+fn handle_reports_class_assessment_drilldown_model(
+    state: &mut AppState,
+    req: &Request,
+) -> serde_json::Value {
+    let proxy_req = Request {
+        id: req.id.clone(),
+        method: "analytics.class.assessmentDrilldown".to_string(),
+        params: req.params.clone(),
+    };
+    match analytics::try_handle(state, &proxy_req) {
+        Some(resp) => resp,
+        None => err(
+            &req.id,
+            "server_error",
+            "analytics.class.assessmentDrilldown handler missing",
+            None,
+        ),
+    }
+}
+
 fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> serde_json::Value {
     let conn = match db_conn(state, req) {
         Ok(v) => v,
@@ -827,6 +847,114 @@ fn handle_reports_mark_set_grid_model(state: &mut AppState, req: &Request) -> se
     )
 }
 
+fn handle_reports_planner_unit_model(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let unit_id = match required_str(req, "unitId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match planner::reports_planner_unit_model(conn, &class_id, &unit_id) {
+        Ok(model) => ok(&req.id, model),
+        Err(msg) => {
+            if msg.contains("not found") {
+                err(&req.id, "not_found", msg, None)
+            } else if msg.contains("must be") || msg.contains("required") {
+                err(&req.id, "bad_params", msg, None)
+            } else {
+                err(&req.id, "db_query_failed", msg, None)
+            }
+        }
+    }
+}
+
+fn handle_reports_planner_lesson_model(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let lesson_id = match required_str(req, "lessonId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match planner::reports_planner_lesson_model(conn, &class_id, &lesson_id) {
+        Ok(model) => ok(&req.id, model),
+        Err(msg) => {
+            if msg.contains("not found") {
+                err(&req.id, "not_found", msg, None)
+            } else if msg.contains("must be") || msg.contains("required") {
+                err(&req.id, "bad_params", msg, None)
+            } else {
+                err(&req.id, "db_query_failed", msg, None)
+            }
+        }
+    }
+}
+
+fn handle_reports_course_description_model(
+    state: &mut AppState,
+    req: &Request,
+) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let options = req.params.get("options").and_then(|v| v.as_object());
+    match planner::reports_course_description_model(conn, &class_id, options) {
+        Ok(model) => ok(&req.id, model),
+        Err(msg) => {
+            if msg.contains("not found") {
+                err(&req.id, "not_found", msg, None)
+            } else if msg.contains("must be") || msg.contains("required") {
+                err(&req.id, "bad_params", msg, None)
+            } else {
+                err(&req.id, "db_query_failed", msg, None)
+            }
+        }
+    }
+}
+
+fn handle_reports_time_management_model(
+    state: &mut AppState,
+    req: &Request,
+) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let options = req.params.get("options").and_then(|v| v.as_object());
+    match planner::reports_time_management_model(conn, &class_id, options) {
+        Ok(model) => ok(&req.id, model),
+        Err(msg) => {
+            if msg.contains("not found") {
+                err(&req.id, "not_found", msg, None)
+            } else if msg.contains("must be") || msg.contains("required") {
+                err(&req.id, "bad_params", msg, None)
+            } else {
+                err(&req.id, "db_query_failed", msg, None)
+            }
+        }
+    }
+}
+
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
     match req.method.as_str() {
         "calc.assessmentStats" => Some(handle_calc_assessment_stats(state, req)),
@@ -842,6 +970,13 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
             Some(handle_reports_learning_skills_summary_model(state, req))
         }
         "reports.combinedAnalysisModel" => Some(handle_reports_combined_analysis_model(state, req)),
+        "reports.classAssessmentDrilldownModel" => {
+            Some(handle_reports_class_assessment_drilldown_model(state, req))
+        }
+        "reports.plannerUnitModel" => Some(handle_reports_planner_unit_model(state, req)),
+        "reports.plannerLessonModel" => Some(handle_reports_planner_lesson_model(state, req)),
+        "reports.courseDescriptionModel" => Some(handle_reports_course_description_model(state, req)),
+        "reports.timeManagementModel" => Some(handle_reports_time_management_model(state, req)),
         "reports.markSetGridModel" => Some(handle_reports_mark_set_grid_model(state, req)),
         _ => None,
     }

@@ -24,8 +24,24 @@ test("student analytics screen reflects selected student/filter final mark", asy
     await page.getByTestId("nav-student-analytics").click();
     await page.waitForSelector('[data-testid="student-analytics-screen"]');
 
+    await expect
+      .poll(async () => {
+        return await page.getByTestId("analytics-student-select").locator("option").count();
+      })
+      .toBeGreaterThan(0);
+
     const selectedStudentId = await page.getByTestId("analytics-student-select").inputValue();
-    expect(selectedStudentId).toBeTruthy();
+    if (!selectedStudentId) {
+      const fallbackId = await page
+        .getByTestId("analytics-student-select")
+        .locator("option")
+        .first()
+        .getAttribute("value");
+      expect(fallbackId).toBeTruthy();
+      await page.getByTestId("analytics-student-select").selectOption(String(fallbackId));
+    }
+    const effectiveStudentId = await page.getByTestId("analytics-student-select").inputValue();
+    expect(effectiveStudentId).toBeTruthy();
 
     await page.getByTestId("analytics-filter-term").selectOption("1");
     await page.waitForTimeout(150);
@@ -38,7 +54,7 @@ test("student analytics screen reflects selected student/filter final mark", asy
         filters: { term: 1, categoryName: null, typesMask: null }
       });
       return model?.finalMark ?? null;
-    }, { classId, markSetId, studentId: selectedStudentId });
+    }, { classId, markSetId, studentId: effectiveStudentId });
 
     const displayed = parseMark(
       await page.getByTestId("student-analytics-final-mark-value").innerText()

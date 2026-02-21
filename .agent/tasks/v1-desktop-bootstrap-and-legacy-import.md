@@ -387,3 +387,48 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:parity:regression` => PASS
   - `bun run test:packaging` => PASS
   - `bun run test:e2e:packaged` => PASS
+
+### EPIC-ANALYTICS-04 + EPIC-EVIDENCE-01B Snapshot (2026-02-20, interactive analytics closure + strict-lane checksum readiness)
+- Backend shipped:
+  - added additive analytics endpoints:
+    - `analytics.class.rows`
+    - `analytics.class.assessmentDrilldown`
+    - `analytics.student.compare`
+    - `analytics.student.trend`
+  - added additive report model endpoint:
+    - `reports.classAssessmentDrilldownModel`
+  - kept existing `analytics.class.open`/`analytics.student.open` contracts unchanged.
+  - drilldown report model now reuses analytics drilldown calculations for parity.
+- Renderer shipped:
+  - class analytics now supports interactive server-backed search/sort/paging + cohort-bin filtering + assessment drilldown panel.
+  - student analytics now includes cohort compare panel and trend-across-marksets panel.
+  - reports handoff now carries drilldown context for class assessment drilldown export.
+- Schema/reports shipped:
+  - added analytics and drilldown report Zod schemas in `packages/schema/src/index.ts`.
+  - added `renderClassAssessmentDrilldownReportHtml` in `packages/reports/src/index.ts`.
+  - extended reports smoke coverage for drilldown model rendering.
+- Strict-lane readiness hardening shipped:
+  - parity manifest now supports optional per-file SHA-256 checksums.
+  - `apps/desktop/scripts/parity-status.cjs` now validates checksums and emits richer JSON diagnostics.
+  - `rust/markbookd/tests/parity_fixture_preflight.rs` now validates checksum mismatches with explicit path+hash diagnostics.
+  - CI quality gate now calls `test:parity:status:json`.
+- Tests added:
+  - Rust:
+    - `rust/markbookd/tests/analytics_class_rows.rs`
+    - `rust/markbookd/tests/analytics_assessment_drilldown.rs`
+    - `rust/markbookd/tests/analytics_student_compare.rs`
+    - `rust/markbookd/tests/analytics_student_trend.rs`
+    - `rust/markbookd/tests/analytics_drilldown_reports_alignment.rs`
+  - Playwright:
+    - `apps/desktop/e2e/class-analytics-interactive.e2e.spec.cjs`
+    - `apps/desktop/e2e/student-analytics-compare-trend.e2e.spec.cjs`
+    - `apps/desktop/e2e/analytics-drilldown-report-alignment.e2e.spec.cjs`
+  - Stability fix:
+    - hardened `apps/desktop/e2e/student-analytics.e2e.spec.cjs` to wait for student select options before assertions.
+- Validation:
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`46 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
+  - `bun run test:e2e:packaged` => PASS

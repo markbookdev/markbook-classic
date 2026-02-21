@@ -13,10 +13,10 @@
 | Learning Skills | Implemented | edit + report model/export |
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
-| Analytics screens | Implemented (read-only) | class + student + combined analytics shipped with report handoff |
+| Analytics screens | Implemented (interactive read-only) | class + student + combined analytics shipped; class rows/drilldown and student compare/trend are now interactive with report handoff |
 | Setup/Admin defaults | Partial | workspace setup screen shipped (analysis/attendance/comments/printer/security/email); deeper legacy setup breadth still pending |
 | Planner/Course Description | Missing | not yet implemented |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial | exchange done; chapter-13 breadth pending |
 | Packaging/Release hardening | Implemented | launch smoke and CI gates in place |
-| Strict legacy-truth parity lane | Partial | infra exists; fresh outputs pending |
+| Strict legacy-truth parity lane | Partial | manifest checksum validation + CI readiness gates shipped; fresh outputs still required to flip strict-ready |

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import {
+  ExchangeApplyClassCsvResultSchema,
   ExchangeExportClassCsvResultSchema,
+  ExchangePreviewClassCsvResultSchema,
   ExchangeImportClassCsvResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
@@ -14,6 +16,13 @@ export function ExchangeScreen(props: {
   const [mode, setMode] = useState<"upsert" | "replace">("upsert");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
+  const [preview, setPreview] = useState<{
+    rowsTotal: number;
+    rowsParsed: number;
+    rowsMatched: number;
+    rowsUnmatched: number;
+    warningsCount: number;
+  } | null>(null);
 
   async function browseExportPath() {
     props.onError(null);
@@ -64,6 +73,40 @@ export function ExchangeScreen(props: {
     }
   }
 
+  async function previewCsv() {
+    if (!importPath.trim()) {
+      props.onError("Enter an import path first.");
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "exchange.previewClassCsv",
+        {
+          classId: props.selectedClassId,
+          inPath: importPath.trim(),
+          mode
+        },
+        ExchangePreviewClassCsvResultSchema
+      );
+      setPreview({
+        rowsTotal: res.rowsTotal,
+        rowsParsed: res.rowsParsed,
+        rowsMatched: res.rowsMatched,
+        rowsUnmatched: res.rowsUnmatched,
+        warningsCount: res.warningsCount
+      });
+      setStatus(`Preview: matched ${res.rowsMatched}/${res.rowsParsed} parsed rows.`);
+    } catch (e: any) {
+      setPreview(null);
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function importCsv() {
     if (!importPath.trim()) {
       props.onError("Enter an import path first.");
@@ -74,17 +117,40 @@ export function ExchangeScreen(props: {
     props.onError(null);
     try {
       const res = await requestParsed(
-        "exchange.importClassCsv",
+        "exchange.applyClassCsv",
         {
           classId: props.selectedClassId,
           inPath: importPath.trim(),
           mode
         },
-        ExchangeImportClassCsvResultSchema
+        ExchangeApplyClassCsvResultSchema
       );
-      setStatus(`Imported ${res.updated} score rows (${mode}).`);
+      setStatus(
+        `Applied ${res.updated} score rows (${mode}); skipped ${res.skipped}, warnings ${res.warningsCount}.`
+      );
+      setPreview({
+        rowsTotal: res.rowsTotal,
+        rowsParsed: res.rowsParsed,
+        rowsMatched: res.updated,
+        rowsUnmatched: res.skipped,
+        warningsCount: res.warningsCount
+      });
     } catch (e: any) {
-      props.onError(e?.message ?? String(e));
+      // Fall back to legacy import endpoint for older sidecars.
+      try {
+        const fallback = await requestParsed(
+          "exchange.importClassCsv",
+          {
+            classId: props.selectedClassId,
+            inPath: importPath.trim(),
+            mode
+          },
+          ExchangeImportClassCsvResultSchema
+        );
+        setStatus(`Imported ${fallback.updated} score rows (${mode}).`);
+      } catch (fallbackErr: any) {
+        props.onError(fallbackErr?.message ?? String(fallbackErr));
+      }
     } finally {
       setBusy(false);
     }
@@ -145,12 +211,24 @@ export function ExchangeScreen(props: {
               <option value="replace">Replace</option>
             </select>
           </label>
+          <button data-testid="exchange-preview-btn" disabled={busy} onClick={() => void previewCsv()}>
+            {busy ? "Working..." : "Preview"}
+          </button>
           <button data-testid="exchange-import-btn" disabled={busy} onClick={() => void importCsv()}>
             {busy ? "Working..." : "Import"}
           </button>
         </div>
       </div>
 
+      {preview ? (
+        <div
+          data-testid="exchange-preview-summary"
+          style={{ marginTop: 8, color: "#444", fontSize: 13 }}
+        >
+          Parsed {preview.rowsParsed}/{preview.rowsTotal}, matched {preview.rowsMatched}, unmatched{" "}
+          {preview.rowsUnmatched}, warnings {preview.warningsCount}
+        </div>
+      ) : null}
       {status ? <div style={{ marginTop: 8, color: "#1a5" }}>{status}</div> : null}
       <div style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
         CSV format is the MarkBook desktop exchange format emitted by this app.

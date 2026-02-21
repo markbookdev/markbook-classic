@@ -804,6 +804,67 @@ export const AnalyticsClassOpenResultSchema = z.object({
   rows: z.array(CalcPerStudentSchema)
 });
 
+export const AnalyticsClassRowsResultSchema = z.object({
+  rows: z.array(CalcPerStudentSchema),
+  totalRows: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+  sortBy: z.string(),
+  sortDir: z.enum(["asc", "desc"]),
+  appliedCohort: z.object({
+    finalMin: z.number().nullable(),
+    finalMax: z.number().nullable(),
+    includeNoFinal: z.boolean()
+  })
+});
+
+export const AnalyticsClassAssessmentDrilldownResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  studentScope: AnalyticsStudentScopeSchema,
+  assessment: z.object({
+    assessmentId: z.string(),
+    idx: z.number(),
+    date: z.string().nullable(),
+    categoryName: z.string().nullable(),
+    title: z.string(),
+    term: z.number().nullable(),
+    legacyType: z.number().nullable(),
+    weight: z.number(),
+    outOf: z.number()
+  }),
+  rows: z.array(
+    z.object({
+      studentId: z.string(),
+      displayName: z.string(),
+      sortOrder: z.number(),
+      active: z.boolean(),
+      status: z.enum(["no_mark", "zero", "scored"]),
+      raw: z.number().nullable(),
+      percent: z.number().nullable(),
+      finalMark: z.number().nullable()
+    })
+  ),
+  totalRows: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+  sortBy: z.string(),
+  sortDir: z.enum(["asc", "desc"]),
+  classStats: CalcPerAssessmentSchema
+});
+
 export const AnalyticsStudentOpenResultSchema = z.object({
   class: z.object({
     id: z.string(),
@@ -867,6 +928,92 @@ export const AnalyticsStudentOpenResultSchema = z.object({
       codedDays: z.number()
     })
     .optional()
+});
+
+export const AnalyticsStudentCompareResultSchema = z.object({
+  class: z.object({
+    id: z.string(),
+    name: z.string()
+  }),
+  markSet: z.object({
+    id: z.string(),
+    code: z.string(),
+    description: z.string()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  studentScope: AnalyticsStudentScopeSchema,
+  student: CalcPerStudentSchema,
+  cohort: z.object({
+    studentCount: z.number(),
+    finalMarkCount: z.number(),
+    classAverage: z.number().nullable(),
+    classMedian: z.number().nullable()
+  }),
+  finalMarkDelta: z.number().nullable(),
+  percentile: z.number().nullable(),
+  categoryComparison: z.array(
+    z.object({
+      name: z.string(),
+      weight: z.number(),
+      studentValue: z.number().nullable(),
+      classAvg: z.number().nullable(),
+      hasData: z.boolean()
+    })
+  ),
+  assessmentComparison: z.array(
+    z.object({
+      assessmentId: z.string(),
+      idx: z.number(),
+      title: z.string(),
+      date: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      term: z.number().nullable(),
+      legacyType: z.number().nullable(),
+      weight: z.number(),
+      outOf: z.number(),
+      status: z.enum(["no_mark", "zero", "scored"]),
+      raw: z.number().nullable(),
+      percent: z.number().nullable(),
+      classAvgRaw: z.number().nullable(),
+      classAvgPercent: z.number().nullable(),
+      classMedianPercent: z.number().nullable()
+    })
+  )
+});
+
+export const AnalyticsStudentTrendResultSchema = z.object({
+  student: z.object({
+    id: z.string(),
+    displayName: z.string(),
+    active: z.boolean()
+  }),
+  filters: z.object({
+    term: z.number().nullable(),
+    categoryName: z.string().nullable(),
+    typesMask: z.number().nullable()
+  }),
+  points: z.array(
+    z.object({
+      markSetId: z.string(),
+      code: z.string(),
+      sortOrder: z.number(),
+      finalMark: z.number().nullable(),
+      classAverage: z.number().nullable(),
+      classMedian: z.number().nullable(),
+      validForSet: z.boolean()
+    })
+  ),
+  summary: z.object({
+    selectedMarkSetCount: z.number(),
+    finalMarkCount: z.number(),
+    averageFinal: z.number().nullable(),
+    bestFinal: z.number().nullable(),
+    worstFinal: z.number().nullable()
+  })
 });
 
 const AnalyticsCombinedMarkSetSchema = z.object({
@@ -988,42 +1135,240 @@ export const CalcConfigClearOverrideResultSchema = z.object({
   ok: z.literal(true)
 });
 
+export const PlannerUnitSchema = z.object({
+  id: z.string(),
+  sortOrder: z.number(),
+  title: z.string(),
+  startDate: z.string().nullable(),
+  endDate: z.string().nullable(),
+  summary: z.string(),
+  expectations: z.array(z.string()),
+  resources: z.array(z.string()),
+  archived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const PlannerUnitsListResultSchema = z.object({
+  units: z.array(PlannerUnitSchema)
+});
+
+export const PlannerUnitsOpenResultSchema = z.object({
+  unit: PlannerUnitSchema
+});
+
+export const PlannerUnitsCreateResultSchema = z.object({
+  unitId: z.string()
+});
+
+export const PlannerUnitsUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerUnitsReorderResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerUnitsArchiveResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerLessonSchema = z.object({
+  id: z.string(),
+  unitId: z.string().nullable(),
+  sortOrder: z.number(),
+  lessonDate: z.string().nullable(),
+  title: z.string(),
+  outline: z.string(),
+  detail: z.string(),
+  followUp: z.string(),
+  homework: z.string(),
+  durationMinutes: z.number().nullable(),
+  archived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const PlannerLessonsListResultSchema = z.object({
+  lessons: z.array(PlannerLessonSchema)
+});
+
+export const PlannerLessonsOpenResultSchema = z.object({
+  lesson: PlannerLessonSchema
+});
+
+export const PlannerLessonsCreateResultSchema = z.object({
+  lessonId: z.string()
+});
+
+export const PlannerLessonsUpdateResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerLessonsReorderResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerLessonsArchiveResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const PlannerPublishedArtifactSchema = z.object({
+  id: z.string(),
+  artifactKind: z.enum(["unit", "lesson", "course_description", "time_management"]),
+  sourceId: z.string().nullable(),
+  title: z.string(),
+  status: z.enum(["draft", "published", "archived"]),
+  version: z.number(),
+  model: z.unknown(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const PlannerPublishListResultSchema = z.object({
+  published: z.array(PlannerPublishedArtifactSchema)
+});
+
+export const PlannerPublishPreviewResultSchema = z.object({
+  artifactKind: z.enum(["unit", "lesson", "course_description", "time_management"]),
+  sourceId: z.string().nullable().optional(),
+  title: z.string(),
+  model: z.unknown()
+});
+
+export const PlannerPublishCommitResultSchema = z.object({
+  ok: z.literal(true),
+  publishId: z.string(),
+  status: z.enum(["draft", "published", "archived"]),
+  version: z.number(),
+  settingsApplied: z.unknown().optional()
+});
+
+export const PlannerPublishUpdateStatusResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CourseDescriptionProfileSchema = z.object({
+  courseTitle: z.string(),
+  gradeLabel: z.string(),
+  periodMinutes: z.number(),
+  periodsPerWeek: z.number(),
+  totalWeeks: z.number(),
+  strands: z.array(z.string()),
+  policyText: z.string(),
+  updatedAt: z.string().nullable()
+});
+
+export const CourseDescriptionGetProfileResultSchema = z.object({
+  classId: z.string(),
+  profile: CourseDescriptionProfileSchema
+});
+
+export const CourseDescriptionUpdateProfileResultSchema = z.object({
+  ok: z.literal(true)
+});
+
+export const CourseDescriptionModelResultSchema = z.object({
+  class: z.object({ id: z.string(), name: z.string() }),
+  profile: z.object({
+    courseTitle: z.string(),
+    gradeLabel: z.string(),
+    periodMinutes: z.number(),
+    periodsPerWeek: z.number(),
+    totalWeeks: z.number(),
+    strands: z.array(z.unknown()),
+    policyText: z.string()
+  }),
+  schedule: z.object({
+    periodMinutes: z.number(),
+    periodsPerWeek: z.number(),
+    totalWeeks: z.number(),
+    totalHours: z.number()
+  }),
+  units: z.array(z.unknown()),
+  lessons: z.array(z.unknown()),
+  generatedAt: z.string(),
+  settingsApplied: z.unknown().optional()
+});
+
+export const TimeManagementModelResultSchema = z.object({
+  class: z.object({ id: z.string(), name: z.string() }),
+  inputs: z.object({
+    periodMinutes: z.number(),
+    periodsPerWeek: z.number(),
+    totalWeeks: z.number(),
+    includeArchived: z.boolean()
+  }),
+  totals: z.object({
+    plannedMinutes: z.number(),
+    availableMinutes: z.number(),
+    remainingMinutes: z.number(),
+    utilizationPercent: z.number()
+  }),
+  generatedAt: z.string(),
+  settingsApplied: z.unknown().optional()
+});
+
 export const SetupGetResultSchema = z.object({
   analysis: z.object({
     defaultStudentScope: z.enum(["all", "active", "valid"]),
     showInactiveStudents: z.boolean(),
     showDeletedEntries: z.boolean(),
-    histogramBins: z.number()
+    histogramBins: z.number(),
+    defaultSortBy: z.enum(["sortOrder", "displayName", "finalMark"]),
+    defaultTopBottomCount: z.number()
   }),
   attendance: z.object({
     schoolYearStartMonth: z.number(),
     presentCode: z.string(),
     absentCode: z.string(),
     lateCode: z.string(),
-    excusedCode: z.string()
+    excusedCode: z.string(),
+    tardyThresholdMinutes: z.number()
   }),
   comments: z.object({
     defaultTransferPolicy: z.enum(["replace", "append", "fill_blank", "source_if_longer"]),
     appendSeparator: z.string(),
     enforceFit: z.boolean(),
-    enforceMaxChars: z.boolean()
+    enforceMaxChars: z.boolean(),
+    defaultMaxChars: z.number()
   }),
   printer: z.object({
     fontScale: z.number(),
     landscapeWideTables: z.boolean(),
     repeatHeaders: z.boolean(),
-    showGeneratedAt: z.boolean()
+    showGeneratedAt: z.boolean(),
+    defaultMarginMm: z.number()
+  }),
+  planner: z.object({
+    defaultLessonDurationMinutes: z.number(),
+    defaultPublishStatus: z.enum(["draft", "published", "archived"]),
+    showArchivedByDefault: z.boolean(),
+    defaultUnitTitlePrefix: z.string()
+  }),
+  courseDescription: z.object({
+    defaultPeriodMinutes: z.number(),
+    defaultPeriodsPerWeek: z.number(),
+    defaultTotalWeeks: z.number(),
+    includePolicyByDefault: z.boolean()
+  }),
+  reports: z.object({
+    plannerHeaderStyle: z.enum(["compact", "classic", "minimal"]),
+    showGeneratedAt: z.boolean(),
+    defaultStudentScope: z.enum(["all", "active", "valid"])
   }),
   security: z.object({
     passwordEnabled: z.boolean(),
     passwordHint: z.string().nullable(),
-    confirmDeletes: z.boolean()
+    confirmDeletes: z.boolean(),
+    autoLockMinutes: z.number()
   }),
   email: z.object({
     enabled: z.boolean(),
     fromName: z.string(),
     replyTo: z.string(),
-    subjectPrefix: z.string()
+    subjectPrefix: z.string(),
+    defaultCc: z.string()
   })
 });
 
@@ -1260,6 +1605,51 @@ export const ReportsCategoryAnalysisModelResultSchema = z.object({
 });
 
 export const ReportsCombinedAnalysisModelResultSchema = AnalyticsCombinedOpenResultSchema;
+export const ReportsClassAssessmentDrilldownModelResultSchema =
+  AnalyticsClassAssessmentDrilldownResultSchema;
+export const ReportsPlannerUnitModelResultSchema = z.object({
+  artifactKind: z.literal("unit"),
+  title: z.string(),
+  unit: z.object({
+    unitId: z.string(),
+    title: z.string(),
+    startDate: z.string().nullable(),
+    endDate: z.string().nullable(),
+    summary: z.string(),
+    expectations: z.array(z.string()),
+    resources: z.array(z.string())
+  }),
+  lessons: z.array(
+    z.object({
+      lessonId: z.string(),
+      title: z.string(),
+      lessonDate: z.string().nullable(),
+      outline: z.string(),
+      detail: z.string(),
+      followUp: z.string(),
+      homework: z.string(),
+      durationMinutes: z.number().nullable()
+    })
+  )
+});
+export const ReportsPlannerLessonModelResultSchema = z.object({
+  artifactKind: z.literal("lesson"),
+  title: z.string(),
+  lesson: z.object({
+    lessonId: z.string(),
+    unitId: z.string().nullable(),
+    title: z.string(),
+    lessonDate: z.string().nullable(),
+    outline: z.string(),
+    detail: z.string(),
+    followUp: z.string(),
+    homework: z.string(),
+    durationMinutes: z.number().nullable(),
+    unitTitle: z.string().nullable()
+  })
+});
+export const ReportsCourseDescriptionModelResultSchema = CourseDescriptionModelResultSchema;
+export const ReportsTimeManagementModelResultSchema = TimeManagementModelResultSchema;
 
 export const ReportsStudentSummaryModelResultSchema = z.object({
   class: z.object({
@@ -1370,9 +1760,55 @@ export const ExchangeExportClassCsvResultSchema = z.object({
   path: z.string()
 });
 
+export const ExchangeWarningSchema = z.object({
+  line: z.number().optional(),
+  code: z.string(),
+  message: z.string()
+});
+
+export const ExchangePreviewClassCsvResultSchema = z.object({
+  ok: z.literal(true),
+  path: z.string(),
+  mode: z.string(),
+  rowsTotal: z.number(),
+  rowsParsed: z.number(),
+  rowsMatched: z.number(),
+  rowsUnmatched: z.number(),
+  warningsCount: z.number(),
+  warnings: z.array(ExchangeWarningSchema),
+  previewRows: z.array(
+    z.object({
+      line: z.number(),
+      studentId: z.string(),
+      markSetCode: z.string(),
+      assessmentIdx: z.number(),
+      status: z.string()
+    })
+  )
+});
+
+export const ExchangeApplyClassCsvResultSchema = z.object({
+  ok: z.literal(true),
+  updated: z.number(),
+  rowsTotal: z.number(),
+  rowsParsed: z.number(),
+  skipped: z.number(),
+  warningsCount: z.number(),
+  warnings: z.array(ExchangeWarningSchema),
+  mode: z.string(),
+  path: z.string()
+});
+
 export const ExchangeImportClassCsvResultSchema = z.object({
   ok: z.literal(true),
-  updated: z.number()
+  updated: z.number(),
+  rowsTotal: z.number().optional(),
+  rowsParsed: z.number().optional(),
+  skipped: z.number().optional(),
+  warningsCount: z.number().optional(),
+  warnings: z.array(ExchangeWarningSchema).optional(),
+  mode: z.string().optional(),
+  path: z.string().optional()
 });
 
 export const ReportsAttendanceMonthlyModelResultSchema = z.object({

@@ -30,8 +30,10 @@ test("class exchange CSV export/import roundtrip", async () => {
 
     await page.getByTestId("exchange-import-browse-btn").click();
     await expect(page.getByTestId("exchange-import-path-input")).toHaveValue(csvPath);
+    await page.getByTestId("exchange-preview-btn").click();
+    await expect(page.getByTestId("exchange-preview-summary")).toBeVisible();
     await page.getByTestId("exchange-import-btn").click();
-    await expect(page.getByText("Imported", { exact: false })).toBeVisible();
+    await expect(page.getByText(/Imported|Applied/, { exact: false })).toBeVisible();
   } finally {
     await app.close();
   }

@@ -58,6 +58,79 @@ fn parse_csv_record(line: &str) -> Vec<String> {
     out
 }
 
+#[derive(Clone, Debug)]
+struct ParsedExchangeRow {
+    line_no: usize,
+    student_id: String,
+    mark_set_code: String,
+    assessment_idx: i64,
+    status: String,
+    raw_value: Option<f64>,
+}
+
+fn parse_exchange_rows(text: &str) -> (Vec<ParsedExchangeRow>, Vec<serde_json::Value>, usize) {
+    let mut rows = Vec::new();
+    let mut warnings = Vec::new();
+    let mut total = 0usize;
+    for (line_no, raw_line) in text.lines().enumerate() {
+        if line_no == 0 {
+            continue;
+        }
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        total += 1;
+        let fields = parse_csv_record(line);
+        if fields.len() < 7 {
+            warnings.push(json!({
+                "line": line_no + 1,
+                "code": "bad_columns",
+                "message": "expected at least 7 CSV columns"
+            }));
+            continue;
+        }
+        let student_id = fields[0].trim().to_string();
+        let mark_set_code = fields[2].trim().to_string();
+        let assessment_idx = match fields[3].trim().parse::<i64>() {
+            Ok(v) => v,
+            Err(_) => {
+                warnings.push(json!({
+                    "line": line_no + 1,
+                    "code": "bad_assessment_idx",
+                    "message": "assessment_idx must be an integer"
+                }));
+                continue;
+            }
+        };
+        let status = fields[5].trim().to_ascii_lowercase();
+        let raw_value = if fields[6].trim().is_empty() {
+            None
+        } else {
+            match fields[6].trim().parse::<f64>() {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    warnings.push(json!({
+                        "line": line_no + 1,
+                        "code": "bad_raw_value",
+                        "message": "raw_value must be numeric when provided"
+                    }));
+                    continue;
+                }
+            }
+        };
+        rows.push(ParsedExchangeRow {
+            line_no: line_no + 1,
+            student_id,
+            mark_set_code,
+            assessment_idx,
+            status,
+            raw_value,
+        });
+    }
+    (rows, warnings, total)
+}
+
 fn resolve_score_state(
     explicit_state: Option<&str>,
     value: Option<f64>,
@@ -329,18 +402,20 @@ fn handle_exchange_export_class_csv(state: &mut AppState, req: &Request) -> serd
     )
 }
 
-fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serde_json::Value {
-    let Some(conn) = state.db.as_ref() else {
-        return err(&req.id, "no_workspace", "select a workspace first", None);
-    };
-    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
-        Some(v) => v.to_string(),
-        None => return err(&req.id, "bad_params", "missing classId", None),
-    };
-    let in_path = match req.params.get("inPath").and_then(|v| v.as_str()) {
-        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
-        _ => return err(&req.id, "bad_params", "missing inPath", None),
-    };
+fn read_exchange_input(req: &Request) -> Result<(String, String, String, String), serde_json::Value> {
+    let class_id = req
+        .params
+        .get("classId")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+        .ok_or_else(|| err(&req.id, "bad_params", "missing classId", None))?;
+    let in_path = req
+        .params
+        .get("inPath")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| err(&req.id, "bad_params", "missing inPath", None))?;
     let mode = req
         .params
         .get("mode")
@@ -350,15 +425,120 @@ fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serd
     let text = match std::fs::read_to_string(&in_path) {
         Ok(t) => t,
         Err(e) => {
-            return err(
+            return Err(err(
                 &req.id,
                 "io_failed",
                 e.to_string(),
                 Some(json!({ "path": in_path })),
-            )
+            ))
         }
     };
+    Ok((class_id, in_path, mode, text))
+}
 
+fn handle_exchange_preview_class_csv(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let (class_id, in_path, mode, text) = match read_exchange_input(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let (parsed_rows, mut warnings, rows_total) = parse_exchange_rows(&text);
+    let mut matched = 0usize;
+    let mut unmatched = 0usize;
+    let mut preview_rows = Vec::new();
+    for row in &parsed_rows {
+        let student_ok = conn
+            .query_row(
+                "SELECT 1 FROM students WHERE id = ? AND class_id = ?",
+                (&row.student_id, &class_id),
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .is_some();
+        let assessment_id: Option<String> = conn
+            .query_row(
+                "SELECT a.id
+                 FROM assessments a
+                 JOIN mark_sets ms ON ms.id = a.mark_set_id
+                 WHERE ms.class_id = ? AND ms.code = ? AND a.idx = ?",
+                (&class_id, &row.mark_set_code, row.assessment_idx),
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+
+        let mut status = "matched";
+        if !student_ok {
+            status = "missing_student";
+            warnings.push(json!({
+                "line": row.line_no,
+                "code": "missing_student",
+                "message": "student_id does not belong to target class"
+            }));
+        } else if assessment_id.is_none() {
+            status = "missing_assessment";
+            warnings.push(json!({
+                "line": row.line_no,
+                "code": "missing_assessment",
+                "message": "assessment not found in target class/mark set"
+            }));
+        } else if let Err(e) = resolve_score_state(Some(&row.status), row.raw_value) {
+            status = "invalid_state";
+            warnings.push(json!({
+                "line": row.line_no,
+                "code": e.code,
+                "message": e.message
+            }));
+        }
+
+        if status == "matched" {
+            matched += 1;
+        } else {
+            unmatched += 1;
+        }
+        if preview_rows.len() < 250 {
+            preview_rows.push(json!({
+                "line": row.line_no,
+                "studentId": row.student_id,
+                "markSetCode": row.mark_set_code,
+                "assessmentIdx": row.assessment_idx,
+                "status": status
+            }));
+        }
+    }
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "path": in_path,
+            "mode": mode,
+            "rowsTotal": rows_total,
+            "rowsParsed": parsed_rows.len(),
+            "rowsMatched": matched,
+            "rowsUnmatched": unmatched,
+            "warningsCount": warnings.len(),
+            "warnings": warnings,
+            "previewRows": preview_rows
+        }),
+    )
+}
+
+fn handle_exchange_apply_class_csv(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let (class_id, in_path, mode, text) = match read_exchange_input(req) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let (parsed_rows, mut warnings, rows_total) = parse_exchange_rows(&text);
     let tx = match conn.unchecked_transaction() {
         Ok(t) => t,
         Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
@@ -385,30 +565,13 @@ fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serd
     }
 
     let mut updated = 0usize;
-    for (line_no, raw_line) in text.lines().enumerate() {
-        if line_no == 0 {
-            continue;
-        }
-        let line = raw_line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let fields = parse_csv_record(line);
-        if fields.len() < 7 {
-            continue;
-        }
-        let student_id = fields[0].trim();
-        let mark_set_code = fields[2].trim();
-        let assessment_idx = match fields[3].trim().parse::<i64>() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let status = fields[5].trim().to_ascii_lowercase();
-        let raw_value = if fields[6].trim().is_empty() {
-            None
-        } else {
-            fields[6].trim().parse::<f64>().ok()
-        };
+    let mut skipped = 0usize;
+    for row in &parsed_rows {
+        let student_id = row.student_id.as_str();
+        let mark_set_code = row.mark_set_code.as_str();
+        let assessment_idx = row.assessment_idx;
+        let status = row.status.as_str();
+        let raw_value = row.raw_value;
 
         let student_ok = tx
             .query_row(
@@ -421,6 +584,12 @@ fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serd
             .flatten()
             .is_some();
         if !student_ok {
+            skipped += 1;
+            warnings.push(json!({
+                "line": row.line_no,
+                "code": "missing_student",
+                "message": "student_id does not belong to target class"
+            }));
             continue;
         }
         let assessment_id: Option<String> = tx
@@ -436,11 +605,25 @@ fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serd
             .ok()
             .flatten();
         let Some(assessment_id) = assessment_id else {
+            skipped += 1;
+            warnings.push(json!({
+                "line": row.line_no,
+                "code": "missing_assessment",
+                "message": "assessment not found in target class/mark set"
+            }));
             continue;
         };
         let (resolved_raw, resolved_state) = match resolve_score_state(Some(&status), raw_value) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                skipped += 1;
+                warnings.push(json!({
+                    "line": row.line_no,
+                    "code": e.code,
+                    "message": e.message
+                }));
+                continue;
+            }
         };
         if let Err(e) = upsert_score(
             &tx,
@@ -459,7 +642,24 @@ fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serd
         return err(&req.id, "db_commit_failed", e.to_string(), None);
     }
 
-    ok(&req.id, json!({ "ok": true, "updated": updated }))
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "updated": updated,
+            "rowsTotal": rows_total,
+            "rowsParsed": parsed_rows.len(),
+            "skipped": skipped,
+            "warningsCount": warnings.len(),
+            "warnings": warnings,
+            "mode": mode,
+            "path": in_path
+        }),
+    )
+}
+
+fn handle_exchange_import_class_csv(state: &mut AppState, req: &Request) -> serde_json::Value {
+    handle_exchange_apply_class_csv(state, req)
 }
 
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
@@ -467,6 +667,8 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "backup.exportWorkspaceBundle" => Some(handle_backup_export_workspace_bundle(state, req)),
         "backup.importWorkspaceBundle" => Some(handle_backup_import_workspace_bundle(state, req)),
         "exchange.exportClassCsv" => Some(handle_exchange_export_class_csv(state, req)),
+        "exchange.previewClassCsv" => Some(handle_exchange_preview_class_csv(state, req)),
+        "exchange.applyClassCsv" => Some(handle_exchange_apply_class_csv(state, req)),
         "exchange.importClassCsv" => Some(handle_exchange_import_class_csv(state, req)),
         _ => None,
     }

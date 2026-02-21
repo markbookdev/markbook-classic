@@ -4,10 +4,15 @@ import {
   renderMarkSetSummaryReportHtml,
   renderCategoryAnalysisReportHtml,
   renderCombinedAnalysisReportHtml,
+  renderClassAssessmentDrilldownReportHtml,
   renderStudentSummaryReportHtml,
   renderAttendanceMonthlyReportHtml,
   renderClassListReportHtml,
-  renderLearningSkillsSummaryReportHtml
+  renderLearningSkillsSummaryReportHtml,
+  renderPlannerUnitReportHtml,
+  renderPlannerLessonReportHtml,
+  renderCourseDescriptionReportHtml,
+  renderTimeManagementReportHtml
 } from "../index";
 
 function expectTablePrintCss(html: string) {
@@ -124,6 +129,59 @@ describe("reports html render smoke", () => {
     expect(html).toContain("Student Summary");
   });
 
+  test("class assessment drilldown includes print css", () => {
+    const html = renderClassAssessmentDrilldownReportHtml({
+      class: { id: "c1", name: "8D (2025)" },
+      markSet: { id: "ms1", code: "MAT1", description: "Mathematics 1" },
+      filters: { term: 1, categoryName: null, typesMask: null },
+      studentScope: "valid",
+      assessment: {
+        assessmentId: "a1",
+        idx: 0,
+        date: "2025-09-01",
+        categoryName: "KNOW",
+        title: "Review Quiz",
+        term: 1,
+        legacyType: 0,
+        weight: 1,
+        outOf: 10
+      },
+      rows: [
+        {
+          studentId: "s1",
+          displayName: "Boyce, Daniella",
+          sortOrder: 0,
+          active: true,
+          status: "scored",
+          raw: 8,
+          percent: 80,
+          finalMark: 78
+        }
+      ],
+      totalRows: 1,
+      page: 1,
+      pageSize: 25,
+      sortBy: "sortOrder",
+      sortDir: "asc",
+      classStats: {
+        assessmentId: "a1",
+        idx: 0,
+        date: "2025-09-01",
+        categoryName: "KNOW",
+        title: "Review Quiz",
+        outOf: 10,
+        avgRaw: 8,
+        avgPercent: 80,
+        medianPercent: 80,
+        scoredCount: 1,
+        zeroCount: 0,
+        noMarkCount: 0
+      }
+    });
+    expectTablePrintCss(html);
+    expect(html).toContain("Class Assessment Drilldown");
+  });
+
   test("combined analysis includes print css", () => {
     const html = renderCombinedAnalysisReportHtml({
       class: { id: "c1", name: "8D (2025)" },
@@ -228,5 +286,98 @@ describe("reports html render smoke", () => {
     });
     expectTablePrintCss(html);
     expect(html).toContain("Learning Skills Summary");
+  });
+
+  test("planner unit includes print css", () => {
+    const html = renderPlannerUnitReportHtml({
+      artifactKind: "unit",
+      title: "Unit 1",
+      unit: {
+        unitId: "u1",
+        title: "Unit 1",
+        startDate: "2025-09-01",
+        endDate: "2025-09-20",
+        summary: "Intro unit",
+        expectations: ["Expect 1"],
+        resources: ["Resource 1"]
+      },
+      lessons: [
+        {
+          lessonId: "l1",
+          title: "Lesson 1",
+          lessonDate: "2025-09-02",
+          outline: "Outline",
+          detail: "Detail",
+          followUp: "Follow",
+          homework: "HW",
+          durationMinutes: 75
+        }
+      ]
+    });
+    expectTablePrintCss(html);
+    expect(html).toContain("Planner Unit");
+  });
+
+  test("planner lesson renders", () => {
+    const html = renderPlannerLessonReportHtml({
+      artifactKind: "lesson",
+      title: "Lesson 1",
+      lesson: {
+        lessonId: "l1",
+        unitId: "u1",
+        title: "Lesson 1",
+        lessonDate: "2025-09-02",
+        outline: "Outline",
+        detail: "Detail",
+        followUp: "Follow up",
+        homework: "Homework",
+        durationMinutes: 75,
+        unitTitle: "Unit 1"
+      }
+    });
+    expect(html).toContain("Planner Lesson");
+    expect(html).toContain("Outline");
+  });
+
+  test("course description renders", () => {
+    const html = renderCourseDescriptionReportHtml({
+      class: { id: "c1", name: "8D (2025)" },
+      profile: {
+        courseTitle: "Course A",
+        gradeLabel: "Grade 9",
+        periodMinutes: 75,
+        periodsPerWeek: 5,
+        totalWeeks: 36,
+        strands: ["S1"],
+        policyText: "Policy"
+      },
+      schedule: { periodMinutes: 75, periodsPerWeek: 5, totalWeeks: 36, totalHours: 225 },
+      units: [{ title: "Unit 1", summary: "Summary" }],
+      lessons: [{ title: "Lesson 1" }],
+      generatedAt: "0"
+    });
+    expect(html).toContain("Course Description");
+    expect(html).toContain("Course A");
+  });
+
+  test("time management renders", () => {
+    const html = renderTimeManagementReportHtml({
+      class: { id: "c1", name: "8D (2025)" },
+      inputs: {
+        periodMinutes: 75,
+        periodsPerWeek: 5,
+        totalWeeks: 36,
+        includeArchived: false
+      },
+      totals: {
+        plannedMinutes: 1500,
+        availableMinutes: 13500,
+        remainingMinutes: 12000,
+        utilizationPercent: 11.1
+      },
+      generatedAt: "0"
+    });
+    expect(html).toContain("Time Management");
+    expect(html).toContain("Utilization");
   });
 });

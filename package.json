@@ -17,6 +17,7 @@
     "test:reports": "bun test packages/reports/src/__tests__/render_smoke.test.ts",
     "test:parity:regression": "cargo test --manifest-path rust/markbookd/Cargo.toml --test parity_fixture_preflight --test calc_behavior_locks --test calc_parity_goldens --test assessment_stats_vs_fresh_legacy_summaries",
     "test:parity:status": "node apps/desktop/scripts/parity-status.cjs",
+    "test:parity:status:json": "node apps/desktop/scripts/parity-status.cjs --json",
     "test:parity:truth": "cargo test --manifest-path rust/markbookd/Cargo.toml --test final_marks_vs_fresh_legacy_exports --test assessment_stats_vs_fresh_legacy_summaries",
     "test:parity:strict": "MBC_STRICT_FRESH_SUMMARIES=1 cargo test --manifest-path rust/markbookd/Cargo.toml --test parity_fixture_preflight && MBC_STRICT_FRESH_SUMMARIES=1 cargo test --manifest-path rust/markbookd/Cargo.toml --test calc_behavior_locks --test calc_parity_goldens --test final_marks_vs_fresh_legacy_exports --test assessment_stats_vs_fresh_legacy_summaries"
   },

@@ -176,7 +176,6 @@ export type MarkSetSummaryReportModel = {
     typesMask: number | null;
   };
   studentScope?: "all" | "active" | "valid";
-  studentScope?: "all" | "active" | "valid";
   categories: Array<{ name: string; weight: number; sortOrder: number }>;
   assessments: Array<{
     assessmentId: string;
@@ -420,6 +419,7 @@ export type CategoryAnalysisReportModel = {
     categoryName: string | null;
     typesMask: number | null;
   };
+  studentScope?: "all" | "active" | "valid";
   categories: Array<{ name: string; weight: number; sortOrder: number }>;
   perCategory: Array<{
     name: string;
@@ -781,6 +781,140 @@ export type StudentSummaryReportModel = {
   }>;
 };
 
+export type ClassAssessmentDrilldownReportModel = {
+  class: { id: string; name: string };
+  markSet: { id: string; code: string; description: string };
+  filters: {
+    term: number | null;
+    categoryName: string | null;
+    typesMask: number | null;
+  };
+  studentScope?: "all" | "active" | "valid";
+  assessment: {
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    term: number | null;
+    legacyType: number | null;
+    weight: number;
+    outOf: number;
+  };
+  rows: Array<{
+    studentId: string;
+    displayName: string;
+    sortOrder: number;
+    active: boolean;
+    status: "no_mark" | "zero" | "scored";
+    raw: number | null;
+    percent: number | null;
+    finalMark: number | null;
+  }>;
+  totalRows: number;
+  page: number;
+  pageSize: number;
+  sortBy: string;
+  sortDir: "asc" | "desc";
+  classStats: {
+    assessmentId: string;
+    idx: number;
+    date: string | null;
+    categoryName: string | null;
+    title: string;
+    outOf: number;
+    avgRaw: number;
+    avgPercent: number;
+    medianPercent: number;
+    scoredCount: number;
+    zeroCount: number;
+    noMarkCount: number;
+  };
+};
+
+export function renderClassAssessmentDrilldownReportHtml(
+  model: ClassAssessmentDrilldownReportModel
+): string {
+  const generatedAt = new Date().toLocaleString();
+  const rowHtml = model.rows
+    .map(
+      (r) => `<tr>
+      <td class="left">${escapeHtml(r.displayName)}</td>
+      <td class="left">${escapeHtml(r.status)}</td>
+      <td class="num">${r.raw == null ? "" : escapeHtml(r.raw.toFixed(1))}</td>
+      <td class="num">${r.percent == null ? "" : escapeHtml(r.percent.toFixed(1))}</td>
+      <td class="num">${r.finalMark == null ? "" : escapeHtml(r.finalMark.toFixed(1))}</td>
+    </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4 landscape; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.3; }
+      .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+      .grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 8px; margin: 8px 0 10px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 3px 4px; }
+      th { background: #f6f6f6; }
+      td.left, th.left { text-align: left; }
+      td.num, th.num { text-align: right; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1>Class Assessment Drilldown</h1>
+        <div class="meta">
+          <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+          <div><strong>Mark Set:</strong> ${escapeHtml(model.markSet.code)}: ${escapeHtml(
+    model.markSet.description
+  )}</div>
+          <div><strong>Assessment:</strong> ${escapeHtml(model.assessment.title)}</div>
+          <div><strong>Scope:</strong> ${escapeHtml(reportStudentScopeLabel(model.studentScope))}</div>
+          <div><strong>Filters:</strong> ${escapeHtml(reportFiltersLabel(model.filters))}</div>
+          <div><strong>Query:</strong> ${escapeHtml(
+            `sort=${model.sortBy}/${model.sortDir}, page=${model.page}, size=${model.pageSize}`
+          )}</div>
+        </div>
+      </div>
+      <div class="meta">${escapeHtml(generatedAt)}</div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><strong>Avg Raw:</strong> ${model.classStats.avgRaw.toFixed(1)}</div>
+      <div class="card"><strong>Avg %:</strong> ${model.classStats.avgPercent.toFixed(1)}</div>
+      <div class="card"><strong>Median %:</strong> ${model.classStats.medianPercent.toFixed(1)}</div>
+      <div class="card"><strong>Scored/Zero/No Mark:</strong> ${model.classStats.scoredCount}/${model.classStats.zeroCount}/${model.classStats.noMarkCount}</div>
+    </div>
+
+    <h2>Student Rows (page ${model.page} of ${Math.max(1, Math.ceil(model.totalRows / Math.max(1, model.pageSize)))})</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Student</th>
+          <th class="left">Status</th>
+          <th class="num">Raw</th>
+          <th class="num">Percent</th>
+          <th class="num">Final Mark</th>
+        </tr>
+      </thead>
+      <tbody>${rowHtml}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
 export function renderStudentSummaryReportHtml(model: StudentSummaryReportModel): string {
   const generatedAt = new Date().toLocaleString();
   const statRows = model.perAssessment
@@ -1059,6 +1193,278 @@ export function renderLearningSkillsSummaryReportHtml(
         </tr>
       </thead>
       <tbody>${bodyRows}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type PlannerUnitReportModel = {
+  artifactKind: "unit";
+  title: string;
+  unit: {
+    unitId: string;
+    title: string;
+    startDate: string | null;
+    endDate: string | null;
+    summary: string;
+    expectations: string[];
+    resources: string[];
+  };
+  lessons: Array<{
+    lessonId: string;
+    title: string;
+    lessonDate: string | null;
+    outline: string;
+    detail: string;
+    followUp: string;
+    homework: string;
+    durationMinutes: number | null;
+  }>;
+};
+
+export function renderPlannerUnitReportHtml(model: PlannerUnitReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  const lessonRows = model.lessons
+    .map(
+      (lesson) => `<tr>
+        <td>${escapeHtml(lesson.lessonDate ?? "")}</td>
+        <td class="left">${escapeHtml(lesson.title)}</td>
+        <td>${lesson.durationMinutes == null ? "" : lesson.durationMinutes}</td>
+        <td class="left">${escapeHtml(lesson.outline)}</td>
+      </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      h2 { margin: 14px 0 6px 0; font-size: 14px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.35; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 4px; vertical-align: top; }
+      th { background: #f6f6f6; }
+      .left { text-align: left; }
+      .block { border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 8px 0; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>Planner Unit</h1>
+    <div class="meta">
+      <div><strong>Unit:</strong> ${escapeHtml(model.unit.title)}</div>
+      <div><strong>Date Range:</strong> ${escapeHtml(model.unit.startDate ?? "")} - ${escapeHtml(
+    model.unit.endDate ?? ""
+  )}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <div class="block">
+      <strong>Summary</strong>
+      <div class="muted">${escapeHtml(model.unit.summary || "(none)")}</div>
+    </div>
+    <div class="block">
+      <strong>Expectations</strong>
+      <ul>
+        ${(model.unit.expectations.length ? model.unit.expectations : ["(none)"])
+          .map((v) => `<li>${escapeHtml(v)}</li>`)
+          .join("")}
+      </ul>
+      <strong>Resources</strong>
+      <ul>
+        ${(model.unit.resources.length ? model.unit.resources : ["(none)"])
+          .map((v) => `<li>${escapeHtml(v)}</li>`)
+          .join("")}
+      </ul>
+    </div>
+    <h2>Lessons</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th class="left">Title</th>
+          <th>Minutes</th>
+          <th class="left">Outline</th>
+        </tr>
+      </thead>
+      <tbody>${lessonRows || `<tr><td colspan="4" class="left">(no lessons)</td></tr>`}</tbody>
+    </table>
+  </body>
+</html>`;
+}
+
+export type PlannerLessonReportModel = {
+  artifactKind: "lesson";
+  title: string;
+  lesson: {
+    lessonId: string;
+    unitId: string | null;
+    title: string;
+    lessonDate: string | null;
+    outline: string;
+    detail: string;
+    followUp: string;
+    homework: string;
+    durationMinutes: number | null;
+    unitTitle: string | null;
+  };
+};
+
+export function renderPlannerLessonReportHtml(model: PlannerLessonReportModel): string {
+  const generatedAt = new Date().toLocaleString();
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.35; margin-bottom: 8px; }
+      .block { border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 8px 0; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Planner Lesson</h1>
+    <div class="meta">
+      <div><strong>Title:</strong> ${escapeHtml(model.lesson.title)}</div>
+      <div><strong>Date:</strong> ${escapeHtml(model.lesson.lessonDate ?? "")}</div>
+      <div><strong>Unit:</strong> ${escapeHtml(model.lesson.unitTitle ?? "")}</div>
+      <div><strong>Minutes:</strong> ${
+        model.lesson.durationMinutes == null ? "" : model.lesson.durationMinutes
+      }</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <div class="block"><strong>Outline</strong><div>${escapeHtml(model.lesson.outline || "(none)")}</div></div>
+    <div class="block"><strong>Detail</strong><div>${escapeHtml(model.lesson.detail || "(none)")}</div></div>
+    <div class="block"><strong>Follow-up</strong><div>${escapeHtml(model.lesson.followUp || "(none)")}</div></div>
+    <div class="block"><strong>Homework</strong><div>${escapeHtml(model.lesson.homework || "(none)")}</div></div>
+  </body>
+</html>`;
+}
+
+export type CourseDescriptionReportModel = {
+  class: { id: string; name: string };
+  profile: {
+    courseTitle: string;
+    gradeLabel: string;
+    periodMinutes: number;
+    periodsPerWeek: number;
+    totalWeeks: number;
+    strands: Array<string | unknown>;
+    policyText: string;
+  };
+  schedule: {
+    periodMinutes: number;
+    periodsPerWeek: number;
+    totalWeeks: number;
+    totalHours: number;
+  };
+  units: Array<{ title?: string; summary?: string }>;
+  lessons: Array<{ title?: string }>;
+  generatedAt: string;
+};
+
+export function renderCourseDescriptionReportHtml(model: CourseDescriptionReportModel): string {
+  const strands = (model.profile.strands ?? []).map((s) => String(s));
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.35; margin-bottom: 8px; }
+      .block { border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 8px 0; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>Course Description</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div><strong>Course:</strong> ${escapeHtml(model.profile.courseTitle)}</div>
+      <div><strong>Grade:</strong> ${escapeHtml(model.profile.gradeLabel)}</div>
+      <div>${escapeHtml(new Date(Number(model.generatedAt) * 1000 || Date.now()).toLocaleString())}</div>
+    </div>
+    <div class="block">
+      <strong>Schedule</strong>
+      <div class="muted">${model.schedule.periodMinutes} min x ${model.schedule.periodsPerWeek} / week x ${
+    model.schedule.totalWeeks
+  } weeks (${model.schedule.totalHours.toFixed(1)} hours)</div>
+    </div>
+    <div class="block">
+      <strong>Strands</strong>
+      <ul>${(strands.length ? strands : ["(none)"]).map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>
+    </div>
+    <div class="block">
+      <strong>Policy</strong>
+      <div class="muted">${escapeHtml(model.profile.policyText || "(none)")}</div>
+    </div>
+    <div class="block">
+      <strong>Planned Units</strong>
+      <div class="muted">${model.units.length} units, ${model.lessons.length} lessons</div>
+    </div>
+  </body>
+</html>`;
+}
+
+export type TimeManagementReportModel = {
+  class: { id: string; name: string };
+  inputs: {
+    periodMinutes: number;
+    periodsPerWeek: number;
+    totalWeeks: number;
+    includeArchived: boolean;
+  };
+  totals: {
+    plannedMinutes: number;
+    availableMinutes: number;
+    remainingMinutes: number;
+    utilizationPercent: number;
+  };
+  generatedAt: string;
+};
+
+export function renderTimeManagementReportHtml(model: TimeManagementReportModel): string {
+  const generatedAt = new Date(Number(model.generatedAt) * 1000 || Date.now()).toLocaleString();
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; }
+      h1 { margin: 0; font-size: 18px; }
+      .meta { font-size: 11px; color: #444; line-height: 1.35; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th, td { border: 1px solid #ccc; font-size: 10px; padding: 4px; }
+      th { background: #f6f6f6; text-align: left; width: 40%; }
+    </style>
+  </head>
+  <body>
+    <h1>Time Management</h1>
+    <div class="meta">
+      <div><strong>Class:</strong> ${escapeHtml(model.class.name)}</div>
+      <div>${escapeHtml(generatedAt)}</div>
+    </div>
+    <table>
+      <tbody>
+        <tr><th>Period Minutes</th><td>${model.inputs.periodMinutes}</td></tr>
+        <tr><th>Periods Per Week</th><td>${model.inputs.periodsPerWeek}</td></tr>
+        <tr><th>Total Weeks</th><td>${model.inputs.totalWeeks}</td></tr>
+        <tr><th>Include Archived</th><td>${model.inputs.includeArchived ? "Yes" : "No"}</td></tr>
+        <tr><th>Planned Minutes</th><td>${model.totals.plannedMinutes}</td></tr>
+        <tr><th>Available Minutes</th><td>${model.totals.availableMinutes}</td></tr>
+        <tr><th>Remaining Minutes</th><td>${model.totals.remainingMinutes}</td></tr>
+        <tr><th>Utilization</th><td>${model.totals.utilizationPercent.toFixed(1)}%</td></tr>
+      </tbody>
     </table>
   </body>
 </html>`;

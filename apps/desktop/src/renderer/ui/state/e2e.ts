@@ -4,13 +4,17 @@
 // window.__markbookTest so production users never rely on them.
 import {
   renderAttendanceMonthlyReportHtml,
+  renderCourseDescriptionReportHtml,
   renderClassListReportHtml,
   renderCategoryAnalysisReportHtml,
   renderCombinedAnalysisReportHtml,
   renderLearningSkillsSummaryReportHtml,
+  renderPlannerLessonReportHtml,
+  renderPlannerUnitReportHtml,
   renderMarkSetGridReportHtml,
   renderMarkSetSummaryReportHtml,
-  renderStudentSummaryReportHtml
+  renderStudentSummaryReportHtml,
+  renderTimeManagementReportHtml
 } from "@markbook/reports";
 
 declare global {
@@ -179,6 +183,52 @@ t.exportLearningSkillsSummaryPdfToPath = async (
     term
   });
   const html = renderLearningSkillsSummaryReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportPlannerUnitPdfToPath = async (classId: string, unitId: string, outPath: string) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.plannerUnitModel", {
+    classId,
+    unitId
+  });
+  const html = renderPlannerUnitReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportPlannerLessonPdfToPath = async (classId: string, lessonId: string, outPath: string) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.plannerLessonModel", {
+    classId,
+    lessonId
+  });
+  const html = renderPlannerLessonReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportCourseDescriptionPdfToPath = async (classId: string, outPath: string) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.courseDescriptionModel", {
+    classId
+  });
+  const html = renderCourseDescriptionReportHtml(model);
+  await window.markbook.exportPdfHtml(html, outPath);
+  return { ok: true };
+};
+
+t.exportTimeManagementPdfToPath = async (classId: string, outPath: string) => {
+  if (!window.markbook?.request) throw new Error("window.markbook.request missing");
+  if (!window.markbook?.exportPdfHtml) throw new Error("window.markbook.exportPdfHtml missing");
+  const model = await window.markbook.request("reports.timeManagementModel", {
+    classId
+  });
+  const html = renderTimeManagementReportHtml(model);
   await window.markbook.exportPdfHtml(html, outPath);
   return { ok: true };
 };

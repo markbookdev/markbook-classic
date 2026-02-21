@@ -1,24 +1,36 @@
 import React, { useState } from "react";
 import {
   renderAttendanceMonthlyReportHtml,
+  renderClassAssessmentDrilldownReportHtml,
   renderClassListReportHtml,
+  renderCourseDescriptionReportHtml,
   renderCategoryAnalysisReportHtml,
   renderCombinedAnalysisReportHtml,
   renderLearningSkillsSummaryReportHtml,
   renderMarkSetGridReportHtml,
+  renderPlannerLessonReportHtml,
+  renderPlannerUnitReportHtml,
   renderMarkSetSummaryReportHtml,
-  renderStudentSummaryReportHtml
+  renderStudentSummaryReportHtml,
+  renderTimeManagementReportHtml
 } from "@markbook/reports";
 import {
+  PlannerLessonsListResultSchema,
+  PlannerUnitsListResultSchema,
   MarkSetOpenResultSchema,
+  ReportsClassAssessmentDrilldownModelResultSchema,
   ReportsAttendanceMonthlyModelResultSchema,
   ReportsClassListModelResultSchema,
+  ReportsCourseDescriptionModelResultSchema,
   ReportsCategoryAnalysisModelResultSchema,
   ReportsCombinedAnalysisModelResultSchema,
   ReportsLearningSkillsSummaryModelResultSchema,
+  ReportsPlannerLessonModelResultSchema,
+  ReportsPlannerUnitModelResultSchema,
   ReportsMarkSetGridModelResultSchema,
   ReportsMarkSetSummaryModelResultSchema,
-  ReportsStudentSummaryModelResultSchema
+  ReportsStudentSummaryModelResultSchema,
+  ReportsTimeManagementModelResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -36,6 +48,16 @@ export function ReportsScreen(props: {
     studentScope: "all" | "active" | "valid";
     studentId?: string | null;
     markSetIds?: string[] | null;
+    drilldown?: {
+      assessmentId: string;
+      query?: {
+        search?: string | null;
+        sortBy?: "sortOrder" | "displayName" | "status" | "raw" | "percent" | "finalMark";
+        sortDir?: "asc" | "desc";
+        page?: number;
+        pageSize?: number;
+      };
+    } | null;
   };
   contextVersion?: number;
 }) {
@@ -44,13 +66,32 @@ export function ReportsScreen(props: {
   const [exportingCategoryPdf, setExportingCategoryPdf] = useState(false);
   const [exportingCombinedPdf, setExportingCombinedPdf] = useState(false);
   const [exportingStudentPdf, setExportingStudentPdf] = useState(false);
+  const [exportingDrilldownPdf, setExportingDrilldownPdf] = useState(false);
   const [exportingAttendancePdf, setExportingAttendancePdf] = useState(false);
   const [exportingClassListPdf, setExportingClassListPdf] = useState(false);
   const [exportingLearningSkillsPdf, setExportingLearningSkillsPdf] = useState(false);
+  const [exportingPlannerUnitPdf, setExportingPlannerUnitPdf] = useState(false);
+  const [exportingPlannerLessonPdf, setExportingPlannerLessonPdf] = useState(false);
+  const [exportingCourseDescriptionPdf, setExportingCourseDescriptionPdf] = useState(false);
+  const [exportingTimeManagementPdf, setExportingTimeManagementPdf] = useState(false);
   const [students, setStudents] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [plannerUnits, setPlannerUnits] = useState<Array<{ id: string; title: string }>>([]);
+  const [plannerLessons, setPlannerLessons] = useState<Array<{ id: string; title: string }>>([]);
+  const [selectedPlannerUnitId, setSelectedPlannerUnitId] = useState<string | null>(null);
+  const [selectedPlannerLessonId, setSelectedPlannerLessonId] = useState<string | null>(null);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [combinedMarkSetIds, setCombinedMarkSetIds] = useState<string[] | null>(null);
+  const [drilldownContext, setDrilldownContext] = useState<{
+    assessmentId: string;
+    query?: {
+      search?: string | null;
+      sortBy?: "sortOrder" | "displayName" | "status" | "raw" | "percent" | "finalMark";
+      sortDir?: "asc" | "desc";
+      page?: number;
+      pageSize?: number;
+    };
+  } | null>(null);
   const [studentScope, setStudentScope] = useState<"all" | "active" | "valid">("all");
   const [reportFilters, setReportFilters] = useState<{
     term: number | null;
@@ -73,13 +114,35 @@ export function ReportsScreen(props: {
     let cancelled = false;
     async function loadStudents() {
       try {
-        const open = await requestParsed(
-          "markset.open",
-          { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
-          MarkSetOpenResultSchema
-        );
+        const [open, unitsRes, lessonsRes] = await Promise.all([
+          requestParsed(
+            "markset.open",
+            { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
+            MarkSetOpenResultSchema
+          ),
+          requestParsed(
+            "planner.units.list",
+            { classId: props.selectedClassId, includeArchived: false },
+            PlannerUnitsListResultSchema
+          ),
+          requestParsed(
+            "planner.lessons.list",
+            { classId: props.selectedClassId, includeArchived: false },
+            PlannerLessonsListResultSchema
+          )
+        ]);
         if (cancelled) return;
         setStudents(open.students.map((s) => ({ id: s.id, displayName: s.displayName })));
+        setPlannerUnits(unitsRes.units.map((u) => ({ id: u.id, title: u.title })));
+        setPlannerLessons(lessonsRes.lessons.map((l) => ({ id: l.id, title: l.title })));
+        setSelectedPlannerUnitId((cur) => {
+          if (cur && unitsRes.units.some((u) => u.id === cur)) return cur;
+          return unitsRes.units[0]?.id ?? null;
+        });
+        setSelectedPlannerLessonId((cur) => {
+          if (cur && lessonsRes.lessons.some((l) => l.id === cur)) return cur;
+          return lessonsRes.lessons[0]?.id ?? null;
+        });
         const cats = Array.from(
           new Set(
             open.assessments
@@ -96,6 +159,10 @@ export function ReportsScreen(props: {
       } catch {
         if (cancelled) return;
         setStudents([]);
+        setPlannerUnits([]);
+        setPlannerLessons([]);
+        setSelectedPlannerUnitId(null);
+        setSelectedPlannerLessonId(null);
         setCategoryOptions([]);
         setSelectedStudentId(null);
       }
@@ -133,6 +200,7 @@ export function ReportsScreen(props: {
     setCombinedMarkSetIds(
       Array.isArray(fromCombined) && fromCombined.length > 0 ? [...fromCombined] : null
     );
+    setDrilldownContext(props.initialContext.drilldown ?? null);
   }, [props.contextVersion, props.initialContext]);
 
   React.useEffect(() => {
@@ -221,6 +289,35 @@ export function ReportsScreen(props: {
       props.onError(e?.message ?? String(e));
     } finally {
       setExportingCategoryPdf(false);
+    }
+  }
+
+  async function exportClassAssessmentDrilldownPdf() {
+    if (!drilldownContext?.assessmentId) return;
+    setExportingDrilldownPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.classAssessmentDrilldownModel",
+        {
+          classId: props.selectedClassId,
+          markSetId: props.selectedMarkSetId,
+          assessmentId: drilldownContext.assessmentId,
+          filters: reportFilters,
+          studentScope,
+          query: drilldownContext.query ?? {}
+        },
+        ReportsClassAssessmentDrilldownModelResultSchema
+      );
+      const html = renderClassAssessmentDrilldownReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(
+        `${model.class.name} - ${model.markSet.code} - ${model.assessment.title} - Drilldown.pdf`
+      );
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingDrilldownPdf(false);
     }
   }
 
@@ -344,6 +441,86 @@ export function ReportsScreen(props: {
     }
   }
 
+  async function exportPlannerUnitPdf() {
+    if (!selectedPlannerUnitId) return;
+    setExportingPlannerUnitPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.plannerUnitModel",
+        { classId: props.selectedClassId, unitId: selectedPlannerUnitId },
+        ReportsPlannerUnitModelResultSchema
+      );
+      const html = renderPlannerUnitReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(`${model.title || "Planner Unit"}.pdf`);
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingPlannerUnitPdf(false);
+    }
+  }
+
+  async function exportPlannerLessonPdf() {
+    if (!selectedPlannerLessonId) return;
+    setExportingPlannerLessonPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.plannerLessonModel",
+        { classId: props.selectedClassId, lessonId: selectedPlannerLessonId },
+        ReportsPlannerLessonModelResultSchema
+      );
+      const html = renderPlannerLessonReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(`${model.title || "Planner Lesson"}.pdf`);
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingPlannerLessonPdf(false);
+    }
+  }
+
+  async function exportCourseDescriptionPdf() {
+    setExportingCourseDescriptionPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.courseDescriptionModel",
+        { classId: props.selectedClassId },
+        ReportsCourseDescriptionModelResultSchema
+      );
+      const html = renderCourseDescriptionReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(
+        `${model.profile.courseTitle || model.class.name} - Course Description.pdf`
+      );
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingCourseDescriptionPdf(false);
+    }
+  }
+
+  async function exportTimeManagementPdf() {
+    setExportingTimeManagementPdf(true);
+    props.onError(null);
+    try {
+      const model = await requestParsed(
+        "reports.timeManagementModel",
+        { classId: props.selectedClassId },
+        ReportsTimeManagementModelResultSchema
+      );
+      const html = renderTimeManagementReportHtml(model as any);
+      const defaultFilename = sanitizeFilename(`${model.class.name} - Time Management.pdf`);
+      await window.markbook.exportPdfHtmlWithSaveDialog(html, defaultFilename);
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setExportingTimeManagementPdf(false);
+    }
+  }
+
   return (
     <div data-testid="reports-screen" style={{ padding: 24 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Reports</div>
@@ -457,6 +634,7 @@ export function ReportsScreen(props: {
           exportingGridPdf ||
           exportingSummaryPdf ||
           exportingCategoryPdf ||
+          exportingDrilldownPdf ||
           exportingCombinedPdf ||
           exportingStudentPdf
         }
@@ -471,6 +649,7 @@ export function ReportsScreen(props: {
           exportingGridPdf ||
           exportingSummaryPdf ||
           exportingCategoryPdf ||
+          exportingDrilldownPdf ||
           exportingCombinedPdf ||
           exportingStudentPdf
         }
@@ -485,12 +664,38 @@ export function ReportsScreen(props: {
           exportingGridPdf ||
           exportingSummaryPdf ||
           exportingCategoryPdf ||
+          exportingDrilldownPdf ||
           exportingCombinedPdf ||
           exportingStudentPdf
         }
       >
         {exportingCategoryPdf ? "Exporting..." : "Export Category Analysis PDF"}
       </button>
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>
+        Class Assessment Drilldown
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          data-testid="export-class-assessment-drilldown-pdf-btn"
+          onClick={() => void exportClassAssessmentDrilldownPdf()}
+          disabled={
+            !drilldownContext?.assessmentId ||
+            exportingGridPdf ||
+            exportingSummaryPdf ||
+            exportingCategoryPdf ||
+            exportingDrilldownPdf ||
+            exportingCombinedPdf ||
+            exportingStudentPdf
+          }
+        >
+          {exportingDrilldownPdf ? "Exporting..." : "Export Drilldown PDF"}
+        </button>
+        <span style={{ color: "#666", fontSize: 12 }}>
+          {drilldownContext?.assessmentId
+            ? `Assessment: ${drilldownContext.assessmentId}`
+            : "Open a class analytics assessment drilldown to prefill this report"}
+        </span>
+      </div>
       <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Combined Analysis</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
@@ -500,6 +705,7 @@ export function ReportsScreen(props: {
             exportingGridPdf ||
             exportingSummaryPdf ||
             exportingCategoryPdf ||
+            exportingDrilldownPdf ||
             exportingCombinedPdf ||
             exportingStudentPdf
           }
@@ -537,6 +743,7 @@ export function ReportsScreen(props: {
             exportingGridPdf ||
             exportingSummaryPdf ||
             exportingCategoryPdf ||
+            exportingDrilldownPdf ||
             exportingCombinedPdf ||
             exportingStudentPdf
           }
@@ -595,6 +802,68 @@ export function ReportsScreen(props: {
           {exportingLearningSkillsPdf ? "Exporting..." : "Export Learning Skills PDF"}
         </button>
       </div>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Planner Unit</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select
+          data-testid="planner-unit-select"
+          value={selectedPlannerUnitId ?? ""}
+          onChange={(e) => setSelectedPlannerUnitId(e.currentTarget.value || null)}
+        >
+          {plannerUnits.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.title}
+            </option>
+          ))}
+        </select>
+        <button
+          data-testid="export-planner-unit-pdf-btn"
+          onClick={() => void exportPlannerUnitPdf()}
+          disabled={exportingPlannerUnitPdf || !selectedPlannerUnitId}
+        >
+          {exportingPlannerUnitPdf ? "Exporting..." : "Export Planner Unit PDF"}
+        </button>
+      </div>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Planner Lesson</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select
+          data-testid="planner-lesson-select"
+          value={selectedPlannerLessonId ?? ""}
+          onChange={(e) => setSelectedPlannerLessonId(e.currentTarget.value || null)}
+        >
+          {plannerLessons.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.title}
+            </option>
+          ))}
+        </select>
+        <button
+          data-testid="export-planner-lesson-pdf-btn"
+          onClick={() => void exportPlannerLessonPdf()}
+          disabled={exportingPlannerLessonPdf || !selectedPlannerLessonId}
+        >
+          {exportingPlannerLessonPdf ? "Exporting..." : "Export Planner Lesson PDF"}
+        </button>
+      </div>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Course Description</div>
+      <button
+        data-testid="export-course-description-pdf-btn"
+        onClick={() => void exportCourseDescriptionPdf()}
+        disabled={exportingCourseDescriptionPdf}
+      >
+        {exportingCourseDescriptionPdf ? "Exporting..." : "Export Course Description PDF"}
+      </button>
+
+      <div style={{ color: "#444", marginTop: 16, marginBottom: 8 }}>Time Management</div>
+      <button
+        data-testid="export-time-management-pdf-btn"
+        onClick={() => void exportTimeManagementPdf()}
+        disabled={exportingTimeManagementPdf}
+      >
+        {exportingTimeManagementPdf ? "Exporting..." : "Export Time Management PDF"}
+      </button>
     </div>
   );
 }

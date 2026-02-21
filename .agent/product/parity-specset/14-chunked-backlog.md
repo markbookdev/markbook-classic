@@ -62,6 +62,7 @@ Execution-ready chunk list for iterative delivery.
 ## EPIC-ANALYTICS-01: Class analytics interactive tabs
 - Status:
   - DONE (2026-02-20): `analytics.class.open`/`analytics.filters.options` shipped with read-only class analytics screen + report handoff.
+  - DONE (2026-02-20): interactive closure shipped via `analytics.class.rows` and `analytics.class.assessmentDrilldown`, including cohort drilldown and report-model alignment.
 - Objective:
   - deliver chapter-9 equivalent screen behaviors.
 - File targets:
@@ -73,6 +74,7 @@ Execution-ready chunk list for iterative delivery.
 ## EPIC-ANALYTICS-02: Student + combined analytics parity
 - Status:
   - DONE (2026-02-20): `analytics.student.open`, `analytics.combined.options`, and `analytics.combined.open` shipped with read-only student/combined analytics screens and report alignment.
+  - DONE (2026-02-20): student interactive closure shipped via `analytics.student.compare` and `analytics.student.trend`.
 - Objective:
   - deliver chapter 11/12 interactive parity.
 - Tests:
@@ -131,3 +133,29 @@ Execution-ready chunk list for iterative delivery.
 - file targets:
   - `fixtures/legacy/Sample25/expected/fresh-markfiles/...`
   - strict parity tests.
+
+## EPIC-ANALYTICS-04: Class/student interactive parity closure
+- Status:
+  - DONE (2026-02-20): additive interactive analytics APIs + UI shipped, with drilldown report parity.
+- Objective:
+  - close remaining class/student interactive analytics parity while keeping analytics read-only.
+- API changes:
+  - `analytics.class.rows`
+  - `analytics.class.assessmentDrilldown`
+  - `analytics.student.compare`
+  - `analytics.student.trend`
+  - `reports.classAssessmentDrilldownModel`
+- Tests:
+  - Rust: `analytics_class_rows.rs`, `analytics_assessment_drilldown.rs`, `analytics_student_compare.rs`, `analytics_student_trend.rs`, `analytics_drilldown_reports_alignment.rs`
+  - Playwright: `class-analytics-interactive.e2e.spec.cjs`, `student-analytics-compare-trend.e2e.spec.cjs`, `analytics-drilldown-report-alignment.e2e.spec.cjs`
+
+## EPIC-EVIDENCE-01B: Strict-lane readiness hardening
+- Status:
+  - IN PROGRESS (2026-02-20): manifest checksums + parity status JSON + CI readiness plumbing shipped.
+- Objective:
+  - make strict legacy-truth activation deterministic as soon as fresh artifacts arrive.
+- File targets:
+  - `apps/desktop/scripts/parity-status.cjs`
+  - `fixtures/legacy/Sample25/expected/parity-manifest.json`
+  - `rust/markbookd/tests/parity_fixture_preflight.rs`
+  - `.github/workflows/quality-gates.yml`

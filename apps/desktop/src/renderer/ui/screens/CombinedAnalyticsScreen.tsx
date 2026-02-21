@@ -409,7 +409,10 @@ export function CombinedAnalyticsScreen(props: {
                       </td>
                       {model.markSets.map((m: any) => (
                         <td key={`${r.studentId}-${m.id}`} style={{ padding: 6, textAlign: "right" }}>
-                          {formatMark(perMap.get(m.id))}
+                          {(() => {
+                            const v = perMap.get(m.id);
+                            return formatMark(typeof v === "number" ? v : null);
+                          })()}
                         </td>
                       ))}
                     </tr>
