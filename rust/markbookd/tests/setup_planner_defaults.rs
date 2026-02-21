@@ -56,7 +56,9 @@ fn setup_planner_course_description_and_reports_defaults_persist() {
             "patch": {
                 "plannerHeaderStyle": "compact",
                 "showGeneratedAt": false,
-                "defaultStudentScope": "active"
+                "defaultStudentScope": "active",
+                "defaultAnalyticsScope": "all",
+                "showFiltersInHeaderByDefault": false
             }
         }),
     );
@@ -103,5 +105,17 @@ fn setup_planner_course_description_and_reports_defaults_persist() {
             .pointer("/reports/defaultStudentScope")
             .and_then(|v| v.as_str()),
         Some("active")
+    );
+    assert_eq!(
+        setup
+            .pointer("/reports/defaultAnalyticsScope")
+            .and_then(|v| v.as_str()),
+        Some("all")
+    );
+    assert_eq!(
+        setup
+            .pointer("/reports/showFiltersInHeaderByDefault")
+            .and_then(|v| v.as_bool()),
+        Some(false)
     );
 }

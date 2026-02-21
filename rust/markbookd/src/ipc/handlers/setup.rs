@@ -9,6 +9,7 @@ enum SetupSection {
     Attendance,
     Comments,
     Printer,
+    Integrations,
     Planner,
     CourseDescription,
     Reports,
@@ -23,6 +24,7 @@ impl SetupSection {
             "attendance" => Some(Self::Attendance),
             "comments" => Some(Self::Comments),
             "printer" => Some(Self::Printer),
+            "integrations" => Some(Self::Integrations),
             "planner" => Some(Self::Planner),
             "courseDescription" => Some(Self::CourseDescription),
             "reports" => Some(Self::Reports),
@@ -38,6 +40,7 @@ impl SetupSection {
             Self::Attendance => "setup.attendance",
             Self::Comments => "setup.comments",
             Self::Printer => "setup.printer",
+            Self::Integrations => "setup.integrations",
             Self::Planner => "setup.planner",
             Self::CourseDescription => "setup.courseDescription",
             Self::Reports => "setup.reports",
@@ -79,6 +82,13 @@ fn default_section(section: SetupSection) -> Value {
             "showGeneratedAt": true,
             "defaultMarginMm": 12
         }),
+        SetupSection::Integrations => json!({
+            "defaultSisProfile": "sis_roster_v1",
+            "defaultMatchMode": "student_no_then_name",
+            "defaultCollisionPolicy": "merge_existing",
+            "autoPreviewBeforeApply": true,
+            "adminTransferDefaultPolicy": "fill_blank"
+        }),
         SetupSection::Planner => json!({
             "defaultLessonDurationMinutes": 75,
             "defaultPublishStatus": "draft",
@@ -94,7 +104,9 @@ fn default_section(section: SetupSection) -> Value {
         SetupSection::Reports => json!({
             "plannerHeaderStyle": "classic",
             "showGeneratedAt": true,
-            "defaultStudentScope": "valid"
+            "defaultStudentScope": "valid",
+            "defaultAnalyticsScope": "valid",
+            "showFiltersInHeaderByDefault": true
         }),
         SetupSection::Security => json!({
             "passwordEnabled": false,
@@ -249,6 +261,56 @@ fn merge_section_patch(
                 }
                 _ => return Err(format!("unknown printer field: {}", k)),
             },
+            SetupSection::Integrations => match k.as_str() {
+                "defaultSisProfile" => {
+                    let p = parse_string_max(v, k, 32)?.to_ascii_lowercase();
+                    if p != "mb_exchange_v1" && p != "sis_roster_v1" && p != "sis_marks_v1" {
+                        return Err(
+                            "defaultSisProfile must be one of: mb_exchange_v1, sis_roster_v1, sis_marks_v1"
+                                .into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(p));
+                }
+                "defaultMatchMode" => {
+                    let m = parse_string_max(v, k, 32)?.to_ascii_lowercase();
+                    if m != "student_no_then_name" && m != "name_only" && m != "sort_order" {
+                        return Err(
+                            "defaultMatchMode must be one of: student_no_then_name, name_only, sort_order"
+                                .into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(m));
+                }
+                "defaultCollisionPolicy" => {
+                    let p = parse_string_max(v, k, 32)?.to_ascii_lowercase();
+                    if p != "merge_existing" && p != "append_new" && p != "stop_on_collision" {
+                        return Err(
+                            "defaultCollisionPolicy must be one of: merge_existing, append_new, stop_on_collision"
+                                .into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(p));
+                }
+                "autoPreviewBeforeApply" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                "adminTransferDefaultPolicy" => {
+                    let p = parse_string_max(v, k, 24)?.to_ascii_lowercase();
+                    if p != "replace"
+                        && p != "append"
+                        && p != "fill_blank"
+                        && p != "source_if_longer"
+                    {
+                        return Err(
+                            "adminTransferDefaultPolicy must be one of: replace, append, fill_blank, source_if_longer"
+                                .into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(p));
+                }
+                _ => return Err(format!("unknown integrations field: {}", k)),
+            },
             SetupSection::Planner => match k.as_str() {
                 "defaultLessonDurationMinutes" => {
                     obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 15, 240)?));
@@ -307,6 +369,18 @@ fn merge_section_patch(
                         );
                     }
                     obj.insert(k.clone(), Value::String(s));
+                }
+                "defaultAnalyticsScope" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "all" && s != "active" && s != "valid" {
+                        return Err(
+                            "defaultAnalyticsScope must be one of: all, active, valid".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
+                }
+                "showFiltersInHeaderByDefault" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
                 }
                 _ => return Err(format!("unknown reports field: {}", k)),
             },
@@ -383,6 +457,10 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
+    let integrations = match load_section(conn, SetupSection::Integrations) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
     let course_description = match load_section(conn, SetupSection::CourseDescription) {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
@@ -407,6 +485,7 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
             "attendance": attendance,
             "comments": comments,
             "printer": printer,
+            "integrations": integrations,
             "planner": planner,
             "courseDescription": course_description,
             "reports": reports,

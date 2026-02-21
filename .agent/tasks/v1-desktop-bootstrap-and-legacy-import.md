@@ -432,3 +432,50 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:parity:regression` => PASS
   - `bun run test:packaging` => PASS
   - `bun run test:e2e:packaged` => PASS
+
+### EPIC-INTEGRATIONS-01 + EPIC-EVIDENCE-01C Snapshot (2026-02-21, Tier-A integrations + strict-lane operational hardening)
+- Backend shipped:
+  - new additive integrations handler:
+    - `rust/markbookd/src/ipc/handlers/integrations.rs`
+  - new additive IPC methods:
+    - `integrations.sis.previewImport`
+    - `integrations.sis.applyImport`
+    - `integrations.sis.exportRoster`
+    - `integrations.sis.exportMarks`
+    - `integrations.adminTransfer.previewPackage`
+    - `integrations.adminTransfer.applyPackage`
+    - `integrations.adminTransfer.exportPackage`
+  - router/handler wiring updated:
+    - `rust/markbookd/src/ipc/handlers/mod.rs`
+    - `rust/markbookd/src/ipc/router.rs`
+  - setup/admin defaults expanded for integrations and report parity metadata:
+    - `setup.integrations.*`
+    - `setup.reports.defaultAnalyticsScope`
+    - `setup.reports.showFiltersInHeaderByDefault`
+- Renderer shipped:
+  - Exchange screen upgraded to tabbed integrations workflow (`Class Exchange`, `SIS`, `Admin Transfer`) with preview-first apply behavior and setup-driven defaults.
+  - Setup/Admin screen extended with `Integrations Defaults` and additive report defaults controls.
+- Schema/contracts shipped:
+  - additive setup fields in `SetupGetResultSchema`.
+  - additive result schemas for all `integrations.sis.*` and `integrations.adminTransfer.*` endpoints.
+- Tests added/extended:
+  - Rust:
+    - `rust/markbookd/tests/integrations_sis_preview_apply.rs`
+    - `rust/markbookd/tests/integrations_sis_exports.rs`
+    - `rust/markbookd/tests/integrations_admin_transfer_roundtrip.rs`
+    - `rust/markbookd/tests/integrations_admin_transfer_collision_policy.rs`
+    - `rust/markbookd/tests/setup_integrations_defaults.rs`
+  - Playwright:
+    - `apps/desktop/e2e/integrations-sis.e2e.spec.cjs`
+    - `apps/desktop/e2e/integrations-admin-transfer.e2e.spec.cjs`
+    - extended `apps/desktop/e2e/exchange-csv.e2e.spec.cjs`
+    - extended `apps/desktop/e2e/setup-admin.e2e.spec.cjs`
+- Strict-lane operational hardening:
+  - `apps/desktop/scripts/parity-status.cjs` now validates manifest schema version and outputs machine-readable artifact path summaries.
+  - `rust/markbookd/tests/parity_fixture_preflight.rs` now enforces manifest schema version.
+  - `.github/workflows/quality-gates.yml` now prints parity artifact summaries and uploads `parity-status.json` diagnostics on failure.
+- Validation (this slice):
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun x playwright test apps/desktop/e2e/exchange-csv.e2e.spec.cjs apps/desktop/e2e/setup-admin.e2e.spec.cjs apps/desktop/e2e/integrations-sis.e2e.spec.cjs apps/desktop/e2e/integrations-admin-transfer.e2e.spec.cjs` => PASS (`4 passed`)
+  - `node apps/desktop/scripts/parity-status.cjs --json` => PASS (`mode=ready`, strict lane conditional)

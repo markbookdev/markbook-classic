@@ -7,6 +7,7 @@ pub mod comments;
 pub mod core;
 pub mod grid;
 pub mod import_legacy;
+pub mod integrations;
 pub mod markset_setup;
 pub mod planner;
 pub mod reports;

@@ -24,8 +24,10 @@ Map legacy references to current implementation, gap status, and planned chunk I
 | Ch 6 planner | unit/lesson planner | no module | Missing | EPIC-PLANNER-01 | new planner tests |
 | Ch 6-8/6-11 | course description/time management | no module | Missing | EPIC-PLANNER-02 | new course description tests |
 | MAIN Setup menu | setup subdomains | `SetupAdminScreen.tsx` + `CalcSettingsScreen.tsx` + `setup.get/update` | Partial | EPIC-SETUP-01 | `setup-admin.e2e.spec.cjs`, `setup_admin_ipc.rs` |
+| Setup defaults for transfer/export workflows | integrations/reporting defaults | `setup.get/update` (`setup.integrations`, additive `setup.reports` fields) + `SetupAdminScreen.tsx` | Implemented (core defaults) | EPIC-SETUP-01 | `setup_integrations_defaults.rs`, `setup-admin.e2e.spec.cjs` |
 | Ch 3-2/3-3 + BACKUP | backup/restore | `backup.*`, packaged smoke | Partial | EPIC-INTEGRATIONS-01 | backup e2e + packaged smoke |
-| Ch 13 exports/integrations | external adapter breadth | exchange/SIS partial | Partial | EPIC-INTEGRATIONS-01 | exchange tests + adapter tests |
+| Ch 13 exports/integrations | Tier-A SIS + admin transfer | `integrations.sis.*`, `integrations.adminTransfer.*`, upgraded `ExchangeScreen.tsx` tabs | Implemented (Tier-A) | EPIC-INTEGRATIONS-01 | `integrations_sis_preview_apply.rs`, `integrations_sis_exports.rs`, `integrations_admin_transfer_roundtrip.rs`, `integrations_admin_transfer_collision_policy.rs`, `integrations-sis.e2e.spec.cjs`, `integrations-admin-transfer.e2e.spec.cjs` |
+| Ch 13 exports/integrations | broader adapter families | deferred beyond Tier-A | Partial | EPIC-INTEGRATIONS-01 | follow-on adapter test plan |
 | MAIN Help/menu discoverability | command discoverability parity | AppShell legacy menu blocks | Partial | EPIC-UX-01 | navigation/discoverability e2e |
 | Appendix A-7 | calc algorithm parity + evidence lane | `calc.rs`, parity tests, parity manifest/checksum preflight, CI strict-readiness gates | Partial | EPIC-EVIDENCE-01 + EPIC-EVIDENCE-01B | calc parity suites + `parity_fixture_preflight.rs` + parity status checks |
 

@@ -102,9 +102,19 @@ fn checksum_mismatches(
 
 #[test]
 fn parity_fixture_preflight() {
+    const EXPECTED_MANIFEST_VERSION: i64 = 1;
     let expected_dir = fixture_path("fixtures/legacy/Sample25/expected");
     let manifest_path = expected_dir.join("parity-manifest.json");
     let manifest = read_manifest(&manifest_path);
+    let manifest_version = manifest
+        .get("version")
+        .and_then(|v| v.as_i64())
+        .unwrap_or_default();
+    assert_eq!(
+        manifest_version, EXPECTED_MANIFEST_VERSION,
+        "parity manifest schema version mismatch at {}: expected {}, got {}",
+        manifest_path.to_string_lossy(), EXPECTED_MANIFEST_VERSION, manifest_version
+    );
 
     let regression_required = required_list(&manifest, "regression");
     let strict_required = required_list(&manifest, "strict");

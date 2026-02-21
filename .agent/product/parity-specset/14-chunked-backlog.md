@@ -109,13 +109,15 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-SETUP-01: Setup subdomain surfaces
 - Status:
-  - IN PROGRESS (2026-02-20): workspace Setup/Admin screen shipped with additive `setup.get` + `setup.update` IPC for analysis/attendance/comments/printer/security/email defaults.
+  - IN PROGRESS (2026-02-21): workspace Setup/Admin screen now also ships integrations defaults (`defaultSisProfile`, `defaultMatchMode`, `defaultCollisionPolicy`, `adminTransferDefaultPolicy`, `autoPreviewBeforeApply`) and report parity defaults (`defaultAnalyticsScope`, `showFiltersInHeaderByDefault`).
 - Objective:
   - expose calc/comments/attendance/printer/email/password options.
 - API changes:
   - `setup.*` namespaces.
 
 ## EPIC-INTEGRATIONS-01: SIS/admin transfer hardening
+- Status:
+  - IN PROGRESS (2026-02-21): Tier-A integrations contracts are shipped in sidecar + renderer (`integrations.sis.*`, `integrations.adminTransfer.*`) with preview-first workflows and setup-driven defaults.
 - Objective:
   - chapter-13 Tier A parity closure.
 - API changes:
@@ -151,7 +153,7 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-EVIDENCE-01B: Strict-lane readiness hardening
 - Status:
-  - IN PROGRESS (2026-02-20): manifest checksums + parity status JSON + CI readiness plumbing shipped.
+  - IN PROGRESS (2026-02-21): manifest checksums + parity status JSON + CI readiness plumbing shipped, plus manifest schema-version checks and machine-readable artifact path summaries.
 - Objective:
   - make strict legacy-truth activation deterministic as soon as fresh artifacts arrive.
 - File targets:

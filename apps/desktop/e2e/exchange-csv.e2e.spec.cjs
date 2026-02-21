@@ -34,6 +34,12 @@ test("class exchange CSV export/import roundtrip", async () => {
     await expect(page.getByTestId("exchange-preview-summary")).toBeVisible();
     await page.getByTestId("exchange-import-btn").click();
     await expect(page.getByText(/Imported|Applied/, { exact: false })).toBeVisible();
+
+    // New integrations tabs should remain discoverable from the same screen.
+    await page.getByTestId("integrations-sis-tab").click();
+    await expect(page.getByTestId("integrations-sis-preview-btn")).toBeVisible();
+    await page.getByTestId("integrations-admin-tab").click();
+    await expect(page.getByTestId("integrations-admin-preview-btn")).toBeVisible();
   } finally {
     await app.close();
   }

@@ -48,6 +48,11 @@ test("setup admin settings persist and reload", async () => {
   await page.getByTestId("setup-analysis-scope").selectOption("active");
   await page.getByTestId("setup-printer-font-scale").fill("115");
   await page.getByTestId("setup-comments-policy").selectOption("append");
+  await page.getByTestId("setup-integrations-default-profile").selectOption("sis_marks_v1");
+  await page.getByTestId("setup-integrations-match-mode").selectOption("name_only");
+  await page.getByTestId("setup-integrations-collision-policy").selectOption("append_new");
+  await page.getByTestId("setup-integrations-admin-policy").selectOption("source_if_longer");
+  await page.getByTestId("setup-reports-default-analytics-scope").selectOption("active");
   await page.getByTestId("setup-save-all").click();
 
   // Navigate away and back to ensure reload path works.
@@ -62,6 +67,11 @@ test("setup admin settings persist and reload", async () => {
   expect(persisted.analysis.defaultStudentScope).toBe("active");
   expect(persisted.printer.fontScale).toBe(115);
   expect(persisted.comments.defaultTransferPolicy).toBe("append");
+  expect(persisted.integrations.defaultSisProfile).toBe("sis_marks_v1");
+  expect(persisted.integrations.defaultMatchMode).toBe("name_only");
+  expect(persisted.integrations.defaultCollisionPolicy).toBe("append_new");
+  expect(persisted.integrations.adminTransferDefaultPolicy).toBe("source_if_longer");
+  expect(persisted.reports.defaultAnalyticsScope).toBe("active");
 
   await app.close();
 });

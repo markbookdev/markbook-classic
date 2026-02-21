@@ -98,6 +98,7 @@ function printHumanStatus(payload, expectedDir, manifestPath) {
 
 function main() {
   const jsonMode = process.argv.includes("--json");
+  const expectedManifestVersion = 1;
   const appDir = path.join(__dirname, "..");
   const repoRoot = path.join(appDir, "..", "..");
   const expectedDir = path.join(repoRoot, "fixtures", "legacy", "Sample25", "expected");
@@ -108,6 +109,8 @@ function main() {
   }
 
   const manifest = readJson(manifestPath);
+  const manifestVersion = Number(manifest?.version || 0);
+  const staleSchemaVersion = manifestVersion !== expectedManifestVersion;
   const strictRequiredByManifest = manifest?.strictReady === true;
   const regressionRequired = requiredList(manifest, "regression");
   const strictRequired = requiredList(manifest, "strict");
@@ -119,11 +122,21 @@ function main() {
   const regressionReady = regressionMissing.length === 0 && regressionChecksumMismatches.length === 0;
   const strictFilesReady = strictMissing.length === 0 && strictChecksumMismatches.length === 0;
   const strictReady = !strictRequiredByManifest || strictFilesReady;
-  const overallReady = regressionReady && strictReady;
+  const overallReady = !staleSchemaVersion && regressionReady && strictReady;
 
   const payload = {
     mode: overallReady ? "ready" : "not-ready",
     manifestPath,
+    manifest: {
+      version: manifestVersion,
+      expectedVersion: expectedManifestVersion,
+      staleSchemaVersion
+    },
+    artifacts: {
+      expectedDir,
+      regressionRequiredAbs: regressionRequired.map((rel) => path.join(expectedDir, rel)),
+      strictRequiredAbs: strictRequired.map((rel) => path.join(expectedDir, rel))
+    },
     checksums: {
       configuredCount: Object.keys(checksums).length
     },
@@ -145,6 +158,11 @@ function main() {
 
   if (!jsonMode) {
     printHumanStatus(payload, expectedDir, manifestPath);
+    if (staleSchemaVersion) {
+      console.error(
+        `parity-status: stale manifest schema version ${manifestVersion}; expected ${expectedManifestVersion}`
+      );
+    }
   }
   console.log(JSON.stringify(payload));
 

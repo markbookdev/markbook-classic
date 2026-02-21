@@ -14,6 +14,10 @@ test("combined analytics open-in-reports keeps filters and aligns model output",
 
     await page.getByTestId("nav-combined-analytics").click();
     await page.waitForSelector('[data-testid="combined-analytics-screen"]');
+    await page.waitForFunction(() => {
+      const sel = document.querySelector('[data-testid="combined-analytics-markset-multiselect"]');
+      return !!sel && sel.options && sel.options.length > 1;
+    });
 
     const allMarkSetIds = await page.evaluate(() => {
       const sel = document.querySelector('[data-testid="combined-analytics-markset-multiselect"]');
@@ -59,4 +63,3 @@ test("combined analytics open-in-reports keeps filters and aligns model output",
     await app.close();
   }
 });
-

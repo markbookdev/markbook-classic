@@ -14,9 +14,9 @@
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
 | Analytics screens | Implemented (interactive read-only) | class + student + combined analytics shipped; class rows/drilldown and student compare/trend are now interactive with report handoff |
-| Setup/Admin defaults | Partial | workspace setup screen shipped (analysis/attendance/comments/printer/security/email); deeper legacy setup breadth still pending |
+| Setup/Admin defaults | Partial (expanded) | workspace setup screen now includes integrations defaults + analytics/report header defaults; deeper legacy setup breadth still pending |
 | Planner/Course Description | Missing | not yet implemented |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
-| Exchange/Integrations | Partial | exchange done; chapter-13 breadth pending |
+| Exchange/Integrations | Partial (Tier-A shipped) | class exchange + SIS preview/apply/export + admin transfer package preview/apply/export shipped; broader chapter-13 adapters pending |
 | Packaging/Release hardening | Implemented | launch smoke and CI gates in place |
 | Strict legacy-truth parity lane | Partial | manifest checksum validation + CI readiness gates shipped; fresh outputs still required to flip strict-ready |

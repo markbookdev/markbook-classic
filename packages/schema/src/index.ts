@@ -1340,6 +1340,13 @@ export const SetupGetResultSchema = z.object({
     showGeneratedAt: z.boolean(),
     defaultMarginMm: z.number()
   }),
+  integrations: z.object({
+    defaultSisProfile: z.enum(["mb_exchange_v1", "sis_roster_v1", "sis_marks_v1"]),
+    defaultMatchMode: z.enum(["student_no_then_name", "name_only", "sort_order"]),
+    defaultCollisionPolicy: z.enum(["merge_existing", "append_new", "stop_on_collision"]),
+    autoPreviewBeforeApply: z.boolean(),
+    adminTransferDefaultPolicy: z.enum(["replace", "append", "fill_blank", "source_if_longer"])
+  }),
   planner: z.object({
     defaultLessonDurationMinutes: z.number(),
     defaultPublishStatus: z.enum(["draft", "published", "archived"]),
@@ -1355,7 +1362,9 @@ export const SetupGetResultSchema = z.object({
   reports: z.object({
     plannerHeaderStyle: z.enum(["compact", "classic", "minimal"]),
     showGeneratedAt: z.boolean(),
-    defaultStudentScope: z.enum(["all", "active", "valid"])
+    defaultStudentScope: z.enum(["all", "active", "valid"]),
+    defaultAnalyticsScope: z.enum(["all", "active", "valid"]),
+    showFiltersInHeaderByDefault: z.boolean()
   }),
   security: z.object({
     passwordEnabled: z.boolean(),
@@ -1809,6 +1818,91 @@ export const ExchangeImportClassCsvResultSchema = z.object({
   warnings: z.array(ExchangeWarningSchema).optional(),
   mode: z.string().optional(),
   path: z.string().optional()
+});
+
+export const IntegrationsSisPreviewImportResultSchema = z.object({
+  ok: z.literal(true),
+  classId: z.string(),
+  path: z.string(),
+  profile: z.string(),
+  matchMode: z.string(),
+  mode: z.string(),
+  rowsTotal: z.number(),
+  rowsParsed: z.number(),
+  matched: z.number(),
+  new: z.number(),
+  ambiguous: z.number(),
+  invalid: z.number(),
+  warnings: z.array(z.record(z.string(), z.unknown())),
+  previewRows: z.array(z.record(z.string(), z.unknown()))
+});
+
+export const IntegrationsSisApplyImportResultSchema = z.object({
+  ok: z.literal(true),
+  classId: z.string(),
+  path: z.string(),
+  profile: z.string(),
+  matchMode: z.string(),
+  mode: z.string(),
+  collisionPolicy: z.string(),
+  created: z.number(),
+  updated: z.number(),
+  ambiguousSkipped: z.number(),
+  warnings: z.array(z.record(z.string(), z.unknown()))
+});
+
+export const IntegrationsSisExportRosterResultSchema = z.object({
+  ok: z.literal(true),
+  rowsExported: z.number(),
+  profile: z.string(),
+  path: z.string()
+});
+
+export const IntegrationsSisExportMarksResultSchema = z.object({
+  ok: z.literal(true),
+  rowsExported: z.number(),
+  assessmentsExported: z.number(),
+  profile: z.string(),
+  path: z.string()
+});
+
+export const IntegrationsAdminTransferPreviewPackageResultSchema = z.object({
+  metadata: z.record(z.string(), z.unknown()),
+  markSetCount: z.number(),
+  studentAlignment: z.object({
+    sourceRows: z.number(),
+    targetRows: z.number(),
+    matched: z.number(),
+    unmatchedSource: z.number(),
+    ambiguous: z.number()
+  }),
+  collisions: z.array(z.record(z.string(), z.unknown())),
+  warnings: z.array(z.record(z.string(), z.unknown()))
+});
+
+export const IntegrationsAdminTransferApplyPackageResultSchema = z.object({
+  ok: z.literal(true),
+  students: z.object({
+    created: z.number()
+  }),
+  assessments: z.object({
+    created: z.number(),
+    merged: z.number()
+  }),
+  scores: z.object({
+    upserted: z.number()
+  }),
+  remarks: z.object({
+    updated: z.number()
+  }),
+  warnings: z.array(z.record(z.string(), z.unknown()))
+});
+
+export const IntegrationsAdminTransferExportPackageResultSchema = z.object({
+  ok: z.literal(true),
+  entriesWritten: z.number(),
+  path: z.string(),
+  format: z.literal("mb-admin-transfer-v1")
 });
 
 export const ReportsAttendanceMonthlyModelResultSchema = z.object({

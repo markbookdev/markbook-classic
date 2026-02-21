@@ -42,6 +42,9 @@ pub fn handle_request(state: &mut AppState, req: Request) -> serde_json::Value {
     if let Some(resp) = handlers::reports::try_handle(state, &req) {
         return resp;
     }
+    if let Some(resp) = handlers::integrations::try_handle(state, &req) {
+        return resp;
+    }
     if let Some(resp) = handlers::backup_exchange::try_handle(state, &req) {
         return resp;
     }

@@ -131,6 +131,22 @@ fn setup_get_update_roundtrip_and_validation() {
             }
         }),
     );
+    let _ = request_ok(
+        &mut stdin,
+        &mut reader,
+        "4b",
+        "setup.update",
+        json!({
+            "section": "integrations",
+            "patch": {
+                "defaultSisProfile": "sis_marks_v1",
+                "defaultMatchMode": "name_only",
+                "defaultCollisionPolicy": "append_new",
+                "autoPreviewBeforeApply": false,
+                "adminTransferDefaultPolicy": "append"
+            }
+        }),
+    );
 
     let updated = request_ok(&mut stdin, &mut reader, "5", "setup.get", json!({}));
     assert_eq!(
@@ -166,6 +182,36 @@ fn setup_get_update_roundtrip_and_validation() {
             .pointer("/printer/repeatHeaders")
             .and_then(|v| v.as_bool()),
         Some(false)
+    );
+    assert_eq!(
+        updated
+            .pointer("/integrations/defaultSisProfile")
+            .and_then(|v| v.as_str()),
+        Some("sis_marks_v1")
+    );
+    assert_eq!(
+        updated
+            .pointer("/integrations/defaultMatchMode")
+            .and_then(|v| v.as_str()),
+        Some("name_only")
+    );
+    assert_eq!(
+        updated
+            .pointer("/integrations/defaultCollisionPolicy")
+            .and_then(|v| v.as_str()),
+        Some("append_new")
+    );
+    assert_eq!(
+        updated
+            .pointer("/integrations/autoPreviewBeforeApply")
+            .and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        updated
+            .pointer("/integrations/adminTransferDefaultPolicy")
+            .and_then(|v| v.as_str()),
+        Some("append")
     );
 
     let invalid = request(

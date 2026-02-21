@@ -33,6 +33,13 @@ type SetupState = {
     showGeneratedAt: boolean;
     defaultMarginMm: number;
   };
+  integrations: {
+    defaultSisProfile: "mb_exchange_v1" | "sis_roster_v1" | "sis_marks_v1";
+    defaultMatchMode: "student_no_then_name" | "name_only" | "sort_order";
+    defaultCollisionPolicy: "merge_existing" | "append_new" | "stop_on_collision";
+    autoPreviewBeforeApply: boolean;
+    adminTransferDefaultPolicy: "replace" | "append" | "fill_blank" | "source_if_longer";
+  };
   planner: {
     defaultLessonDurationMinutes: number;
     defaultPublishStatus: "draft" | "published" | "archived";
@@ -49,6 +56,8 @@ type SetupState = {
     plannerHeaderStyle: "compact" | "classic" | "minimal";
     showGeneratedAt: boolean;
     defaultStudentScope: "all" | "active" | "valid";
+    defaultAnalyticsScope: "all" | "active" | "valid";
+    showFiltersInHeaderByDefault: boolean;
   };
   security: {
     passwordEnabled: boolean;
@@ -96,6 +105,13 @@ const DEFAULT_STATE: SetupState = {
     showGeneratedAt: true,
     defaultMarginMm: 12
   },
+  integrations: {
+    defaultSisProfile: "sis_roster_v1",
+    defaultMatchMode: "student_no_then_name",
+    defaultCollisionPolicy: "merge_existing",
+    autoPreviewBeforeApply: true,
+    adminTransferDefaultPolicy: "fill_blank"
+  },
   planner: {
     defaultLessonDurationMinutes: 75,
     defaultPublishStatus: "draft",
@@ -111,7 +127,9 @@ const DEFAULT_STATE: SetupState = {
   reports: {
     plannerHeaderStyle: "classic",
     showGeneratedAt: true,
-    defaultStudentScope: "valid"
+    defaultStudentScope: "valid",
+    defaultAnalyticsScope: "valid",
+    showFiltersInHeaderByDefault: true
   },
   security: {
     passwordEnabled: false,
@@ -175,6 +193,13 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           showGeneratedAt: res.printer.showGeneratedAt,
           defaultMarginMm: res.printer.defaultMarginMm
         },
+        integrations: {
+          defaultSisProfile: res.integrations.defaultSisProfile,
+          defaultMatchMode: res.integrations.defaultMatchMode,
+          defaultCollisionPolicy: res.integrations.defaultCollisionPolicy,
+          autoPreviewBeforeApply: res.integrations.autoPreviewBeforeApply,
+          adminTransferDefaultPolicy: res.integrations.adminTransferDefaultPolicy
+        },
         planner: {
           defaultLessonDurationMinutes: res.planner.defaultLessonDurationMinutes,
           defaultPublishStatus: res.planner.defaultPublishStatus,
@@ -190,7 +215,9 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
         reports: {
           plannerHeaderStyle: res.reports.plannerHeaderStyle,
           showGeneratedAt: res.reports.showGeneratedAt,
-          defaultStudentScope: res.reports.defaultStudentScope
+          defaultStudentScope: res.reports.defaultStudentScope,
+          defaultAnalyticsScope: res.reports.defaultAnalyticsScope,
+          showFiltersInHeaderByDefault: res.reports.showFiltersInHeaderByDefault
         },
         security: {
           passwordEnabled: res.security.passwordEnabled,
@@ -246,6 +273,7 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
         "attendance",
         "comments",
         "printer",
+        "integrations",
         "planner",
         "courseDescription",
         "reports",
@@ -273,7 +301,7 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
       <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 10 }}>Setup & Admin</div>
       <div style={{ color: "#666", marginBottom: 14 }}>
         Workspace-level defaults for analytics, attendance, comments transfer, printing, security,
-        and email metadata.
+        integrations, and email metadata.
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -797,6 +825,108 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
         </section>
 
         <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Integrations Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default SIS profile
+            <select
+              data-testid="setup-integrations-default-profile"
+              value={setup.integrations.defaultSisProfile}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["integrations"]["defaultSisProfile"];
+                setSetup((s) => ({
+                  ...s,
+                  integrations: { ...s.integrations, defaultSisProfile: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="sis_roster_v1">sis_roster_v1</option>
+              <option value="sis_marks_v1">sis_marks_v1</option>
+              <option value="mb_exchange_v1">mb_exchange_v1</option>
+            </select>
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default match mode
+            <select
+              data-testid="setup-integrations-match-mode"
+              value={setup.integrations.defaultMatchMode}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["integrations"]["defaultMatchMode"];
+                setSetup((s) => ({
+                  ...s,
+                  integrations: { ...s.integrations, defaultMatchMode: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="student_no_then_name">student_no_then_name</option>
+              <option value="name_only">name_only</option>
+              <option value="sort_order">sort_order</option>
+            </select>
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default collision policy
+            <select
+              data-testid="setup-integrations-collision-policy"
+              value={setup.integrations.defaultCollisionPolicy}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["integrations"]["defaultCollisionPolicy"];
+                setSetup((s) => ({
+                  ...s,
+                  integrations: { ...s.integrations, defaultCollisionPolicy: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="merge_existing">merge_existing</option>
+              <option value="append_new">append_new</option>
+              <option value="stop_on_collision">stop_on_collision</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={setup.integrations.autoPreviewBeforeApply}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  integrations: { ...s.integrations, autoPreviewBeforeApply: checked }
+                }));
+              }}
+            />
+            Require preview before apply
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Admin transfer comments policy
+            <select
+              data-testid="setup-integrations-admin-policy"
+              value={setup.integrations.adminTransferDefaultPolicy}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["integrations"]["adminTransferDefaultPolicy"];
+                setSetup((s) => ({
+                  ...s,
+                  integrations: { ...s.integrations, adminTransferDefaultPolicy: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="fill_blank">fill_blank</option>
+              <option value="replace">replace</option>
+              <option value="append">append</option>
+              <option value="source_if_longer">source_if_longer</option>
+            </select>
+          </label>
+          <button
+            data-testid="setup-save-integrations"
+            onClick={() => void saveSection("integrations")}
+            disabled={saving || loading}
+          >
+            Save Integrations
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Planner Defaults</div>
           <label style={{ display: "block", marginBottom: 8 }}>
             Default lesson duration (minutes)
@@ -1027,6 +1157,39 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
               <option value="active">active</option>
               <option value="valid">valid</option>
             </select>
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default analytics scope
+            <select
+              data-testid="setup-reports-default-analytics-scope"
+              value={setup.reports.defaultAnalyticsScope}
+              onChange={(e) => {
+                const value = e.currentTarget.value as SetupState["reports"]["defaultAnalyticsScope"];
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, defaultAnalyticsScope: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="all">all</option>
+              <option value="active">active</option>
+              <option value="valid">valid</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={setup.reports.showFiltersInHeaderByDefault}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  reports: { ...s.reports, showFiltersInHeaderByDefault: checked }
+                }));
+              }}
+            />
+            Show filter metadata in report headers
           </label>
           <button
             data-testid="setup-save-reports"
