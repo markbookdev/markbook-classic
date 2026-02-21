@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  PlannerLessonsBulkAssignUnitResultSchema,
+  PlannerLessonsCopyForwardResultSchema,
   PlannerLessonsArchiveResultSchema,
   PlannerLessonsCreateResultSchema,
   PlannerLessonsListResultSchema,
@@ -10,6 +12,7 @@ import {
   PlannerPublishPreviewResultSchema,
   PlannerPublishUpdateStatusResultSchema,
   PlannerUnitsArchiveResultSchema,
+  PlannerUnitsCloneResultSchema,
   PlannerUnitsCreateResultSchema,
   PlannerUnitsListResultSchema,
   PlannerUnitsReorderResultSchema,
@@ -90,6 +93,7 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
 
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>([]);
   const [lessonUnitFilter, setLessonUnitFilter] = useState<string | null>(null);
 
   const [newUnitTitle, setNewUnitTitle] = useState("");
@@ -103,6 +107,11 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
   const [publishStatus, setPublishStatus] = useState<"draft" | "published" | "archived">("draft");
   const [publishPreview, setPublishPreview] = useState<any>(null);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [plannerActionMessage, setPlannerActionMessage] = useState<string | null>(null);
+  const [copyForwardDayOffset, setCopyForwardDayOffset] = useState<string>("7");
+  const [copyForwardIncludeFollowUp, setCopyForwardIncludeFollowUp] = useState<boolean>(true);
+  const [copyForwardIncludeHomework, setCopyForwardIncludeHomework] = useState<boolean>(true);
+  const [bulkAssignUnitId, setBulkAssignUnitId] = useState<string>("");
 
   const filteredLessons = useMemo(() => {
     if (!lessonUnitFilter || lessonUnitFilter === "ALL") return lessons;
@@ -173,6 +182,9 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
         if (cur && lessonsRes.lessons.some((l) => l.id === cur)) return cur;
         return lessonsRes.lessons[0]?.id ?? null;
       });
+      setSelectedLessonIds((cur) =>
+        cur.filter((id) => lessonsRes.lessons.some((lesson) => lesson.id === id))
+      );
 
       setPublished(publishRes.published as any);
     } catch (e: any) {
@@ -266,6 +278,26 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
     }
   }
 
+  async function cloneUnit(unitId: string) {
+    setSaving(true);
+    setPlannerActionMessage(null);
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "planner.units.clone",
+        { classId: props.selectedClassId, unitId, titleMode: "appendCopy" },
+        PlannerUnitsCloneResultSchema
+      );
+      setPlannerActionMessage("Unit cloned.");
+      setSelectedUnitId(res.unitId);
+      await loadAll();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function createLesson() {
     const title = newLessonTitle.trim();
     if (!title) return;
@@ -350,6 +382,72 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
         { classId: props.selectedClassId, lessonId, archived },
         PlannerLessonsArchiveResultSchema
       );
+      await loadAll();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleLessonSelection(lessonId: string, selected: boolean) {
+    setSelectedLessonIds((cur) => {
+      if (selected) {
+        if (cur.includes(lessonId)) return cur;
+        return [...cur, lessonId];
+      }
+      return cur.filter((id) => id !== lessonId);
+    });
+  }
+
+  async function copyForwardLessons() {
+    if (selectedLessonIds.length === 0) return;
+    const parsedDayOffset = Number.parseInt(copyForwardDayOffset.trim(), 10);
+    if (!Number.isFinite(parsedDayOffset)) {
+      props.onError("Day offset must be a valid integer.");
+      return;
+    }
+    setSaving(true);
+    setPlannerActionMessage(null);
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "planner.lessons.copyForward",
+        {
+          classId: props.selectedClassId,
+          lessonIds: selectedLessonIds,
+          dayOffset: parsedDayOffset,
+          includeFollowUp: copyForwardIncludeFollowUp,
+          includeHomework: copyForwardIncludeHomework
+        },
+        PlannerLessonsCopyForwardResultSchema
+      );
+      setSelectedLessonIds(res.createdLessonIds);
+      setPlannerActionMessage(`Copied ${res.createdLessonIds.length} lesson(s) forward.`);
+      await loadAll();
+    } catch (e: any) {
+      props.onError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function bulkAssignLessonsToUnit() {
+    if (selectedLessonIds.length === 0) return;
+    setSaving(true);
+    setPlannerActionMessage(null);
+    props.onError(null);
+    try {
+      const res = await requestParsed(
+        "planner.lessons.bulkAssignUnit",
+        {
+          classId: props.selectedClassId,
+          lessonIds: selectedLessonIds,
+          unitId: bulkAssignUnitId || null
+        },
+        PlannerLessonsBulkAssignUnitResultSchema
+      );
+      setPlannerActionMessage(`Updated ${res.updated} lesson assignment(s).`);
       await loadAll();
     } catch (e: any) {
       props.onError(e?.message ?? String(e));
@@ -472,6 +570,9 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
           Show archived
         </label>
       </div>
+      {plannerActionMessage ? (
+        <div style={{ marginBottom: 10, color: "#0b6b46" }}>{plannerActionMessage}</div>
+      ) : null}
 
       {tab === "units" ? (
         <div>
@@ -512,6 +613,12 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
                     <button onClick={() => void renameUnit(unit.id, unit.title)}>Rename</button>
                     <button onClick={() => void reorderUnits(unit.id, -1)}>Up</button>
                     <button onClick={() => void reorderUnits(unit.id, 1)}>Down</button>
+                    <button
+                      data-testid={`planner-unit-clone-btn-${unit.id}`}
+                      onClick={() => void cloneUnit(unit.id)}
+                    >
+                      Clone
+                    </button>
                     <button onClick={() => void toggleUnitArchive(unit.id, !unit.archived)}>
                       {unit.archived ? "Unarchive" : "Archive"}
                     </button>
@@ -580,9 +687,78 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
             </label>
           </div>
 
+          <div
+            style={{
+              marginBottom: 10,
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap"
+            }}
+          >
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              Day offset
+              <input
+                data-testid="planner-lessons-copyforward-day-offset"
+                value={copyForwardDayOffset}
+                onChange={(e) => setCopyForwardDayOffset(e.currentTarget.value)}
+                style={{ width: 72 }}
+              />
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={copyForwardIncludeFollowUp}
+                onChange={(e) => setCopyForwardIncludeFollowUp(e.currentTarget.checked)}
+              />
+              Include follow-up
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={copyForwardIncludeHomework}
+                onChange={(e) => setCopyForwardIncludeHomework(e.currentTarget.checked)}
+              />
+              Include homework
+            </label>
+            <button
+              data-testid="planner-lessons-copyforward-btn"
+              onClick={() => void copyForwardLessons()}
+              disabled={saving || loading || selectedLessonIds.length === 0}
+            >
+              Copy Forward Selected
+            </button>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              Assign unit
+              <select
+                data-testid="planner-lessons-bulk-assign-unit-select"
+                value={bulkAssignUnitId}
+                onChange={(e) => setBulkAssignUnitId(e.currentTarget.value)}
+              >
+                <option value="">No Unit</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              data-testid="planner-lessons-bulk-assign-btn"
+              onClick={() => void bulkAssignLessonsToUnit()}
+              disabled={saving || loading || selectedLessonIds.length === 0}
+            >
+              Apply Unit to Selected
+            </button>
+            <div style={{ color: "#666", fontSize: 12 }}>
+              Selected: {selectedLessonIds.length}
+            </div>
+          </div>
+
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
+                <th>Select</th>
                 <th style={{ textAlign: "left" }}>Title</th>
                 <th>Date</th>
                 <th>Unit</th>
@@ -594,6 +770,14 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
             <tbody>
               {filteredLessons.map((lesson) => (
                 <tr key={lesson.id}>
+                  <td style={{ textAlign: "center" }}>
+                    <input
+                      data-testid={`planner-lesson-select-${lesson.id}`}
+                      type="checkbox"
+                      checked={selectedLessonIds.includes(lesson.id)}
+                      onChange={(e) => toggleLessonSelection(lesson.id, e.currentTarget.checked)}
+                    />
+                  </td>
                   <td>{lesson.title}</td>
                   <td>{lesson.lessonDate ?? ""}</td>
                   <td>{units.find((u) => u.id === lesson.unitId)?.title ?? ""}</td>

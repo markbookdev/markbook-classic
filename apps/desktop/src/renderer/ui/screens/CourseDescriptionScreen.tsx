@@ -38,6 +38,9 @@ export function CourseDescriptionScreen(props: {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<ProfileState>(DEFAULT_PROFILE);
   const [includePolicyDefault, setIncludePolicyDefault] = useState(true);
+  const [includeStrands, setIncludeStrands] = useState(true);
+  const [includeAssessmentPlan, setIncludeAssessmentPlan] = useState(true);
+  const [includeResources, setIncludeResources] = useState(true);
   const [generatedModel, setGeneratedModel] = useState<any>(null);
   const [timeManagementModel, setTimeManagementModel] = useState<any>(null);
 
@@ -74,6 +77,9 @@ export function CourseDescriptionScreen(props: {
             : setupRes.courseDescription.defaultTotalWeeks
       });
       setIncludePolicyDefault(setupRes.courseDescription.includePolicyByDefault);
+      setIncludeStrands(true);
+      setIncludeAssessmentPlan(true);
+      setIncludeResources(true);
       setGeneratedModel(null);
       setTimeManagementModel(null);
     } catch (e: any) {
@@ -120,7 +126,10 @@ export function CourseDescriptionScreen(props: {
         {
           classId: props.selectedClassId,
           options: {
-            includePolicy: includePolicyDefault
+            includePolicy: includePolicyDefault,
+            includeStrands,
+            includeAssessmentPlan,
+            includeResources
           }
         },
         CourseDescriptionModelResultSchema
@@ -160,6 +169,39 @@ export function CourseDescriptionScreen(props: {
     if (!Number.isFinite(parsed)) return fallback;
     return Math.max(min, Math.min(max, parsed));
   }
+
+  const generationDiffSummary = (() => {
+    if (!generatedModel || !generatedModel.profile) return "(no generated model yet)";
+    const diffs: string[] = [];
+    const gProfile = generatedModel.profile ?? {};
+    if ((gProfile.courseTitle ?? "") !== profile.courseTitle) {
+      diffs.push("courseTitle");
+    }
+    if ((gProfile.gradeLabel ?? "") !== profile.gradeLabel) {
+      diffs.push("gradeLabel");
+    }
+    if (Number(gProfile.periodMinutes ?? 0) !== Number(profile.periodMinutes)) {
+      diffs.push("periodMinutes");
+    }
+    if (Number(gProfile.periodsPerWeek ?? 0) !== Number(profile.periodsPerWeek)) {
+      diffs.push("periodsPerWeek");
+    }
+    if (Number(gProfile.totalWeeks ?? 0) !== Number(profile.totalWeeks)) {
+      diffs.push("totalWeeks");
+    }
+    const currentStrands = profile.strands.join("|");
+    const generatedStrands = Array.isArray(gProfile.strands)
+      ? gProfile.strands.map((v: any) => String(v ?? "")).join("|")
+      : "";
+    if (generatedStrands !== currentStrands) {
+      diffs.push("strands");
+    }
+    if ((gProfile.policyText ?? "") !== profile.policyText) {
+      diffs.push("policyText");
+    }
+    if (diffs.length === 0) return "Profile and generated model are aligned.";
+    return `Differences from profile: ${diffs.join(", ")}`;
+  })();
 
   return (
     <div data-testid="course-description-screen" style={{ padding: 24 }}>
@@ -255,11 +297,39 @@ export function CourseDescriptionScreen(props: {
 
       <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
         <input
+          data-testid="course-description-option-include-policy"
           type="checkbox"
           checked={includePolicyDefault}
           onChange={(e) => setIncludePolicyDefault(e.currentTarget.checked)}
         />
         Include policy in generated model
+      </label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+        <input
+          data-testid="course-description-option-include-strands"
+          type="checkbox"
+          checked={includeStrands}
+          onChange={(e) => setIncludeStrands(e.currentTarget.checked)}
+        />
+        Include strands in generated model
+      </label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+        <input
+          data-testid="course-description-option-include-assessment-plan"
+          type="checkbox"
+          checked={includeAssessmentPlan}
+          onChange={(e) => setIncludeAssessmentPlan(e.currentTarget.checked)}
+        />
+        Include assessment plan summary
+      </label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+        <input
+          data-testid="course-description-option-include-resources"
+          type="checkbox"
+          checked={includeResources}
+          onChange={(e) => setIncludeResources(e.currentTarget.checked)}
+        />
+        Include resources list
       </label>
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -284,6 +354,12 @@ export function CourseDescriptionScreen(props: {
 
       <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div>
+          <div
+            data-testid="course-description-preview-diff"
+            style={{ fontSize: 12, color: "#555", marginBottom: 6 }}
+          >
+            {generationDiffSummary}
+          </div>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Course Description Model</div>
           <pre
             style={{

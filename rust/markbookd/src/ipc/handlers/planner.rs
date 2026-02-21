@@ -1,6 +1,7 @@
 use crate::db;
 use crate::ipc::error::{err, ok};
 use crate::ipc::types::{AppState, Request};
+use chrono::{Duration as ChronoDuration, NaiveDate};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde_json::{json, Map, Value as JsonValue};
 use std::collections::HashSet;
@@ -172,6 +173,63 @@ fn parse_string_array(v: Option<&JsonValue>) -> Result<Vec<String>, &'static str
             }
             Ok(out)
         }
+    }
+}
+
+fn parse_required_string_array(v: Option<&JsonValue>, key: &str) -> Result<Vec<String>, String> {
+    let Some(raw) = v else {
+        return Err(format!("missing {}", key));
+    };
+    let arr = raw
+        .as_array()
+        .ok_or_else(|| format!("{} must be array of strings", key))?;
+    let mut out = Vec::with_capacity(arr.len());
+    for item in arr {
+        let s = item
+            .as_str()
+            .ok_or_else(|| format!("{} must be array of strings", key))?
+            .trim()
+            .to_string();
+        if !s.is_empty() && !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    if out.is_empty() {
+        return Err(format!("{} must contain at least one lesson id", key));
+    }
+    Ok(out)
+}
+
+fn parse_title_mode(v: Option<&JsonValue>, default: &str) -> Result<String, String> {
+    let mode = match v.and_then(|x| x.as_str()) {
+        Some(raw) => raw.trim().to_ascii_lowercase(),
+        None => default.to_string(),
+    };
+    if mode != "same" && mode != "appendcopy" {
+        return Err("titleMode must be one of: same, appendCopy".to_string());
+    }
+    Ok(if mode == "appendcopy" {
+        "appendCopy".to_string()
+    } else {
+        "same".to_string()
+    })
+}
+
+fn shift_iso_date(value: Option<String>, day_offset: i64) -> Option<String> {
+    let Some(raw) = value else {
+        return None;
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || day_offset == 0 {
+        return if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
+    }
+    match NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+        Ok(date) => Some(
+            (date + ChronoDuration::days(day_offset))
+                .format("%Y-%m-%d")
+                .to_string(),
+        ),
+        Err(_) => Some(trimmed.to_string()),
     }
 }
 
@@ -652,6 +710,149 @@ fn handle_units_archive(state: &mut AppState, req: &Request) -> serde_json::Valu
         Ok(_) => ok(&req.id, json!({ "ok": true })),
         Err(e) => err(&req.id, "db_update_failed", e.to_string(), None),
     }
+}
+
+fn handle_units_clone(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let unit_id = match required_str(req, "unitId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let title_mode = match parse_title_mode(req.params.get("titleMode"), "appendCopy") {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", m, None),
+    };
+
+    let source = match conn
+        .query_row(
+            "SELECT title, start_date, end_date, summary, expectations_json, resources_json
+             FROM planner_units
+             WHERE class_id = ? AND id = ?",
+            params![class_id, unit_id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => return err(&req.id, "not_found", "unit not found", None),
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let cloned_title = if title_mode == "appendCopy" {
+        format!("{} (Copy)", source.0.trim())
+    } else {
+        source.0.clone()
+    };
+    let sort_order = match next_sort_order(conn, "planner_units", &class_id, None) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e, None),
+    };
+    let ts = now_ts();
+    let cloned_unit_id = Uuid::new_v4().to_string();
+    let mut lesson_stmt = match conn.prepare(
+        "SELECT lesson_date, title, outline, detail, follow_up, homework, duration_minutes, archived
+         FROM planner_lessons
+         WHERE class_id = ? AND unit_id = ?
+         ORDER BY sort_order, id",
+    ) {
+        Ok(s) => s,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let lesson_rows = match lesson_stmt.query_map(params![class_id, unit_id], |r| {
+        Ok((
+            r.get::<_, Option<String>>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, String>(5)?,
+            r.get::<_, Option<i64>>(6)?,
+            r.get::<_, i64>(7)?,
+        ))
+    }) {
+        Ok(rows) => match rows.collect::<Result<Vec<_>, _>>() {
+            Ok(v) => v,
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        },
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    drop(lesson_stmt);
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+
+    if let Err(e) = tx.execute(
+        "INSERT INTO planner_units(
+            id, class_id, sort_order, title, start_date, end_date, summary, expectations_json, resources_json, archived, created_at, updated_at
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        params![
+            cloned_unit_id,
+            class_id,
+            sort_order,
+            cloned_title,
+            source.1,
+            source.2,
+            source.3,
+            source.4,
+            source.5,
+            ts,
+            ts
+        ],
+    ) {
+        let _ = tx.rollback();
+        return err(&req.id, "db_insert_failed", e.to_string(), None);
+    }
+
+    for (idx, lesson) in lesson_rows.iter().enumerate() {
+        let cloned_lesson_id = Uuid::new_v4().to_string();
+        if let Err(e) = tx.execute(
+            "INSERT INTO planner_lessons(
+                id, class_id, unit_id, sort_order, lesson_date, title, outline, detail, follow_up, homework, duration_minutes, archived, created_at, updated_at
+             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                cloned_lesson_id,
+                class_id,
+                cloned_unit_id,
+                idx as i64,
+                lesson.0,
+                lesson.1,
+                lesson.2,
+                lesson.3,
+                lesson.4,
+                lesson.5,
+                lesson.6,
+                lesson.7,
+                ts,
+                ts
+            ],
+        ) {
+            let _ = tx.rollback();
+            return err(&req.id, "db_insert_failed", e.to_string(), None);
+        }
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+    ok(&req.id, json!({ "ok": true, "unitId": cloned_unit_id }))
 }
 
 fn lesson_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<JsonValue> {
@@ -1145,6 +1346,182 @@ fn handle_lessons_archive(state: &mut AppState, req: &Request) -> serde_json::Va
     }
 }
 
+fn handle_lessons_copy_forward(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let lesson_ids = match parse_required_string_array(req.params.get("lessonIds"), "lessonIds") {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", m, None),
+    };
+    let day_offset = match req.params.get("dayOffset").and_then(|v| v.as_i64()) {
+        Some(v) if (-3650..=3650).contains(&v) => v,
+        Some(_) => {
+            return err(
+                &req.id,
+                "bad_params",
+                "dayOffset must be in -3650..=3650",
+                None,
+            )
+        }
+        None => return err(&req.id, "bad_params", "missing dayOffset", None),
+    };
+    let include_follow_up = match parse_bool(req.params.get("includeFollowUp"), true) {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", format!("includeFollowUp {}", m), None),
+    };
+    let include_homework = match parse_bool(req.params.get("includeHomework"), true) {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", format!("includeHomework {}", m), None),
+    };
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+    let mut created_lesson_ids: Vec<String> = Vec::new();
+    let ts = now_ts();
+    for lesson_id in &lesson_ids {
+        let source = match tx
+            .query_row(
+                "SELECT unit_id, sort_order, lesson_date, title, outline, detail, follow_up, homework, duration_minutes, archived
+                 FROM planner_lessons
+                 WHERE class_id = ? AND id = ?",
+                params![class_id, lesson_id],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                        r.get::<_, String>(5)?,
+                        r.get::<_, String>(6)?,
+                        r.get::<_, String>(7)?,
+                        r.get::<_, Option<i64>>(8)?,
+                        r.get::<_, i64>(9)?,
+                    ))
+                },
+            )
+            .optional()
+        {
+            Ok(Some(row)) => row,
+            Ok(None) => continue,
+            Err(e) => {
+                let _ = tx.rollback();
+                return err(&req.id, "db_query_failed", e.to_string(), None);
+            }
+        };
+
+        let next_sort = match next_sort_order(&tx, "planner_lessons", &class_id, source.0.as_deref())
+        {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = tx.rollback();
+                return err(&req.id, "db_query_failed", e, None);
+            }
+        };
+        let copied_id = Uuid::new_v4().to_string();
+        let shifted_date = shift_iso_date(source.2.clone(), day_offset);
+        if let Err(e) = tx.execute(
+            "INSERT INTO planner_lessons(
+                id, class_id, unit_id, sort_order, lesson_date, title, outline, detail, follow_up, homework, duration_minutes, archived, created_at, updated_at
+             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                copied_id,
+                class_id,
+                source.0,
+                next_sort,
+                shifted_date,
+                source.3,
+                source.4,
+                source.5,
+                if include_follow_up { source.6 } else { String::new() },
+                if include_homework { source.7 } else { String::new() },
+                source.8,
+                source.9,
+                ts,
+                ts
+            ],
+        ) {
+            let _ = tx.rollback();
+            return err(&req.id, "db_insert_failed", e.to_string(), None);
+        }
+        created_lesson_ids.push(copied_id);
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+    ok(
+        &req.id,
+        json!({ "ok": true, "createdLessonIds": created_lesson_ids }),
+    )
+}
+
+fn handle_lessons_bulk_assign_unit(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let conn = match db_conn(state, req) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    let class_id = match required_str(req, "classId") {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let lesson_ids = match parse_required_string_array(req.params.get("lessonIds"), "lessonIds") {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", m, None),
+    };
+    let unit_id = match parse_opt_string(req.params.get("unitId")) {
+        Ok(v) => v,
+        Err(m) => return err(&req.id, "bad_params", format!("unitId {}", m), None),
+    };
+    if let Some(ref uid) = unit_id {
+        let exists = match conn
+            .query_row(
+                "SELECT 1 FROM planner_units WHERE class_id = ? AND id = ?",
+                params![class_id, uid],
+                |_r| Ok(()),
+            )
+            .optional()
+        {
+            Ok(v) => v.is_some(),
+            Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+        };
+        if !exists {
+            return err(&req.id, "not_found", "unit not found", None);
+        }
+    }
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+    let mut updated = 0usize;
+    let ts = now_ts();
+    for lesson_id in lesson_ids {
+        match tx.execute(
+            "UPDATE planner_lessons SET unit_id = ?, updated_at = ? WHERE class_id = ? AND id = ?",
+            params![unit_id.as_deref(), ts, class_id, lesson_id],
+        ) {
+            Ok(count) => updated += count as usize,
+            Err(e) => {
+                let _ = tx.rollback();
+                return err(&req.id, "db_update_failed", e.to_string(), None);
+            }
+        }
+    }
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+    ok(&req.id, json!({ "ok": true, "updated": updated }))
+}
+
 fn load_profile(
     conn: &Connection,
     class_id: &str,
@@ -1190,7 +1567,7 @@ fn resolve_course_description_options(
     profile: &JsonValue,
     defaults: &CourseSetupDefaults,
     options: Option<&Map<String, JsonValue>>,
-) -> Result<(i64, i64, i64, bool, bool, JsonValue), String> {
+) -> Result<(i64, i64, i64, bool, bool, bool, bool, bool, JsonValue), String> {
     let mut period_minutes = profile
         .get("periodMinutes")
         .and_then(|v| v.as_i64())
@@ -1207,6 +1584,9 @@ fn resolve_course_description_options(
         .filter(|v| *v > 0)
         .unwrap_or(defaults.default_total_weeks);
     let mut include_policy = defaults.include_policy_by_default;
+    let mut include_strands = true;
+    let mut include_assessment_plan = true;
+    let mut include_resources = true;
     let mut include_archived = false;
     let mut period_minutes_source = "profile";
     let mut periods_per_week_source = "profile";
@@ -1246,6 +1626,21 @@ fn resolve_course_description_options(
                 .ok_or_else(|| "options.includePolicy must be boolean".to_string())?;
             include_policy_source = "options";
         }
+        if let Some(v) = opts.get("includeStrands") {
+            include_strands = v
+                .as_bool()
+                .ok_or_else(|| "options.includeStrands must be boolean".to_string())?;
+        }
+        if let Some(v) = opts.get("includeAssessmentPlan") {
+            include_assessment_plan = v
+                .as_bool()
+                .ok_or_else(|| "options.includeAssessmentPlan must be boolean".to_string())?;
+        }
+        if let Some(v) = opts.get("includeResources") {
+            include_resources = v
+                .as_bool()
+                .ok_or_else(|| "options.includeResources must be boolean".to_string())?;
+        }
         if let Some(v) = opts.get("includeArchived") {
             include_archived = v
                 .as_bool()
@@ -1273,6 +1668,9 @@ fn resolve_course_description_options(
             "periodsPerWeek": periods_per_week,
             "totalWeeks": total_weeks,
             "includePolicy": include_policy,
+            "includeStrands": include_strands,
+            "includeAssessmentPlan": include_assessment_plan,
+            "includeResources": include_resources,
             "includeArchived": include_archived
         }
     });
@@ -1281,6 +1679,9 @@ fn resolve_course_description_options(
         periods_per_week,
         total_weeks,
         include_policy,
+        include_strands,
+        include_assessment_plan,
+        include_resources,
         include_archived,
         settings_applied,
     ))
@@ -1301,13 +1702,16 @@ fn generate_course_description_model(
         periods_per_week,
         total_weeks,
         include_policy,
+        include_strands,
+        include_assessment_plan,
+        include_resources,
         include_archived,
         settings_applied,
     ) = resolve_course_description_options(&profile, &setup_defaults, options)?;
 
     let mut unit_stmt = conn
         .prepare(
-            "SELECT id, title, start_date, end_date, summary
+            "SELECT id, title, start_date, end_date, summary, resources_json
              FROM planner_units
              WHERE class_id = ? AND (? OR archived = 0)
              ORDER BY sort_order, id",
@@ -1315,12 +1719,14 @@ fn generate_course_description_model(
         .map_err(|e| e.to_string())?;
     let units = unit_stmt
         .query_map(params![class_id, include_archived], |r| {
+            let resources_raw: String = r.get(5)?;
             Ok(json!({
                 "unitId": r.get::<_, String>(0)?,
                 "title": r.get::<_, String>(1)?,
                 "startDate": r.get::<_, Option<String>>(2)?,
                 "endDate": r.get::<_, Option<String>>(3)?,
                 "summary": r.get::<_, String>(4)?,
+                "resources": parse_json_array_string(&resources_raw),
             }))
         })
         .and_then(|it| it.collect::<Result<Vec<_>, _>>())
@@ -1358,11 +1764,15 @@ fn generate_course_description_model(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .trim();
-    let strands = profile
-        .get("strands")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let strands = if include_strands {
+        profile
+            .get("strands")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let policy_text = if include_policy {
         profile
             .get("policyText")
@@ -1372,8 +1782,48 @@ fn generate_course_description_model(
     } else {
         String::new()
     };
+    let resources = if include_resources {
+        let mut out: Vec<String> = Vec::new();
+        for unit in &units {
+            if let Some(list) = unit.get("resources").and_then(|v| v.as_array()) {
+                for item in list {
+                    if let Some(s) = item.as_str() {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() && !out.iter().any(|v| v == trimmed) {
+                            out.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        out
+    } else {
+        Vec::new()
+    };
+    let assessment_plan = if include_assessment_plan {
+        let mark_set_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM mark_sets WHERE class_id = ? AND deleted_at IS NULL",
+                [class_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        let assessment_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM assessments a JOIN mark_sets m ON m.id = a.mark_set_id WHERE m.class_id = ? AND m.deleted_at IS NULL",
+                [class_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        Some(json!({
+            "markSetCount": mark_set_count,
+            "assessmentCount": assessment_count
+        }))
+    } else {
+        None
+    };
 
-    Ok(json!({
+    let mut model = json!({
         "class": { "id": class_id, "name": class_name },
         "profile": {
             "courseTitle": if course_title.is_empty() { class_name.clone() } else { course_title.to_string() },
@@ -1384,6 +1834,7 @@ fn generate_course_description_model(
             "strands": strands,
             "policyText": policy_text,
         },
+        "resources": resources,
         "schedule": {
             "periodMinutes": period_minutes,
             "periodsPerWeek": periods_per_week,
@@ -1394,7 +1845,13 @@ fn generate_course_description_model(
         "lessons": lessons,
         "generatedAt": now_ts(),
         "settingsApplied": settings_applied,
-    }))
+    });
+    if let Some(plan) = assessment_plan {
+        if let Some(obj) = model.as_object_mut() {
+            obj.insert("assessmentPlan".to_string(), plan);
+        }
+    }
+    Ok(model)
 }
 
 fn generate_time_management_model(
@@ -1412,6 +1869,9 @@ fn generate_time_management_model(
         periods_per_week,
         total_weeks,
         _include_policy,
+        _include_strands,
+        _include_assessment_plan,
+        _include_resources,
         include_archived,
         settings_applied,
     ) = resolve_course_description_options(&profile, &setup_defaults, options)?;
@@ -2063,12 +2523,15 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "planner.units.update" => Some(handle_units_update(state, req)),
         "planner.units.reorder" => Some(handle_units_reorder(state, req)),
         "planner.units.archive" => Some(handle_units_archive(state, req)),
+        "planner.units.clone" => Some(handle_units_clone(state, req)),
         "planner.lessons.list" => Some(handle_lessons_list(state, req)),
         "planner.lessons.open" => Some(handle_lessons_open(state, req)),
         "planner.lessons.create" => Some(handle_lessons_create(state, req)),
         "planner.lessons.update" => Some(handle_lessons_update(state, req)),
         "planner.lessons.reorder" => Some(handle_lessons_reorder(state, req)),
         "planner.lessons.archive" => Some(handle_lessons_archive(state, req)),
+        "planner.lessons.copyForward" => Some(handle_lessons_copy_forward(state, req)),
+        "planner.lessons.bulkAssignUnit" => Some(handle_lessons_bulk_assign_unit(state, req)),
         "planner.publish.list" => Some(handle_publish_list(state, req)),
         "planner.publish.preview" => Some(handle_publish_preview(state, req)),
         "planner.publish.commit" => Some(handle_publish_commit(state, req)),
