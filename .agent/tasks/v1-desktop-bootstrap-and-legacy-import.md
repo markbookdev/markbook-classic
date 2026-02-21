@@ -521,3 +521,60 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:parity:regression` => PASS
   - `bun run test:packaging` => PASS
   - `bun run test:e2e:packaged` => PASS
+
+### Wave 9 Snapshot (2026-02-21, strict-truth activation pack + setup/admin depth + planner legacy-depth)
+- Strict-lane activation pack finalized:
+  - parity tooling and scripts hardened:
+    - `apps/desktop/scripts/parity-status.cjs`
+    - `apps/desktop/scripts/parity-truth.cjs`
+    - `package.json` (`test:parity:truth`)
+  - CI wiring updated:
+    - `.github/workflows/quality-gates.yml` now executes parity truth readiness lane with machine-readable diagnostics.
+  - preflight verification hardened:
+    - `rust/markbookd/tests/parity_fixture_preflight.rs` validates strict-ready invariants and duplicate/mismatch diagnostics.
+  - strict-ready operational playbook updated:
+    - `docs/parity/legacy-truth-evidence-lane.md`
+- Setup/Admin depth closure shipped (additive only):
+  - backend:
+    - `rust/markbookd/src/ipc/handlers/setup.rs`
+  - schema:
+    - `packages/schema/src/index.ts`
+  - UI wiring:
+    - `apps/desktop/src/renderer/ui/screens/SetupAdminScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/ReportsScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/AttendanceScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/MarkSetCommentsPanel.tsx`
+  - setup domains expanded for parity defaults:
+    - `setup.attendance`, `setup.comments`, `setup.reports`, `setup.security`, `setup.printer`
+- Planner legacy-depth shipped (classroom-speed parity additions):
+  - backend IPC additions:
+    - `planner.units.clone`
+    - `planner.lessons.copyForward`
+    - `planner.lessons.bulkAssignUnit`
+    - additive `courseDescription.generateModel` options
+  - files:
+    - `rust/markbookd/src/ipc/handlers/planner.rs`
+    - `apps/desktop/src/renderer/ui/screens/PlannerScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/CourseDescriptionScreen.tsx`
+- New tests added:
+  - Rust:
+    - `rust/markbookd/tests/setup_sections_depth.rs`
+    - `rust/markbookd/tests/planner_units_clone.rs`
+    - `rust/markbookd/tests/planner_lessons_copy_forward.rs`
+    - `rust/markbookd/tests/course_description_options.rs`
+  - Playwright:
+    - `apps/desktop/e2e/setup-admin-depth.e2e.spec.cjs`
+    - `apps/desktop/e2e/planner-clone-copyforward.e2e.spec.cjs`
+    - `apps/desktop/e2e/course-description-options.e2e.spec.cjs`
+    - extended `apps/desktop/e2e/menu-discoverability.e2e.spec.cjs`
+- Validation (this slice):
+  - `cargo test --manifest-path rust/markbookd/Cargo.toml --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`59 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
+  - `bun run test:e2e:packaged` => PASS
+- Remaining deltas after Wave 9:
+  - strict lane remains conditional until fresh legacy truth artifacts are supplied and `strictReady=true` is committed.
+  - setup/security remains persistence+default behavior only (no full lock-screen/auth UX yet).
+  - discoverability parity remains function-first; full visual clone is still deferred.

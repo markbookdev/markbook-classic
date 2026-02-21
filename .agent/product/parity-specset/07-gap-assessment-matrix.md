@@ -24,28 +24,28 @@ Status rules:
 ## Matrix
 | ID | Legacy area | Current status | Func gap | Workflow gap | Data gap | Calc impact | Criticality | Risk | Complexity | Priority | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GAP-001 | Planner + course description (ch6/tools) | Missing | 5 | 5 | 3 | 1 | 4 | 3 | 4 | 13 | Entire module family absent. |
+| GAP-001 | Planner + course description (ch6/tools) | Partial (legacy-depth core shipped) | 2 | 2 | 2 | 1 | 4 | 2 | 3 | 10 | Planner units/lessons/publish + clone/copy-forward/bulk-assign and course-description generation options are shipped; deeper legacy sequencing/polish remains. |
 | GAP-002 | Class interactive analytics tabs (ch9) | Implemented (interactive read-only) | 1 | 1 | 1 | 5 | 5 | 2 | 4 | 14 | Class analytics now includes server-side search/sort/paging, cohort filtering, assessment drilldown, and report handoff parity. |
 | GAP-003 | Student analytics tabs (ch11) | Implemented (interactive read-only) | 1 | 1 | 1 | 5 | 4 | 2 | 4 | 12 | Student analytics now includes cohort compare and trend-across-marksets with read-only parity behavior. |
 | GAP-004 | Combined report analytics (ch12) | Implemented (read-only) | 2 | 2 | 1 | 5 | 4 | 3 | 3 | 15 | Combined analytics screen + combined report model/export shipped; write actions intentionally deferred. |
 | GAP-005 | Comments transfer-mode UX parity | Implemented (core) | 1 | 1 | 1 | 2 | 5 | 2 | 3 | 11 | Compare/import/flood-fill transfer flows shipped with fit/max-length enforcement and diagnostics. |
 | GAP-006 | Working On menu full parity | Implemented | 1 | 1 | 0 | 1 | 5 | 1 | 2 | 11 | Clone/delete/hide/update-all shipped (`entries.*` + marks UI + tests). |
 | GAP-007 | Class update-from-file/SIS deep parity | Partial (core+attach shipped) | 1 | 1 | 2 | 1 | 4 | 2 | 2 | 10 | `classes.legacyPreview`, `classes.updateFromLegacy`, `classes.importLink.get/set`, `classes.updateFromAttachedLegacy`, and mark set transfer are shipped; remaining nuances are edge-case attach/reimport ergonomics and SIS variants. |
-| GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial (expanded) | 2 | 2 | 2 | 2 | 3 | 2 | 3 | 11 | Setup/Admin now includes integrations defaults, marks defaults, exchange defaults, analytics defaults, and analytics/report header defaults; full legacy setup breadth still pending. |
+| GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial (depth-expanded) | 2 | 2 | 2 | 2 | 3 | 2 | 3 | 11 | Setup/Admin now includes attendance/comments/reports/security/printer defaults plus integrations/marks/exchange/analytics defaults; full legacy setup breadth is narrowed but not complete. |
 | GAP-009 | Bulk email workflow | Missing | 4 | 3 | 2 | 1 | 2 | 3 | 3 | 9 | deferred until core parity closure. |
 | GAP-010 | Chapter 13 external adapters breadth | Partial (Tier-A shipped) | 2 | 2 | 2 | 1 | 2 | 2 | 4 | 7 | Tier-A CSV + admin transfer contracts/UI are shipped; broader adapter families remain deferred. |
-| GAP-011 | Visual/menu discoverability parity | Partial (improved) | 2 | 3 | 0 | 0 | 3 | 2 | 2 | 8 | Legacy-style grouped actions now include Integrations and Planner alongside existing groups; full legacy action surface still pending. |
-| GAP-012 | Legacy-truth strict evidence lane fully populated | Partial | 2 | 1 | 3 | 5 | 4 | 5 | 2 | 18 | blocked on fresh outputs; manifest/checksum preflight and CI strict-lane readiness controls are now shipped. |
+| GAP-011 | Visual/menu discoverability parity | Partial (final pass in progress) | 2 | 2 | 0 | 0 | 3 | 2 | 2 | 9 | Legacy-style grouped menus are present with deterministic implemented-vs-pending affordances; remaining gap is full legacy action-surface polish/coverage. |
+| GAP-012 | Legacy-truth strict evidence lane fully populated | Partial (activation pack finalized) | 1 | 1 | 3 | 5 | 4 | 5 | 2 | 17 | Truth readiness tooling and CI activation mechanics are shipped (`test:parity:truth`, checksum preflight, strict-ready playbook); only fresh legacy artifacts + manifest flip remain. |
 
 ## Priority Ordering (high to low)
 1. GAP-012
 2. GAP-004
 3. GAP-002
-4. GAP-001
-5. GAP-003
-6. GAP-005
-7. GAP-006
-8. GAP-008
+4. GAP-003
+5. GAP-005
+6. GAP-006
+7. GAP-008
+8. GAP-001
 9. GAP-007
 10. GAP-009
 11. GAP-011

@@ -113,7 +113,7 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-SETUP-01: Setup subdomain surfaces
 - Status:
-  - IN PROGRESS (2026-02-21): workspace Setup/Admin screen now also ships integrations defaults (`defaultSisProfile`, `defaultMatchMode`, `defaultCollisionPolicy`, `adminTransferDefaultPolicy`, `autoPreviewBeforeApply`) and report parity defaults (`defaultAnalyticsScope`, `showFiltersInHeaderByDefault`).
+  - DONE (2026-02-21): setup surfaces for integrations/report defaults are shipped and wired in Setup/Admin.
 - Objective:
   - expose calc/comments/attendance/printer/email/password options.
 - API changes:
@@ -129,7 +129,7 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-UX-01: Discoverability parity pass
 - Status:
-  - IN PROGRESS (2026-02-21): legacy menu groups are now present in AppShell (File/Class/Mark Sets/Working On/Reports/Comments/Setup/Integrations/Planner) with implemented actions wired and pending actions disabled.
+  - DONE (core) (2026-02-21): legacy menu groups are present in AppShell (File/Class/Mark Sets/Working On/Reports/Comments/Setup/Integrations/Planner) with implemented actions wired and pending actions explicitly disabled.
 - Objective:
   - map legacy command expectations into modern shell UX.
 - Tests:
@@ -188,7 +188,7 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-EVIDENCE-01B: Strict-lane readiness hardening
 - Status:
-  - IN PROGRESS (2026-02-21): manifest checksums + parity status JSON + CI readiness plumbing shipped, plus manifest schema-version checks and machine-readable artifact path summaries.
+  - DONE (readiness) (2026-02-21): manifest checksums + parity status JSON + CI readiness plumbing shipped, plus manifest schema-version checks and machine-readable artifact path summaries.
 - Objective:
   - make strict legacy-truth activation deterministic as soon as fresh artifacts arrive.
 - File targets:
@@ -196,3 +196,36 @@ Execution-ready chunk list for iterative delivery.
   - `fixtures/legacy/Sample25/expected/parity-manifest.json`
   - `rust/markbookd/tests/parity_fixture_preflight.rs`
   - `.github/workflows/quality-gates.yml`
+
+## EPIC-SETUP-03: Setup/admin breadth closure
+- Status:
+  - DONE (core breadth) (2026-02-21): additive attendance/comments/reports/security/printer setup defaults are shipped and wired to consuming screens.
+- Objective:
+  - close remaining setup domains that affect day-to-day defaults and report output.
+- API changes:
+  - additive `setup.attendance.*`, `setup.comments.*`, `setup.reports.*`, `setup.security.*`, `setup.printer.*` fields under existing `setup.get/setup.update`.
+- Tests:
+  - Rust: `setup_sections_depth.rs`
+  - Playwright: `setup-admin-depth.e2e.spec.cjs`
+
+## EPIC-PLANNER-03: Planner legacy-depth closure
+- Status:
+  - DONE (core depth) (2026-02-21): planner clone/copy-forward/bulk-assign and course description generation options are shipped.
+- Objective:
+  - move planner from MVP into classroom-speed legacy-usable depth.
+- API changes:
+  - `planner.units.clone`
+  - `planner.lessons.copyForward`
+  - `planner.lessons.bulkAssignUnit`
+  - additive `courseDescription.generateModel` options (`includePolicy`, `includeStrands`, `includeAssessmentPlan`, `includeResources`)
+- Tests:
+  - Rust: `planner_units_clone.rs`, `planner_lessons_copy_forward.rs`, `course_description_options.rs`
+  - Playwright: `planner-clone-copyforward.e2e.spec.cjs`, `course-description-options.e2e.spec.cjs`
+
+## EPIC-UX-02: Discoverability final pass
+- Status:
+  - IN PROGRESS (2026-02-21): deterministic action-state labeling is in place; final visual/menu parity polish remains.
+- Objective:
+  - complete discoverability parity without reintroducing legacy security/UI constraints.
+- Tests:
+  - Playwright: `menu-discoverability.e2e.spec.cjs`
