@@ -1019,12 +1019,20 @@ fn handle_marks_pref_hide_deleted_get(state: &mut AppState, req: &Request) -> se
     }
 
     let key = hide_deleted_pref_key(class_id, mark_set_id);
+    let default_hide_deleted = match db::settings_get_json(conn, "setup.marks") {
+        Ok(Some(v)) => v
+            .get("defaultHideDeletedEntries")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(true),
+        Ok(None) => true,
+        Err(_) => true,
+    };
     let hide_deleted = match db::settings_get_json(conn, &key) {
         Ok(Some(v)) => v
             .get("hideDeleted")
             .and_then(|x| x.as_bool())
-            .unwrap_or(true),
-        Ok(None) => true,
+            .unwrap_or(default_hide_deleted),
+        Ok(None) => default_hide_deleted,
         Err(e) => {
             return err(
                 &req.id,

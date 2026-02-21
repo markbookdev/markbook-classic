@@ -34,6 +34,7 @@ import {
   MarkSetOpenResultSchema,
   MarksPrefHideDeletedGetResultSchema,
   MarksPrefHideDeletedSetResultSchema,
+  SetupGetResultSchema,
   StudentsMembershipGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
@@ -111,6 +112,11 @@ export function MarksScreen(props: {
   const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
   const [visibleAssessmentSourceIdxs, setVisibleAssessmentSourceIdxs] = useState<number[]>([]);
   const [hideDeletedEntries, setHideDeletedEntries] = useState(true);
+  const [marksDefaults, setMarksDefaults] = useState<{
+    defaultAutoPreviewBeforeBulkApply: boolean;
+  }>({
+    defaultAutoPreviewBeforeBulkApply: false
+  });
   const [cloneEntryMeta, setCloneEntryMeta] = useState<{
     exists: boolean;
     sourceMarkSetId?: string | null;
@@ -222,6 +228,7 @@ export function MarksScreen(props: {
   const gridInflightMaxRef = useRef(0);
   const requestEpochRef = useRef(0);
   const [gridGetRequests, setGridGetRequests] = useState(0);
+  const lastSelectedRowRef = useRef<number | null>(null);
 
   const selectedStudent =
     selectedCell && selectedCell.row >= 0 && selectedCell.row < students.length
@@ -237,6 +244,12 @@ export function MarksScreen(props: {
   useEffect(() => {
     calcFiltersRef.current = calcFilters;
   }, [calcFilters]);
+
+  useEffect(() => {
+    if (selectedCell && Number.isInteger(selectedCell.row)) {
+      lastSelectedRowRef.current = selectedCell.row;
+    }
+  }, [selectedCell]);
 
   function sourceIdxForVisibleCol(col: number): number | null {
     if (col <= 0) return null;
@@ -642,7 +655,7 @@ export function MarksScreen(props: {
     const runEpoch = requestEpochRef.current;
     resetGridCache();
     try {
-      const [open, hideDeletedPref, assessmentsRes, clonePeek] = await Promise.all([
+      const [open, hideDeletedPref, assessmentsRes, clonePeek, setupRes] = await Promise.all([
         requestParsed(
           "markset.open",
           { classId: props.selectedClassId, markSetId: props.selectedMarkSetId },
@@ -666,8 +679,13 @@ export function MarksScreen(props: {
           "entries.clone.peek",
           { classId: props.selectedClassId },
           EntriesClonePeekResultSchema
-        )
+        ),
+        requestParsed("setup.get", {}, SetupGetResultSchema)
       ]);
+      setMarksDefaults({
+        defaultAutoPreviewBeforeBulkApply:
+          setupRes.marks.defaultAutoPreviewBeforeBulkApply
+      });
       if (isCancelled?.()) return;
       if (runEpoch !== requestEpochRef.current) return;
 
@@ -1112,7 +1130,9 @@ export function MarksScreen(props: {
   }
 
   async function applyUpdateAllModal() {
-    if (!selectedCell || selectedCell.row < 0 || selectedCell.row >= students.length) {
+    setUpdateAllModal((cur) => ({ ...cur, open: false }));
+    const selectedRow = selectedCell?.row ?? lastSelectedRowRef.current ?? -1;
+    if (selectedRow < 0 || selectedRow >= students.length) {
       props.onError("Select a student row first.");
       return;
     }
@@ -1135,7 +1155,7 @@ export function MarksScreen(props: {
       value = null;
     }
 
-    const row = selectedCell.row;
+    const row = selectedRow;
     const edits: BulkScoreEdit[] = visibleAssessmentSourceIdxs.map((sourceCol) => ({
       row,
       col: sourceCol,
@@ -1143,7 +1163,6 @@ export function MarksScreen(props: {
       value
     }));
     await applyBulkEdits(edits);
-    setUpdateAllModal((cur) => ({ ...cur, open: false }));
   }
 
   function openAssessmentUpdateModal(mode: "heading" | "weight" | "entry_update" | "multiple_update") {
@@ -1370,6 +1389,7 @@ export function MarksScreen(props: {
       if (!Number.isInteger(col) || !Number.isInteger(row)) return false;
       if (col <= 0 || col > assessments.length) return false;
       if (row < 0 || row >= students.length) return false;
+      lastSelectedRowRef.current = row;
       setSelectedCell({ row, col });
       openEditorAt(col, row);
       return true;

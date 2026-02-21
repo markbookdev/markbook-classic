@@ -9,7 +9,17 @@ test("legacy menu groups are discoverable and route to implemented screens", asy
 
     const groups = page.getByTestId("legacy-menu-groups");
     await expect(groups).toBeVisible();
-    for (const title of ["File", "Class", "Mark Sets", "Working On", "Reports", "Comments", "Setup"]) {
+    for (const title of [
+      "File",
+      "Class",
+      "Mark Sets",
+      "Working On",
+      "Reports",
+      "Comments",
+      "Setup",
+      "Integrations",
+      "Planner"
+    ]) {
       await expect(groups.locator(`summary:has-text("${title}")`)).toBeVisible();
     }
 

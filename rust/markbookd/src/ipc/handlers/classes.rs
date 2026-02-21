@@ -655,6 +655,154 @@ fn handle_classes_meta_update(state: &mut AppState, req: &Request) -> serde_json
     ok(&req.id, json!({ "ok": true }))
 }
 
+fn handle_classes_import_link_get(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+
+    let exists: Option<i64> = match conn
+        .query_row("SELECT 1 FROM classes WHERE id = ?", [&class_id], |r| r.get(0))
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    if exists.is_none() {
+        return err(&req.id, "not_found", "class not found", None);
+    }
+
+    let row = match conn
+        .query_row(
+            "SELECT legacy_folder_path, legacy_cl_file, legacy_year_token, last_imported_at
+             FROM class_meta
+             WHERE class_id = ?",
+            [&class_id],
+            |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+
+    let (legacy_folder_path, legacy_cl_file, legacy_year_token, last_imported_at) =
+        row.unwrap_or((None, None, None, None));
+
+    ok(
+        &req.id,
+        json!({
+            "classId": class_id,
+            "legacyClassFolderPath": legacy_folder_path,
+            "legacyClFile": legacy_cl_file,
+            "legacyYearToken": legacy_year_token,
+            "lastImportedAt": last_imported_at
+        }),
+    )
+}
+
+fn handle_classes_import_link_set(state: &mut AppState, req: &Request) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return err(&req.id, "no_workspace", "select a workspace first", None);
+    };
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => return err(&req.id, "bad_params", "missing classId", None),
+    };
+    let legacy_class_folder_path = match req
+        .params
+        .get("legacyClassFolderPath")
+        .and_then(|v| v.as_str())
+    {
+        Some(v) => v.trim().to_string(),
+        None => {
+            return err(
+                &req.id,
+                "bad_params",
+                "missing legacyClassFolderPath",
+                None,
+            )
+        }
+    };
+    if legacy_class_folder_path.is_empty() {
+        return err(
+            &req.id,
+            "bad_params",
+            "legacyClassFolderPath must not be empty",
+            None,
+        );
+    }
+
+    let exists: Option<i64> = match conn
+        .query_row("SELECT 1 FROM classes WHERE id = ?", [&class_id], |r| r.get(0))
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    if exists.is_none() {
+        return err(&req.id, "not_found", "class not found", None);
+    }
+
+    let tx = match conn.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return err(&req.id, "db_tx_failed", e.to_string(), None),
+    };
+
+    if let Err(e) = tx.execute(
+        "INSERT INTO class_meta(class_id, created_from_wizard)
+         VALUES(?, 0)
+         ON CONFLICT(class_id) DO NOTHING",
+        [&class_id],
+    ) {
+        let _ = tx.rollback();
+        return err(
+            &req.id,
+            "db_insert_failed",
+            e.to_string(),
+            Some(json!({ "table": "class_meta" })),
+        );
+    }
+
+    if let Err(e) = tx.execute(
+        "UPDATE class_meta
+         SET legacy_folder_path = ?
+         WHERE class_id = ?",
+        (&legacy_class_folder_path, &class_id),
+    ) {
+        let _ = tx.rollback();
+        return err(
+            &req.id,
+            "db_update_failed",
+            e.to_string(),
+            Some(json!({ "table": "class_meta" })),
+        );
+    }
+
+    if let Err(e) = tx.commit() {
+        return err(&req.id, "db_commit_failed", e.to_string(), None);
+    }
+
+    ok(
+        &req.id,
+        json!({
+            "ok": true,
+            "classId": class_id,
+            "legacyClassFolderPath": legacy_class_folder_path
+        }),
+    )
+}
+
 fn handle_classes_delete(state: &mut AppState, req: &Request) -> serde_json::Value {
     let Some(conn) = state.db.as_ref() else {
         return err(&req.id, "no_workspace", "select a workspace first", None);
@@ -927,6 +1075,8 @@ pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Val
         "classes.createFromWizard" => Some(handle_classes_create_from_wizard(state, req)),
         "classes.meta.get" => Some(handle_classes_meta_get(state, req)),
         "classes.meta.update" => Some(handle_classes_meta_update(state, req)),
+        "classes.importLink.get" => Some(handle_classes_import_link_get(state, req)),
+        "classes.importLink.set" => Some(handle_classes_import_link_set(state, req)),
         "classes.delete" => Some(handle_classes_delete(state, req)),
         _ => None,
     }

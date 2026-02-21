@@ -46,14 +46,21 @@ test("setup admin settings persist and reload", async () => {
   await page.waitForSelector('[data-testid="setup-admin-screen"]');
 
   await page.getByTestId("setup-analysis-scope").selectOption("active");
-  await page.getByTestId("setup-printer-font-scale").fill("115");
-  await page.getByTestId("setup-comments-policy").selectOption("append");
-  await page.getByTestId("setup-integrations-default-profile").selectOption("sis_marks_v1");
-  await page.getByTestId("setup-integrations-match-mode").selectOption("name_only");
-  await page.getByTestId("setup-integrations-collision-policy").selectOption("append_new");
-  await page.getByTestId("setup-integrations-admin-policy").selectOption("source_if_longer");
-  await page.getByTestId("setup-reports-default-analytics-scope").selectOption("active");
-  await page.getByTestId("setup-save-all").click();
+  await page.getByTestId("setup-save-analysis").click();
+  await page.getByTestId("setup-marks-default-hide-deleted").uncheck();
+  await page.getByTestId("setup-marks-auto-preview-bulk").uncheck();
+  await page.getByTestId("setup-save-marks").click();
+  await page.getByTestId("setup-exchange-default-scope").selectOption("active");
+  await page.getByTestId("setup-exchange-include-state-columns").uncheck();
+  await page.getByTestId("setup-save-exchange").click();
+  await page.evaluate(async () => {
+    await window.markbook.request("setup.update", {
+      section: "analytics",
+      patch: {
+        defaultPageSize: 40
+      }
+    });
+  });
 
   // Navigate away and back to ensure reload path works.
   await page.getByTestId("nav-marks").click();
@@ -65,13 +72,12 @@ test("setup admin settings persist and reload", async () => {
     return await window.markbook.request("setup.get", {});
   });
   expect(persisted.analysis.defaultStudentScope).toBe("active");
-  expect(persisted.printer.fontScale).toBe(115);
-  expect(persisted.comments.defaultTransferPolicy).toBe("append");
-  expect(persisted.integrations.defaultSisProfile).toBe("sis_marks_v1");
-  expect(persisted.integrations.defaultMatchMode).toBe("name_only");
-  expect(persisted.integrations.defaultCollisionPolicy).toBe("append_new");
-  expect(persisted.integrations.adminTransferDefaultPolicy).toBe("source_if_longer");
-  expect(persisted.reports.defaultAnalyticsScope).toBe("active");
+  expect(persisted.marks.defaultHideDeletedEntries).toBe(false);
+  expect(persisted.marks.defaultAutoPreviewBeforeBulkApply).toBe(false);
+  expect(persisted.exchange.defaultExportStudentScope).toBe("active");
+  expect(persisted.exchange.includeStateColumnsByDefault).toBe(false);
+  expect(persisted.analytics.defaultPageSize).toBe(40);
+  expect(persisted.analytics.defaultCohortMode).toBe("none");
 
   await app.close();
 });

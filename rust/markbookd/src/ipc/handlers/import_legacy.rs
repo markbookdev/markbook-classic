@@ -3291,11 +3291,128 @@ fn handle_markset_open(state: &mut AppState, req: Request) -> serde_json::Value 
     })
 }
 
+fn handle_classes_update_from_attached_legacy(
+    state: &mut AppState,
+    req: Request,
+) -> serde_json::Value {
+    let Some(conn) = state.db.as_ref() else {
+        return json!(ErrResp {
+            id: req.id,
+            ok: false,
+            error: ErrObj {
+                code: "no_workspace".into(),
+                message: "select a workspace first".into(),
+                details: None
+            }
+        });
+    };
+
+    let class_id = match req.params.get("classId").and_then(|v| v.as_str()) {
+        Some(v) => v.to_string(),
+        None => {
+            return json!(ErrResp {
+                id: req.id,
+                ok: false,
+                error: ErrObj {
+                    code: "bad_params".into(),
+                    message: "missing classId".into(),
+                    details: None
+                }
+            })
+        }
+    };
+
+    match class_exists(conn, &class_id) {
+        Ok(true) => {}
+        Ok(false) => {
+            return json!(ErrResp {
+                id: req.id,
+                ok: false,
+                error: ErrObj {
+                    code: "not_found".into(),
+                    message: "class not found".into(),
+                    details: None
+                }
+            })
+        }
+        Err(e) => {
+            return json!(ErrResp {
+                id: req.id,
+                ok: false,
+                error: ErrObj {
+                    code: "db_query_failed".into(),
+                    message: e.to_string(),
+                    details: None
+                }
+            })
+        }
+    }
+
+    let attached_path: Option<String> = match conn
+        .query_row(
+            "SELECT legacy_folder_path FROM class_meta WHERE class_id = ?",
+            [&class_id],
+            |r| r.get(0),
+        )
+        .optional()
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return json!(ErrResp {
+                id: req.id,
+                ok: false,
+                error: ErrObj {
+                    code: "db_query_failed".into(),
+                    message: e.to_string(),
+                    details: None
+                }
+            })
+        }
+    };
+    let attached_path = attached_path
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let Some(attached_path) = attached_path else {
+        return json!(ErrResp {
+            id: req.id,
+            ok: false,
+            error: ErrObj {
+                code: "not_found".into(),
+                message: "no attached legacy folder for class".into(),
+                details: Some(json!({ "classId": class_id }))
+            }
+        });
+    };
+
+    let mut params = serde_json::Map::new();
+    params.insert("classId".to_string(), json!(class_id));
+    params.insert("legacyClassFolderPath".to_string(), json!(attached_path));
+    if let Some(v) = req.params.get("mode") {
+        params.insert("mode".to_string(), v.clone());
+    }
+    if let Some(v) = req.params.get("collisionPolicy") {
+        params.insert("collisionPolicy".to_string(), v.clone());
+    }
+    if let Some(v) = req.params.get("preserveLocalValidity") {
+        params.insert("preserveLocalValidity".to_string(), v.clone());
+    }
+
+    let proxy_req = Request {
+        id: req.id,
+        method: "classes.updateFromLegacy".to_string(),
+        params: serde_json::Value::Object(params),
+    };
+    handle_classes_update_from_legacy(state, proxy_req)
+}
+
 pub fn try_handle(state: &mut AppState, req: &Request) -> Option<serde_json::Value> {
     match req.method.as_str() {
         "class.importLegacy" => Some(handle_class_import_legacy(state, req.clone())),
         "classes.legacyPreview" => Some(handle_classes_legacy_preview(state, req.clone())),
         "classes.updateFromLegacy" => Some(handle_classes_update_from_legacy(state, req.clone())),
+        "classes.updateFromAttachedLegacy" => {
+            Some(handle_classes_update_from_attached_legacy(state, req.clone()))
+        }
         "marksets.list" => Some(handle_marksets_list(state, req.clone())),
         "markset.open" => Some(handle_markset_open(state, req.clone())),
         _ => None,

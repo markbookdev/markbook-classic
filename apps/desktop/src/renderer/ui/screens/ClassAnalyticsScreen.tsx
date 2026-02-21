@@ -3,7 +3,8 @@ import {
   AnalyticsClassAssessmentDrilldownResultSchema,
   AnalyticsClassOpenResultSchema,
   AnalyticsClassRowsResultSchema,
-  AnalyticsFiltersOptionsResultSchema
+  AnalyticsFiltersOptionsResultSchema,
+  SetupGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -58,6 +59,13 @@ export function ClassAnalyticsScreen(props: {
     } | null;
   }) => void;
 }) {
+  function cohortFromMode(mode: "none" | "bin" | "threshold") {
+    if (mode === "threshold") {
+      return { finalMin: 50, finalMax: 100, includeNoFinal: false };
+    }
+    return { finalMin: null, finalMax: null, includeNoFinal: false };
+  }
+
   const [filters, setFilters] = useState<FilterState>({
     term: null,
     categoryName: null,
@@ -93,6 +101,34 @@ export function ClassAnalyticsScreen(props: {
     pageSize: 25
   });
   const [drilldownModel, setDrilldownModel] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSetupDefaults() {
+      try {
+        const setup = await requestParsed("setup.get", {}, SetupGetResultSchema);
+        if (cancelled) return;
+        setStudentScope(setup.reports.defaultAnalyticsScope);
+        setRowsQuery((cur) => ({
+          ...cur,
+          page: 1,
+          pageSize: setup.analytics.defaultPageSize,
+          cohort: cohortFromMode(setup.analytics.defaultCohortMode)
+        }));
+        setDrilldownQuery((cur) => ({
+          ...cur,
+          page: 1,
+          pageSize: setup.analytics.defaultPageSize
+        }));
+      } catch {
+        // best effort defaults
+      }
+    }
+    void loadSetupDefaults();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.selectedClassId, props.selectedMarkSetId]);
 
   useEffect(() => {
     let mask = 0;

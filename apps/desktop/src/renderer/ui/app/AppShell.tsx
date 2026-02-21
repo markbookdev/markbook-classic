@@ -3,8 +3,11 @@ import {
   ClassImportLegacyResultSchema,
   ClassesCreateResultSchema,
   ClassesDeleteResultSchema,
+  ClassesImportLinkGetResultSchema,
+  ClassesImportLinkSetResultSchema,
   ClassesLegacyPreviewResultSchema,
   ClassesListResultSchema,
+  ClassesUpdateFromAttachedLegacyResultSchema,
   ClassesUpdateFromLegacyResultSchema,
   MarkSetsListResultSchema
 } from "@markbook/schema";
@@ -88,6 +91,16 @@ export function AppShell() {
   const [legacyPreviewByClass, setLegacyPreviewByClass] = useState<{
     classId: string;
     data: any;
+  } | null>(null);
+  const [importLinkByClass, setImportLinkByClass] = useState<{
+    classId: string;
+    data: {
+      classId: string;
+      legacyClassFolderPath: string | null;
+      legacyClFile?: string | null;
+      legacyYearToken?: string | null;
+      lastImportedAt?: string | null;
+    };
   } | null>(null);
   const [reportsPrefill, setReportsPrefill] = useState<{
     filters: { term: number | null; categoryName: string | null; typesMask: number | null };
@@ -205,6 +218,38 @@ export function AppShell() {
       }
     }
     run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadImportLink() {
+      if (!selectedClassId) {
+        setImportLinkByClass(null);
+        return;
+      }
+      try {
+        const link = await requestParsed(
+          "classes.importLink.get",
+          { classId: selectedClassId },
+          ClassesImportLinkGetResultSchema
+        );
+        if (cancelled) return;
+        setImportLinkByClass({ classId: selectedClassId, data: link });
+      } catch {
+        if (cancelled) return;
+        setImportLinkByClass({
+          classId: selectedClassId,
+          data: {
+            classId: selectedClassId,
+            legacyClassFolderPath: null
+          }
+        });
+      }
+    }
+    void loadImportLink();
     return () => {
       cancelled = true;
     };
@@ -333,6 +378,75 @@ export function AppShell() {
           lastUpdateResult: res
         }
       });
+      try {
+        const link = await requestParsed(
+          "classes.importLink.get",
+          { classId },
+          ClassesImportLinkGetResultSchema
+        );
+        setImportLinkByClass({ classId, data: link });
+      } catch {
+        // best effort
+      }
+      setSelectedClassId(classId);
+      await refresh();
+    } catch (e: any) {
+      setSidecarError(e?.message ?? String(e));
+    }
+  }
+
+  async function attachLegacyFolder(classId: string) {
+    setSidecarError(null);
+    try {
+      const folder = await window.markbook.selectLegacyClassFolder();
+      if (!folder) return;
+      const res = await requestParsed(
+        "classes.importLink.set",
+        { classId, legacyClassFolderPath: folder },
+        ClassesImportLinkSetResultSchema
+      );
+      setImportLinkByClass({
+        classId,
+        data: {
+          classId: res.classId,
+          legacyClassFolderPath: res.legacyClassFolderPath
+        }
+      });
+    } catch (e: any) {
+      setSidecarError(e?.message ?? String(e));
+    }
+  }
+
+  async function updateFromAttachedLegacy(classId: string) {
+    setSidecarError(null);
+    try {
+      const res = await requestParsed(
+        "classes.updateFromAttachedLegacy",
+        {
+          classId,
+          mode: "upsert_preserve",
+          collisionPolicy: "merge_existing",
+          preserveLocalValidity: true
+        },
+        ClassesUpdateFromAttachedLegacyResultSchema
+      );
+      setLegacyPreviewByClass({
+        classId,
+        data: {
+          ...(legacyPreviewByClass?.classId === classId ? legacyPreviewByClass.data : {}),
+          lastUpdateResult: res
+        }
+      });
+      try {
+        const link = await requestParsed(
+          "classes.importLink.get",
+          { classId },
+          ClassesImportLinkGetResultSchema
+        );
+        setImportLinkByClass({ classId, data: link });
+      } catch {
+        // best effort
+      }
       setSelectedClassId(classId);
       await refresh();
     } catch (e: any) {
@@ -695,6 +809,22 @@ export function AppShell() {
                 <button onClick={() => setScreen("setup_admin")}>Password + Email Setup</button>
               </div>
             </details>
+            <details>
+              <summary>Integrations</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("exchange")}>Class Exchange</button>
+                <button onClick={() => setScreen("exchange")}>SIS</button>
+                <button onClick={() => setScreen("exchange")}>Admin Transfer</button>
+              </div>
+            </details>
+            <details>
+              <summary>Planner</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <button onClick={() => setScreen("planner")}>Units + Lessons</button>
+                <button onClick={() => setScreen("course_description")}>Course Description</button>
+                <button onClick={() => setScreen("reports")}>Planner Reports</button>
+              </div>
+            </details>
           </div>
 
           <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
@@ -727,7 +857,10 @@ export function AppShell() {
               }}
               onPreviewLegacyUpdate={previewLegacyUpdate}
               onUpdateFromLegacy={updateFromLegacy}
+              onAttachLegacyFolder={attachLegacyFolder}
+              onUpdateFromAttachedLegacy={updateFromAttachedLegacy}
               legacyPreviewByClass={legacyPreviewByClass}
+              importLinkByClass={importLinkByClass}
             />
           ) : screen === "class_wizard" ? (
             <ClassWizardScreen

@@ -39,6 +39,10 @@ export function ExchangeScreen(props: {
   const [sisMode, setSisMode] = useState<"upsert_preserve" | "replace_snapshot">("upsert_preserve");
   const [sisAutoPreviewBeforeApply, setSisAutoPreviewBeforeApply] = useState(true);
   const [sisPreviewReady, setSisPreviewReady] = useState(false);
+  const [sisExportStudentScope, setSisExportStudentScope] = useState<"all" | "active" | "valid">(
+    "valid"
+  );
+  const [sisIncludeStateColumns, setSisIncludeStateColumns] = useState(true);
   const [markSets, setMarkSets] = useState<Array<{ id: string; code: string }>>([]);
   const [sisMarkSetId, setSisMarkSetId] = useState<string>("");
   const [adminPath, setAdminPath] = useState("");
@@ -84,6 +88,8 @@ export function ExchangeScreen(props: {
         setSisCollisionPolicy(setup.integrations.defaultCollisionPolicy);
         setSisAutoPreviewBeforeApply(setup.integrations.autoPreviewBeforeApply);
         setAdminCommentPolicy(setup.integrations.adminTransferDefaultPolicy);
+        setSisExportStudentScope(setup.exchange.defaultExportStudentScope);
+        setSisIncludeStateColumns(setup.exchange.includeStateColumnsByDefault);
       } catch {
         // best-effort; defaults already present locally
       }
@@ -363,7 +369,8 @@ export function ExchangeScreen(props: {
         {
           classId: props.selectedClassId,
           outPath: sisExportRosterPath.trim(),
-          profile: sisProfile
+          profile: sisProfile,
+          studentScope: sisExportStudentScope
         },
         IntegrationsSisExportRosterResultSchema
       );
@@ -395,7 +402,8 @@ export function ExchangeScreen(props: {
           markSetId: sisMarkSetId,
           outPath: sisExportMarksPath.trim(),
           profile: "sis_marks_v1",
-          includeStateColumns: true
+          includeStateColumns: sisIncludeStateColumns,
+          studentScope: sisExportStudentScope
         },
         IntegrationsSisExportMarksResultSchema
       );
@@ -746,6 +754,30 @@ export function ExchangeScreen(props: {
 
           <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 14 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>SIS Exports</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <label>
+                Student scope
+                <select
+                  data-testid="integrations-sis-export-scope"
+                  value={sisExportStudentScope}
+                  onChange={(e) => setSisExportStudentScope(e.currentTarget.value as any)}
+                  style={{ display: "block", marginTop: 4, width: "100%" }}
+                >
+                  <option value="all">all</option>
+                  <option value="active">active</option>
+                  <option value="valid">valid</option>
+                </select>
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 20 }}>
+                <input
+                  data-testid="integrations-sis-export-include-state"
+                  type="checkbox"
+                  checked={sisIncludeStateColumns}
+                  onChange={(e) => setSisIncludeStateColumns(e.currentTarget.checked)}
+                />
+                Include state columns
+              </label>
+            </div>
             <div style={{ marginBottom: 8 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input

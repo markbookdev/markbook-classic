@@ -162,6 +162,23 @@ export const ClassesUpdateFromLegacyResultSchema = z.object({
   importedMarkFiles: z.array(z.string()).optional()
 });
 
+export const ClassesImportLinkGetResultSchema = z.object({
+  classId: z.string(),
+  legacyClassFolderPath: z.string().nullable(),
+  legacyClFile: z.string().nullable().optional(),
+  legacyYearToken: z.string().nullable().optional(),
+  lastImportedAt: z.string().nullable().optional()
+});
+
+export const ClassesImportLinkSetResultSchema = z.object({
+  ok: z.literal(true),
+  classId: z.string(),
+  legacyClassFolderPath: z.string()
+});
+
+export const ClassesUpdateFromAttachedLegacyResultSchema =
+  ClassesUpdateFromLegacyResultSchema;
+
 export const MarkSetsListResultSchema = z.object({
   markSets: z.array(
     z.object({
@@ -1346,6 +1363,18 @@ export const SetupGetResultSchema = z.object({
     defaultCollisionPolicy: z.enum(["merge_existing", "append_new", "stop_on_collision"]),
     autoPreviewBeforeApply: z.boolean(),
     adminTransferDefaultPolicy: z.enum(["replace", "append", "fill_blank", "source_if_longer"])
+  }),
+  marks: z.object({
+    defaultHideDeletedEntries: z.boolean(),
+    defaultAutoPreviewBeforeBulkApply: z.boolean()
+  }),
+  exchange: z.object({
+    defaultExportStudentScope: z.enum(["all", "active", "valid"]),
+    includeStateColumnsByDefault: z.boolean()
+  }),
+  analytics: z.object({
+    defaultPageSize: z.number(),
+    defaultCohortMode: z.enum(["none", "bin", "threshold"])
   }),
   planner: z.object({
     defaultLessonDurationMinutes: z.number(),

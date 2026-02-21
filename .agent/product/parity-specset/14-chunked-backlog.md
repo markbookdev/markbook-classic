@@ -94,6 +94,8 @@ Execution-ready chunk list for iterative delivery.
   - Playwright: `comments-transfer-mode.e2e.spec.cjs`, `comments-flood-fill.e2e.spec.cjs`
 
 ## EPIC-PLANNER-01: Unit/lesson planner MVP
+- Status:
+  - DONE (2026-02-21): planner units/lessons class-scoped model + IPC + UI + e2e/regression gates shipped.
 - Objective:
   - core planner data model + CRUD screens.
 - API changes:
@@ -102,6 +104,8 @@ Execution-ready chunk list for iterative delivery.
   - persistence and workflow e2e.
 
 ## EPIC-PLANNER-02: Publish and course description
+- Status:
+  - DONE (2026-02-21): planner publish flows and course-description/time-management model generation + report exports shipped.
 - Objective:
   - publishing states and course-description generator.
 - API changes:
@@ -117,17 +121,48 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-INTEGRATIONS-01: SIS/admin transfer hardening
 - Status:
-  - IN PROGRESS (2026-02-21): Tier-A integrations contracts are shipped in sidecar + renderer (`integrations.sis.*`, `integrations.adminTransfer.*`) with preview-first workflows and setup-driven defaults.
+  - DONE (2026-02-21): Tier-A integrations contracts are shipped in sidecar + renderer (`integrations.sis.*`, `integrations.adminTransfer.*`) with preview-first workflows and setup-driven defaults.
 - Objective:
   - chapter-13 Tier A parity closure.
 - API changes:
   - `integrations.sis.*`, `integrations.adminTransfer.*`.
 
 ## EPIC-UX-01: Discoverability parity pass
+- Status:
+  - IN PROGRESS (2026-02-21): legacy menu groups are now present in AppShell (File/Class/Mark Sets/Working On/Reports/Comments/Setup/Integrations/Planner) with implemented actions wired and pending actions disabled.
 - Objective:
   - map legacy command expectations into modern shell UX.
 - Tests:
   - menu IA and navigation e2e coverage.
+
+## EPIC-CORE-03: Attached class reimport parity
+- Status:
+  - DONE (2026-02-21): class attach/reimport link semantics shipped with dashboard controls and import-link metadata visibility.
+- Objective:
+  - close attach-source and re-import workflows on top of core update-from-legacy engine.
+- API changes:
+  - `classes.importLink.get`
+  - `classes.importLink.set`
+  - `classes.updateFromAttachedLegacy`
+- Tests:
+  - Rust: `classes_import_link_roundtrip.rs`, `classes_update_from_attached_legacy.rs`
+  - Playwright: `class-attach-reimport.e2e.spec.cjs`
+
+## EPIC-SETUP-02: Setup defaults breadth expansion
+- Status:
+  - DONE (2026-02-21): additive setup defaults for marks/exchange/analytics are shipped and wired into marks/exchange/analytics screens.
+- Objective:
+  - expose parity-critical operational defaults that affect day-to-day workflows.
+- API changes:
+  - `setup.marks.defaultHideDeletedEntries`
+  - `setup.marks.defaultAutoPreviewBeforeBulkApply`
+  - `setup.exchange.defaultExportStudentScope`
+  - `setup.exchange.includeStateColumnsByDefault`
+  - `setup.analytics.defaultPageSize`
+  - `setup.analytics.defaultCohortMode`
+- Tests:
+  - Rust: `setup_defaults_extended.rs`
+  - Playwright: extended `setup-admin.e2e.spec.cjs`
 
 ## EPIC-EVIDENCE-01: Strict lane activation pack
 - Objective:

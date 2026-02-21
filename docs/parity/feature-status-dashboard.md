@@ -2,7 +2,7 @@
 
 | Domain | Status | Notes |
 | --- | --- | --- |
-| Class lifecycle | Partial | wizard/profile/update-from-legacy implemented, some legacy workflow depth pending |
+| Class lifecycle | Implemented (core) | wizard/profile/update-from-legacy plus attach legacy folder and re-import-attached workflows are shipped; edge-case depth still tracked in parity backlog |
 | Students | Implemented | CRUD/reorder/active/membership complete |
 | Mark sets | Partial | lifecycle strong; transfer/aux actions still incomplete |
 | Marks workflow | Partial | fast editing present; Working On parity needs closure |
@@ -14,8 +14,8 @@
 | Loaned Items | Implemented | dedicated UI + APIs |
 | Device mappings | Implemented | dedicated UI + APIs |
 | Analytics screens | Implemented (interactive read-only) | class + student + combined analytics shipped; class rows/drilldown and student compare/trend are now interactive with report handoff |
-| Setup/Admin defaults | Partial (expanded) | workspace setup screen now includes integrations defaults + analytics/report header defaults; deeper legacy setup breadth still pending |
-| Planner/Course Description | Missing | not yet implemented |
+| Setup/Admin defaults | Partial (expanded) | workspace setup now includes integrations, marks, exchange, analytics, and report defaults; deeper legacy setup breadth still pending |
+| Planner/Course Description | Implemented (MVP) | units/lessons, publish workflows, course description and time-management generation, and report exports are shipped |
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial (Tier-A shipped) | class exchange + SIS preview/apply/export + admin transfer package preview/apply/export shipped; broader chapter-13 adapters pending |
 | Packaging/Release hardening | Implemented | launch smoke and CI gates in place |

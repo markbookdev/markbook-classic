@@ -479,3 +479,45 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - `bun run test:reports` => PASS
   - `bun x playwright test apps/desktop/e2e/exchange-csv.e2e.spec.cjs apps/desktop/e2e/setup-admin.e2e.spec.cjs apps/desktop/e2e/integrations-sis.e2e.spec.cjs apps/desktop/e2e/integrations-admin-transfer.e2e.spec.cjs` => PASS (`4 passed`)
   - `node apps/desktop/scripts/parity-status.cjs --json` => PASS (`mode=ready`, strict lane conditional)
+
+### Wave 8 Snapshot (2026-02-21, class attach/reimport + setup breadth + discoverability pass)
+- Backend shipped:
+  - additive class link/reimport APIs:
+    - `classes.importLink.get`
+    - `classes.importLink.set`
+    - `classes.updateFromAttachedLegacy`
+  - `marks.pref.hideDeleted.get` now falls back to `setup.marks.defaultHideDeletedEntries` when no per-markset preference is stored.
+  - setup sections expanded (additive):
+    - `setup.marks` (`defaultHideDeletedEntries`, `defaultAutoPreviewBeforeBulkApply`)
+    - `setup.exchange` (`defaultExportStudentScope`, `includeStateColumnsByDefault`)
+    - `setup.analytics` (`defaultPageSize`, `defaultCohortMode`)
+  - integrations export defaults wired:
+    - `integrations.sis.exportRoster` / `integrations.sis.exportMarks` now default student scope from `setup.exchange.defaultExportStudentScope`.
+    - `integrations.sis.exportMarks` now defaults `includeStateColumns` from `setup.exchange.includeStateColumnsByDefault`.
+- Renderer shipped:
+  - Dashboard now has attached-source lifecycle controls:
+    - `Attach Legacy Folder`
+    - `Re-import Attached`
+    - attached-source panel (`folder`, `CL file`, `year token`, `last imported`)
+  - Marks screen now loads `setup.marks` defaults while keeping Update-All modal apply deterministic (no blocking browser confirm path).
+  - Exchange SIS export UI now exposes and persists setup-driven defaults for student scope and include-state-columns.
+  - Class/Student analytics screens now load setup defaults for analytics scope and page-size.
+  - AppShell legacy discoverability groups now include:
+    - `Integrations`
+    - `Planner`
+- Tests added/updated:
+  - Rust:
+    - `rust/markbookd/tests/classes_import_link_roundtrip.rs`
+    - `rust/markbookd/tests/classes_update_from_attached_legacy.rs`
+    - `rust/markbookd/tests/setup_defaults_extended.rs`
+  - Playwright:
+    - `apps/desktop/e2e/class-attach-reimport.e2e.spec.cjs` (new)
+    - `apps/desktop/e2e/setup-admin.e2e.spec.cjs` (extended for new defaults sections)
+    - `apps/desktop/e2e/menu-discoverability.e2e.spec.cjs` (extended for Integrations/Planner groups)
+- Validation (this slice):
+  - `cargo test --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`56 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
+  - `bun run test:e2e:packaged` => PASS

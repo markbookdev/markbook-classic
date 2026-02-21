@@ -6,6 +6,9 @@ use serde_json::{json, Map, Value};
 #[derive(Clone, Copy)]
 enum SetupSection {
     Analysis,
+    Marks,
+    Exchange,
+    Analytics,
     Attendance,
     Comments,
     Printer,
@@ -21,6 +24,9 @@ impl SetupSection {
     fn parse(s: &str) -> Option<Self> {
         match s {
             "analysis" => Some(Self::Analysis),
+            "marks" => Some(Self::Marks),
+            "exchange" => Some(Self::Exchange),
+            "analytics" => Some(Self::Analytics),
             "attendance" => Some(Self::Attendance),
             "comments" => Some(Self::Comments),
             "printer" => Some(Self::Printer),
@@ -37,6 +43,9 @@ impl SetupSection {
     fn key(self) -> &'static str {
         match self {
             Self::Analysis => "setup.analysis",
+            Self::Marks => "setup.marks",
+            Self::Exchange => "setup.exchange",
+            Self::Analytics => "setup.analytics",
             Self::Attendance => "setup.attendance",
             Self::Comments => "setup.comments",
             Self::Printer => "setup.printer",
@@ -59,6 +68,18 @@ fn default_section(section: SetupSection) -> Value {
             "histogramBins": 10,
             "defaultSortBy": "sortOrder",
             "defaultTopBottomCount": 5
+        }),
+        SetupSection::Marks => json!({
+            "defaultHideDeletedEntries": true,
+            "defaultAutoPreviewBeforeBulkApply": false
+        }),
+        SetupSection::Exchange => json!({
+            "defaultExportStudentScope": "valid",
+            "includeStateColumnsByDefault": true
+        }),
+        SetupSection::Analytics => json!({
+            "defaultPageSize": 25,
+            "defaultCohortMode": "none"
         }),
         SetupSection::Attendance => json!({
             "schoolYearStartMonth": 9,
@@ -205,6 +226,42 @@ fn merge_section_patch(
                     obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 3, 20)?));
                 }
                 _ => return Err(format!("unknown analysis field: {}", k)),
+            },
+            SetupSection::Marks => match k.as_str() {
+                "defaultHideDeletedEntries" | "defaultAutoPreviewBeforeBulkApply" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                _ => return Err(format!("unknown marks field: {}", k)),
+            },
+            SetupSection::Exchange => match k.as_str() {
+                "defaultExportStudentScope" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "all" && s != "active" && s != "valid" {
+                        return Err(
+                            "defaultExportStudentScope must be one of: all, active, valid".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
+                }
+                "includeStateColumnsByDefault" => {
+                    obj.insert(k.clone(), Value::Bool(parse_bool(v, k)?));
+                }
+                _ => return Err(format!("unknown exchange field: {}", k)),
+            },
+            SetupSection::Analytics => match k.as_str() {
+                "defaultPageSize" => {
+                    obj.insert(k.clone(), Value::from(parse_i64_range(v, k, 10, 200)?));
+                }
+                "defaultCohortMode" => {
+                    let s = parse_string_max(v, k, 16)?.to_ascii_lowercase();
+                    if s != "none" && s != "bin" && s != "threshold" {
+                        return Err(
+                            "defaultCohortMode must be one of: none, bin, threshold".into(),
+                        );
+                    }
+                    obj.insert(k.clone(), Value::String(s));
+                }
+                _ => return Err(format!("unknown analytics field: {}", k)),
             },
             SetupSection::Attendance => match k.as_str() {
                 "schoolYearStartMonth" => {
@@ -441,6 +498,18 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
     };
+    let marks = match load_section(conn, SetupSection::Marks) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let exchange = match load_section(conn, SetupSection::Exchange) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
+    let analytics = match load_section(conn, SetupSection::Analytics) {
+        Ok(v) => v,
+        Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
+    };
     let attendance = match load_section(conn, SetupSection::Attendance) {
         Ok(v) => v,
         Err(e) => return err(&req.id, "db_query_failed", e.to_string(), None),
@@ -482,6 +551,9 @@ fn handle_setup_get(state: &mut AppState, req: &Request) -> serde_json::Value {
         &req.id,
         json!({
             "analysis": analysis,
+            "marks": marks,
+            "exchange": exchange,
+            "analytics": analytics,
             "attendance": attendance,
             "comments": comments,
             "printer": printer,

@@ -228,6 +228,13 @@ fn get_setup_string(conn: &Connection, section_key: &str, field: &str, default: 
         .unwrap_or_else(|| default.to_string())
 }
 
+fn get_setup_bool(conn: &Connection, section_key: &str, field: &str, default: bool) -> bool {
+    load_section(conn, section_key)
+        .get(field)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(default)
+}
+
 fn parse_student_match_mode(params: &Value, conn: &Connection) -> Result<String, HandlerErr> {
     let default_mode =
         get_setup_string(conn, "setup.integrations", "defaultMatchMode", "student_no_then_name");
@@ -286,8 +293,12 @@ fn parse_comment_policy(params: &Value, conn: &Connection) -> Result<String, Han
 }
 
 fn parse_scope(params: &Value, conn: &Connection) -> Result<String, HandlerErr> {
-    let default_scope =
-        get_setup_string(conn, "setup.reports", "defaultAnalyticsScope", "valid");
+    let default_scope = get_setup_string(conn, "setup.exchange", "defaultExportStudentScope", "");
+    let default_scope = if default_scope.is_empty() {
+        get_setup_string(conn, "setup.reports", "defaultAnalyticsScope", "valid")
+    } else {
+        default_scope
+    };
     let scope = params
         .get("studentScope")
         .and_then(|v| v.as_str())
@@ -1061,7 +1072,12 @@ fn handle_sis_export_marks(state: &mut AppState, req: &Request) -> Value {
         .params
         .get("includeStateColumns")
         .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+        .unwrap_or(get_setup_bool(
+            conn,
+            "setup.exchange",
+            "includeStateColumnsByDefault",
+            true,
+        ));
     let scope = match parse_scope(&req.params, conn) {
         Ok(v) => v,
         Err(e) => return e.response(&req.id),

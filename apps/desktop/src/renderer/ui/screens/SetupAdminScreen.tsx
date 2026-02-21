@@ -11,6 +11,18 @@ type SetupState = {
     defaultSortBy: "sortOrder" | "displayName" | "finalMark";
     defaultTopBottomCount: number;
   };
+  marks: {
+    defaultHideDeletedEntries: boolean;
+    defaultAutoPreviewBeforeBulkApply: boolean;
+  };
+  exchange: {
+    defaultExportStudentScope: "all" | "active" | "valid";
+    includeStateColumnsByDefault: boolean;
+  };
+  analytics: {
+    defaultPageSize: number;
+    defaultCohortMode: "none" | "bin" | "threshold";
+  };
   attendance: {
     schoolYearStartMonth: number;
     presentCode: string;
@@ -82,6 +94,18 @@ const DEFAULT_STATE: SetupState = {
     histogramBins: 10,
     defaultSortBy: "sortOrder",
     defaultTopBottomCount: 5
+  },
+  marks: {
+    defaultHideDeletedEntries: true,
+    defaultAutoPreviewBeforeBulkApply: true
+  },
+  exchange: {
+    defaultExportStudentScope: "valid",
+    includeStateColumnsByDefault: true
+  },
+  analytics: {
+    defaultPageSize: 25,
+    defaultCohortMode: "none"
   },
   attendance: {
     schoolYearStartMonth: 9,
@@ -170,6 +194,18 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           histogramBins: res.analysis.histogramBins,
           defaultSortBy: res.analysis.defaultSortBy,
           defaultTopBottomCount: res.analysis.defaultTopBottomCount
+        },
+        marks: {
+          defaultHideDeletedEntries: res.marks.defaultHideDeletedEntries,
+          defaultAutoPreviewBeforeBulkApply: res.marks.defaultAutoPreviewBeforeBulkApply
+        },
+        exchange: {
+          defaultExportStudentScope: res.exchange.defaultExportStudentScope,
+          includeStateColumnsByDefault: res.exchange.includeStateColumnsByDefault
+        },
+        analytics: {
+          defaultPageSize: res.analytics.defaultPageSize,
+          defaultCohortMode: res.analytics.defaultCohortMode
         },
         attendance: {
           schoolYearStartMonth: res.attendance.schoolYearStartMonth,
@@ -270,6 +306,9 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
     try {
       for (const section of [
         "analysis",
+        "marks",
+        "exchange",
+        "analytics",
         "attendance",
         "comments",
         "printer",
@@ -439,6 +478,146 @@ export function SetupAdminScreen(props: { onError: (msg: string | null) => void 
           </label>
           <button data-testid="setup-save-analysis" onClick={() => void saveSection("analysis")} disabled={saving || loading}>
             Save Analysis
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Marks Defaults</div>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              data-testid="setup-marks-default-hide-deleted"
+              type="checkbox"
+              checked={setup.marks.defaultHideDeletedEntries}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  marks: { ...s.marks, defaultHideDeletedEntries: checked }
+                }));
+              }}
+            />
+            Hide deleted entries by default
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              data-testid="setup-marks-auto-preview-bulk"
+              type="checkbox"
+              checked={setup.marks.defaultAutoPreviewBeforeBulkApply}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  marks: { ...s.marks, defaultAutoPreviewBeforeBulkApply: checked }
+                }));
+              }}
+            />
+            Confirm before applying bulk row updates
+          </label>
+          <button
+            data-testid="setup-save-marks"
+            onClick={() => void saveSection("marks")}
+            disabled={saving || loading}
+          >
+            Save Marks
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Exchange Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default export student scope
+            <select
+              data-testid="setup-exchange-default-scope"
+              value={setup.exchange.defaultExportStudentScope}
+              onChange={(e) => {
+                const value =
+                  e.currentTarget.value as SetupState["exchange"]["defaultExportStudentScope"];
+                setSetup((s) => ({
+                  ...s,
+                  exchange: { ...s.exchange, defaultExportStudentScope: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="all">all</option>
+              <option value="active">active</option>
+              <option value="valid">valid</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              data-testid="setup-exchange-include-state-columns"
+              type="checkbox"
+              checked={setup.exchange.includeStateColumnsByDefault}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setSetup((s) => ({
+                  ...s,
+                  exchange: { ...s.exchange, includeStateColumnsByDefault: checked }
+                }));
+              }}
+            />
+            Include mark state columns by default in SIS marks export
+          </label>
+          <button
+            data-testid="setup-save-exchange"
+            onClick={() => void saveSection("exchange")}
+            disabled={saving || loading}
+          >
+            Save Exchange
+          </button>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Analytics Defaults</div>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default page size
+            <input
+              data-testid="setup-analytics-default-page-size"
+              value={String(setup.analytics.defaultPageSize)}
+              onChange={(e) =>
+                setSetup((s) => ({
+                  ...s,
+                  analytics: {
+                    ...s.analytics,
+                    defaultPageSize: parseIntOr(
+                      s.analytics.defaultPageSize,
+                      e.currentTarget.value,
+                      10,
+                      200
+                    )
+                  }
+                }))
+              }
+              style={{ display: "block", marginTop: 4, width: 100 }}
+            />
+          </label>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Default cohort mode
+            <select
+              data-testid="setup-analytics-default-cohort-mode"
+              value={setup.analytics.defaultCohortMode}
+              onChange={(e) => {
+                const value =
+                  e.currentTarget.value as SetupState["analytics"]["defaultCohortMode"];
+                setSetup((s) => ({
+                  ...s,
+                  analytics: { ...s.analytics, defaultCohortMode: value }
+                }));
+              }}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <option value="none">none</option>
+              <option value="bin">bin</option>
+              <option value="threshold">threshold</option>
+            </select>
+          </label>
+          <button
+            data-testid="setup-save-analytics"
+            onClick={() => void saveSection("analytics")}
+            disabled={saving || loading}
+          >
+            Save Analytics
           </button>
         </section>
 

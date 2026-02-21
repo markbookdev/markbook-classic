@@ -5,7 +5,8 @@ import {
   AnalyticsStudentCompareResultSchema,
   AnalyticsStudentOpenResultSchema,
   AnalyticsStudentTrendResultSchema,
-  MarkSetOpenResultSchema
+  MarkSetOpenResultSchema,
+  SetupGetResultSchema
 } from "@markbook/schema";
 import { requestParsed } from "../state/workspace";
 
@@ -80,7 +81,7 @@ export function StudentAnalyticsScreen(props: {
     async function run() {
       props.onError(null);
       try {
-        const [opts, open, combinedOpts] = await Promise.all([
+        const [opts, open, combinedOpts, setup] = await Promise.all([
           requestParsed(
             "analytics.filters.options",
             {
@@ -101,7 +102,8 @@ export function StudentAnalyticsScreen(props: {
             "analytics.combined.options",
             { classId: props.selectedClassId },
             AnalyticsCombinedOptionsResultSchema
-          )
+          ),
+          requestParsed("setup.get", {}, SetupGetResultSchema)
         ]);
         if (cancelled) return;
 
@@ -131,6 +133,7 @@ export function StudentAnalyticsScreen(props: {
           const valid = cur.filter((id) => trendMarkSets.some((m) => m.id === id));
           return valid.length > 0 ? valid : trendMarkSets.map((m) => m.id);
         });
+        setStudentScope(setup.reports.defaultAnalyticsScope);
       } catch (e: any) {
         if (cancelled) return;
         props.onError(e?.message ?? String(e));

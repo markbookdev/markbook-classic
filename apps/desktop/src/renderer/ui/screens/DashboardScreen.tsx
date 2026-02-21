@@ -24,7 +24,19 @@ export function DashboardScreen(props: {
   onOpenClassProfile: (classId: string) => void;
   onPreviewLegacyUpdate: (classId: string) => Promise<void>;
   onUpdateFromLegacy: (classId: string) => Promise<void>;
+  onAttachLegacyFolder: (classId: string) => Promise<void>;
+  onUpdateFromAttachedLegacy: (classId: string) => Promise<void>;
   legacyPreviewByClass?: { classId: string; data: any } | null;
+  importLinkByClass?: {
+    classId: string;
+    data: {
+      classId: string;
+      legacyClassFolderPath: string | null;
+      legacyClFile?: string | null;
+      legacyYearToken?: string | null;
+      lastImportedAt?: string | null;
+    };
+  } | null;
 }) {
   const [newClassName, setNewClassName] = useState("");
 
@@ -37,6 +49,12 @@ export function DashboardScreen(props: {
     props.legacyPreviewByClass &&
     props.legacyPreviewByClass.classId === selectedClass.id
       ? props.legacyPreviewByClass.data
+      : null;
+  const selectedImportLink =
+    selectedClass &&
+    props.importLinkByClass &&
+    props.importLinkByClass.classId === selectedClass.id
+      ? props.importLinkByClass.data
       : null;
 
   return (
@@ -150,9 +168,54 @@ export function DashboardScreen(props: {
                     >
                       Update From Legacy Folder
                     </button>
+                    <button
+                      data-testid="class-attach-legacy-btn"
+                      onClick={() => void props.onAttachLegacyFolder(selectedClass.id)}
+                    >
+                      Attach Legacy Folder
+                    </button>
+                    <button
+                      data-testid="class-reimport-attached-btn"
+                      onClick={() => void props.onUpdateFromAttachedLegacy(selectedClass.id)}
+                      disabled={!selectedImportLink?.legacyClassFolderPath}
+                    >
+                      Re-import Attached
+                    </button>
                     <div style={{ alignSelf: "center", fontSize: 12, color: "#666" }}>
                       Default mode: Upsert Preserve
                     </div>
+                  </div>
+                  <div
+                    data-testid="class-attached-source-panel"
+                    style={{
+                      marginTop: 10,
+                      border: "1px solid #eee",
+                      borderRadius: 8,
+                      background: "#fafafa",
+                      padding: 10,
+                      fontSize: 12,
+                      color: "#333"
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Attached Source</div>
+                    {selectedImportLink?.legacyClassFolderPath ? (
+                      <div style={{ display: "grid", gap: 3 }}>
+                        <div>
+                          <strong>Folder:</strong> {selectedImportLink.legacyClassFolderPath}
+                        </div>
+                        <div>
+                          <strong>CL file:</strong> {selectedImportLink.legacyClFile ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Year token:</strong> {selectedImportLink.legacyYearToken ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Last imported:</strong> {selectedImportLink.lastImportedAt ?? "—"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ color: "#666" }}>No attached legacy source for this class.</div>
+                    )}
                   </div>
                   {selectedPreview ? (
                     <div
