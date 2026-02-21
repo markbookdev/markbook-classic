@@ -96,6 +96,23 @@ function printHumanStatus(payload, expectedDir, manifestPath) {
   } else {
     console.log("- strict lane: READY");
   }
+
+  const checklist = payload.intakeChecklist || {};
+  const strictArtifacts = Array.isArray(checklist.strictArtifactPathsAbs)
+    ? checklist.strictArtifactPathsAbs
+    : [];
+  console.log("- strict artifact intake checklist:");
+  console.log("  1) Export fresh legacy truth files and copy into:");
+  for (const abs of strictArtifacts) {
+    console.log(`     - ${abs}`);
+  }
+  console.log("  2) Generate checksums from repo root:");
+  if (typeof checklist.checksumCommand === "string" && checklist.checksumCommand.trim() !== "") {
+    console.log(`     ${checklist.checksumCommand}`);
+  }
+  console.log(
+    "  3) Update parity-manifest.json checksums (and strictReady=true only when you want strict CI required)."
+  );
 }
 
 function main() {
@@ -116,6 +133,12 @@ function main() {
   const strictRequiredByManifest = manifest?.strictReady === true;
   const regressionRequired = requiredList(manifest, "regression");
   const strictRequired = requiredList(manifest, "strict");
+  const checksumCommand =
+    strictRequired.length === 0
+      ? "shasum -a 256 <strict-files>"
+      : `shasum -a 256 \\\n  ${strictRequired
+          .map((rel) => path.join("fixtures", "legacy", "Sample25", "expected", rel))
+          .join(" \\\n  ")}`;
   const checksums = collectChecksums(manifest);
   const regressionMissing = missingFiles(expectedDir, regressionRequired);
   const strictMissing = missingFiles(expectedDir, strictRequired);
@@ -183,6 +206,10 @@ function main() {
       status: strictTruthStatus,
       missing: strictMissing,
       checksumMismatches: strictChecksumMismatches
+    },
+    intakeChecklist: {
+      strictArtifactPathsAbs: strictRequired.map((rel) => path.join(expectedDir, rel)),
+      checksumCommand
     }
   };
 

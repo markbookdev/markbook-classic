@@ -34,29 +34,16 @@ import { CombinedAnalyticsScreen } from "../screens/CombinedAnalyticsScreen";
 import { SetupAdminScreen } from "../screens/SetupAdminScreen";
 import { PlannerScreen } from "../screens/PlannerScreen";
 import { CourseDescriptionScreen } from "../screens/CourseDescriptionScreen";
-
-type Screen =
-  | "dashboard"
-  | "marks"
-  | "class_wizard"
-  | "reports"
-  | "class_analytics"
-  | "student_analytics"
-  | "combined_analytics"
-  | "planner"
-  | "course_description"
-  | "students"
-  | "markset_setup"
-  | "attendance"
-  | "notes"
-  | "seating_plan"
-  | "learning_skills"
-  | "loaned_items"
-  | "device_mappings"
-  | "calc_settings"
-  | "setup_admin"
-  | "backup"
-  | "exchange";
+import { LegacyActionsMapScreen } from "../screens/LegacyActionsMapScreen";
+import {
+  actionsForGroup,
+  LEGACY_MENU_GROUP_LABELS,
+  LEGACY_MENU_GROUP_ORDER,
+  LEGACY_MENU_GROUP_TEST_IDS,
+  SCREEN_HEADER_ACTION_LABELS,
+  type AppScreen,
+  type LegacyMenuAction
+} from "../state/actionRegistry";
 
 type ClassRow = {
   id: string;
@@ -81,7 +68,7 @@ export function AppShell() {
   const [sidecarMeta, setSidecarMeta] = useState<SidecarMeta | null>(null);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
 
-  const [screen, setScreen] = useState<Screen>("dashboard");
+  const [screen, setScreen] = useState<AppScreen>("dashboard");
   const [classWizardMode, setClassWizardMode] = useState<"create" | "edit">("create");
   const [sidecarError, setSidecarError] = useState<string | null>(null);
   const [lastGridEvent, setLastGridEvent] = useState<string | null>(null);
@@ -470,6 +457,45 @@ export function AppShell() {
     }
   }
 
+  function legacyActionAvailability(action: LegacyMenuAction): {
+    disabled: boolean;
+    title: string | undefined;
+  } {
+    if (!action.implemented) {
+      return {
+        disabled: true,
+        title: action.pendingReason || "Not implemented yet"
+      };
+    }
+    if (action.requiresClass && !selectedClassId) {
+      return {
+        disabled: true,
+        title: "Select a class first"
+      };
+    }
+    return { disabled: false, title: undefined };
+  }
+
+  function handleLegacyMenuAction(action: LegacyMenuAction) {
+    const availability = legacyActionAvailability(action);
+    if (availability.disabled) return;
+
+    switch (action.id) {
+      case "file.new_class":
+        setClassWizardMode("create");
+        setScreen("class_wizard");
+        return;
+      case "file.edit_class_profile":
+        if (!selectedClassId) return;
+        setClassWizardMode("edit");
+        setScreen("class_wizard");
+        return;
+      default:
+        if (!action.screenRoute) return;
+        setScreen(action.screenRoute);
+    }
+  }
+
   return (
     <div
       data-testid="app-shell"
@@ -719,112 +745,34 @@ export function AppShell() {
             data-testid="legacy-menu-groups"
             style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}
           >
-            <details>
-              <summary>File</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button
-                  onClick={() => {
-                    setClassWizardMode("create");
-                    setScreen("class_wizard");
-                  }}
-                >
-                  Make a New Class
-                </button>
-                <button
-                  onClick={() => {
-                    if (!selectedClassId) return;
-                    setClassWizardMode("edit");
-                    setScreen("class_wizard");
-                  }}
-                  disabled={!selectedClassId}
-                >
-                  Edit Class Profile
-                </button>
-                <button onClick={() => setScreen("dashboard")}>Open a Class</button>
-                <button onClick={() => setScreen("backup")}>BackUp</button>
-                <button onClick={() => setScreen("exchange")}>Exports</button>
-                <button disabled title="Not implemented yet">
-                  Select Printer
-                </button>
-              </div>
-            </details>
-            <details>
-              <summary>Class</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("students")}>Class List</button>
-                <button onClick={() => setScreen("attendance")}>Attendance</button>
-                <button onClick={() => setScreen("seating_plan")}>Seating</button>
-                <button onClick={() => setScreen("notes")}>Student Notes</button>
-                <button disabled title="Not implemented yet">
-                  Email Class List
-                </button>
-              </div>
-            </details>
-            <details>
-              <summary>Mark Sets</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("markset_setup")}>Make a New Mark Set</button>
-                <button onClick={() => setScreen("marks")}>Open a Mark Set</button>
-                <button onClick={() => setScreen("markset_setup")}>Edit Heading and Categories</button>
-                <button disabled title="Not implemented yet">
-                  Undelete a Mark Set
-                </button>
-              </div>
-            </details>
-            <details>
-              <summary>Working On</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("markset_setup")}>Entry Heading</button>
-                <button onClick={() => setScreen("marks")}>Edit Marks</button>
-                <button onClick={() => setScreen("reports")}>Display/Print</button>
-                <button onClick={() => setScreen("marks")}>Clone Entry</button>
-              </div>
-            </details>
-            <details>
-              <summary>Reports</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("reports")}>Mark Set Reports</button>
-                <button onClick={() => setScreen("class_analytics")}>Class Analytics</button>
-                <button onClick={() => setScreen("student_analytics")}>Student Analytics</button>
-                <button onClick={() => setScreen("combined_analytics")}>Combined Analytics</button>
-              </div>
-            </details>
-            <details>
-              <summary>Comments</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("marks")}>Remarks in Marks</button>
-                <button onClick={() => setScreen("markset_setup")}>Comment Sets</button>
-                <button onClick={() => setScreen("markset_setup")}>Comment Banks</button>
-                <button onClick={() => setScreen("markset_setup")}>Transfer Mode</button>
-              </div>
-            </details>
-            <details>
-              <summary>Setup</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("setup_admin")}>Analysis/Report Options</button>
-                <button onClick={() => setScreen("calc_settings")}>Calculation Setup</button>
-                <button onClick={() => setScreen("planner")}>Planner Setup</button>
-                <button onClick={() => setScreen("setup_admin")}>Comments Setup</button>
-                <button onClick={() => setScreen("setup_admin")}>Printer Options</button>
-                <button onClick={() => setScreen("setup_admin")}>Password + Email Setup</button>
-              </div>
-            </details>
-            <details>
-              <summary>Integrations</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("exchange")}>Class Exchange</button>
-                <button onClick={() => setScreen("exchange")}>SIS</button>
-                <button onClick={() => setScreen("exchange")}>Admin Transfer</button>
-              </div>
-            </details>
-            <details>
-              <summary>Planner</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                <button onClick={() => setScreen("planner")}>Units + Lessons</button>
-                <button onClick={() => setScreen("course_description")}>Course Description</button>
-                <button onClick={() => setScreen("reports")}>Planner Reports</button>
-              </div>
-            </details>
+            {LEGACY_MENU_GROUP_ORDER.map((group) => {
+              const actions = actionsForGroup(group);
+              if (actions.length === 0) return null;
+              const groupLabel = LEGACY_MENU_GROUP_LABELS[group];
+              return (
+                <details key={group} data-testid={LEGACY_MENU_GROUP_TEST_IDS[group]}>
+                  <summary>{groupLabel}</summary>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                    {actions.map((action) => {
+                      const availability = legacyActionAvailability(action);
+                      const disabled = availability.disabled;
+                      const title = disabled ? availability.title || "Not implemented yet" : undefined;
+                      return (
+                        <button
+                          key={action.id}
+                          data-testid={action.testId}
+                          disabled={disabled}
+                          title={title}
+                          onClick={() => handleLegacyMenuAction(action)}
+                        >
+                          {action.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
           </div>
 
           <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
@@ -845,7 +793,7 @@ export function AppShell() {
               onCreateClass={createClass}
               onDeleteClass={deleteClass}
               onImportLegacyClassFolder={importLegacyClassFolder}
-              onNavigate={(s) => setScreen(s as Screen)}
+              onNavigate={(s) => setScreen(s as AppScreen)}
               onOpenClassWizard={() => {
                 setClassWizardMode("create");
                 setScreen("class_wizard");
@@ -878,7 +826,7 @@ export function AppShell() {
                 await refresh();
               }}
             />
-          ) : !selectedClassId ? (
+          ) : !selectedClassId && screen !== "legacy_actions_map" ? (
             <div style={{ padding: 24, color: "#666" }}>Select a class.</div>
           ) : !selectedMarkSetId &&
             (screen === "marks" ||
@@ -893,12 +841,14 @@ export function AppShell() {
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
               onGridEvent={(msg) => setLastGridEvent(msg)}
+              headerLabel={SCREEN_HEADER_ACTION_LABELS.marks}
             />
           ) : screen === "reports" ? (
             <ReportsScreen
               selectedClassId={selectedClassId}
               selectedMarkSetId={selectedMarkSetId as string}
               onError={setSidecarError}
+              headerLabel={SCREEN_HEADER_ACTION_LABELS.reports}
               initialContext={
                 reportsPrefill
                   ? {
@@ -981,9 +931,15 @@ export function AppShell() {
           ) : screen === "notes" ? (
             <NotesScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "planner" ? (
-            <PlannerScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+            <PlannerScreen
+              selectedClassId={selectedClassId}
+              onError={setSidecarError}
+              headerLabel={SCREEN_HEADER_ACTION_LABELS.planner}
+            />
           ) : screen === "course_description" ? (
             <CourseDescriptionScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+          ) : screen === "legacy_actions_map" ? (
+            <LegacyActionsMapScreen />
           ) : screen === "seating_plan" ? (
             <SeatingPlanScreen selectedClassId={selectedClassId} onError={setSidecarError} />
           ) : screen === "learning_skills" ? (
@@ -1003,7 +959,11 @@ export function AppShell() {
               onAfterImport={refresh}
             />
           ) : screen === "exchange" ? (
-            <ExchangeScreen selectedClassId={selectedClassId} onError={setSidecarError} />
+            <ExchangeScreen
+              selectedClassId={selectedClassId}
+              onError={setSidecarError}
+              headerLabel={SCREEN_HEADER_ACTION_LABELS.exchange}
+            />
           ) : (
             <div style={{ padding: 24, color: "#666" }}>(unknown screen)</div>
           )}

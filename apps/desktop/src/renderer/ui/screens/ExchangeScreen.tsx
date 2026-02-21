@@ -19,6 +19,7 @@ import { requestParsed } from "../state/workspace";
 export function ExchangeScreen(props: {
   selectedClassId: string;
   onError: (msg: string | null) => void;
+  headerLabel?: string;
 }) {
   const [tab, setTab] = useState<"class" | "sis" | "admin">("class");
   const [exportPath, setExportPath] = useState("");
@@ -568,7 +569,9 @@ export function ExchangeScreen(props: {
 
   return (
     <div data-testid="exchange-screen" style={{ padding: 24, maxWidth: 920 }}>
-      <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 12 }}>Exchange</div>
+      <div data-testid="exchange-screen-header-label" style={{ fontWeight: 800, fontSize: 22, marginBottom: 12 }}>
+        {props.headerLabel ?? "Exchange"}
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button
           data-testid="exchange-tab-class"

@@ -16,6 +16,20 @@
 
 ## Strict-ready playbook
 
+### Plain-language checklist (what we need from the legacy app)
+
+To prove math parity against legacy truth, we need a **freshly recalculated legacy class** and the exact output files below.
+
+1. Open legacy MarkBook and load class folder `Sample25/MB8D25`.
+2. Open each mark set (`MAT1`, `MAT2`, `MAT3`, `SNC1`, `SNC2`, `SNC3`), run Calculate/Recalculate, then Save.
+3. Copy out:
+   - one fresh final-marks export JSON (`fresh-final-marks.json`)
+   - six refreshed mark files (`MAT18D.Y25`, `MAT28D.Y25`, `MAT38D.Y25`, `SNC18D.Y25`, `SNC28D.Y25`, `SNC38D.Y25`)
+4. Place those files into the strict fixture paths listed below.
+5. Run checksum command and update manifest checksums.
+
+If those files are present and checksums match, strict parity can be turned on with `strictReady=true` in the manifest.
+
 1. Put fresh legacy files in these exact paths:
    - `fixtures/legacy/Sample25/expected/fresh-final-marks.json`
    - `fixtures/legacy/Sample25/expected/fresh-markfiles/MB8D25/MAT18D.Y25`

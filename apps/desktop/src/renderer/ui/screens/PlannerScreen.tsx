@@ -50,7 +50,11 @@ function moveByOne(ids: string[], id: string, delta: -1 | 1): string[] {
   return out;
 }
 
-export function PlannerScreen(props: { selectedClassId: string; onError: (msg: string | null) => void }) {
+export function PlannerScreen(props: {
+  selectedClassId: string;
+  onError: (msg: string | null) => void;
+  headerLabel?: string;
+}) {
   const [tab, setTab] = useState<PlannerTab>("units");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -537,7 +541,9 @@ export function PlannerScreen(props: { selectedClassId: string; onError: (msg: s
 
   return (
     <div data-testid="planner-screen" style={{ padding: 24 }}>
-      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>Planner</div>
+      <div data-testid="planner-screen-header-label" style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>
+        {props.headerLabel ?? "Planner"}
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button
           data-testid="planner-units-tab"

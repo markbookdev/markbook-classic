@@ -101,6 +101,7 @@ export function MarksScreen(props: {
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
   onGridEvent?: (msg: string) => void;
+  headerLabel?: string;
 }) {
   const GRID_TILE_ROWS = 40;
   const GRID_TILE_COLS = 8;
@@ -1703,6 +1704,22 @@ export function MarksScreen(props: {
       data-testid="marks-screen"
       style={{ position: "relative", width: "100%", height: "100%" }}
     >
+      <div
+        data-testid="marks-screen-header-label"
+        style={{
+          position: "absolute",
+          right: 12,
+          top: 12,
+          zIndex: 7,
+          background: "rgba(255,255,255,0.95)",
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: "6px 10px",
+          fontWeight: 700
+        }}
+      >
+        {props.headerLabel ?? "Marks"}
+      </div>
       <div
         data-testid="marks-bulk-toolbar"
         style={{

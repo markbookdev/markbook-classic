@@ -34,7 +34,7 @@ Status rules:
 | GAP-008 | Setup subdomains (analysis/calc/comments/etc.) | Partial (depth-expanded) | 2 | 2 | 2 | 2 | 3 | 2 | 3 | 11 | Setup/Admin now includes attendance/comments/reports/security/printer defaults plus integrations/marks/exchange/analytics defaults; full legacy setup breadth is narrowed but not complete. |
 | GAP-009 | Bulk email workflow | Missing | 4 | 3 | 2 | 1 | 2 | 3 | 3 | 9 | deferred until core parity closure. |
 | GAP-010 | Chapter 13 external adapters breadth | Partial (Tier-A shipped) | 2 | 2 | 2 | 1 | 2 | 2 | 4 | 7 | Tier-A CSV + admin transfer contracts/UI are shipped; broader adapter families remain deferred. |
-| GAP-011 | Visual/menu discoverability parity | Partial (final pass in progress) | 2 | 2 | 0 | 0 | 3 | 2 | 2 | 9 | Legacy-style grouped menus are present with deterministic implemented-vs-pending affordances; remaining gap is full legacy action-surface polish/coverage. |
+| GAP-011 | Visual/menu discoverability parity | Implemented (functional) | 1 | 1 | 0 | 0 | 3 | 1 | 2 | 6 | Canonical action registry now drives AppShell groups/actions plus Legacy Actions Map and label-consistency locks; remaining delta is optional visual polish, not workflow parity. |
 | GAP-012 | Legacy-truth strict evidence lane fully populated | Partial (activation pack finalized) | 1 | 1 | 3 | 5 | 4 | 5 | 2 | 17 | Truth readiness tooling and CI activation mechanics are shipped (`test:parity:truth`, checksum preflight, strict-ready playbook); only fresh legacy artifacts + manifest flip remain. |
 
 ## Priority Ordering (high to low)
@@ -52,7 +52,7 @@ Status rules:
 12. GAP-010
 
 ## Interpretation
-- Core-first classroom lane has closed GAP-002/003 to implemented (interactive read-only parity); remaining classroom emphasis is workflow breadth (planner/setup/integrations).
+- Core-first classroom lane has closed GAP-002/003 and GAP-011 to implemented (function-first parity); remaining classroom emphasis is workflow breadth (planner/setup/integrations).
 - Tier-A integrations and setup defaults now reduce operational risk for real-school import/export workflows without introducing IPC breaking changes.
 - GAP-012 remains the highest-risk evidence lane item and continues as the strict-goldens activation path.
 - GAP-001 (planner) is strategic but not day-one classroom-critical for grading/reporting parity.

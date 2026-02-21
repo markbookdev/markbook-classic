@@ -44,6 +44,7 @@ export function ReportsScreen(props: {
   selectedClassId: string;
   selectedMarkSetId: string;
   onError: (msg: string | null) => void;
+  headerLabel?: string;
   initialContext?: {
     filters: { term: number | null; categoryName: string | null; typesMask: number | null };
     studentScope: "all" | "active" | "valid";
@@ -547,7 +548,9 @@ export function ReportsScreen(props: {
 
   return (
     <div data-testid="reports-screen" style={{ padding: 24 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Reports</div>
+      <div data-testid="reports-screen-header-label" style={{ fontWeight: 700, marginBottom: 8 }}>
+        {props.headerLabel ?? "Reports"}
+      </div>
       <div
         data-testid="reports-filters-panel"
         style={{

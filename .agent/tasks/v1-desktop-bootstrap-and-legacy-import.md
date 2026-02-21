@@ -578,3 +578,42 @@ Stand up a working desktop skeleton (Electron + Bun + Rust sidecar) and implemen
   - strict lane remains conditional until fresh legacy truth artifacts are supplied and `strictReady=true` is committed.
   - setup/security remains persistence+default behavior only (no full lock-screen/auth UX yet).
   - discoverability parity remains function-first; full visual clone is still deferred.
+
+### Wave 10 Snapshot (2026-02-21, discoverability final pass + strict-prep only)
+- Baseline lock and gate snapshot (pre-change):
+  - `cargo test --all-targets` => PASS
+  - `bun run test:reports` => PASS
+  - `bun run test:e2e` => PASS (`59 passed`, `1 skipped packaged smoke`)
+  - `bun run test:parity:regression` => PASS
+  - `bun run test:packaging` => PASS
+  - `bun run test:e2e:packaged` => PASS
+  - `bun run test:parity:truth` => PASS (`mode=not-ready`, strict artifacts missing expected)
+- Discoverability closure delivered:
+  - Added canonical renderer action registry:
+    - `apps/desktop/src/renderer/ui/state/actionRegistry.ts`
+  - AppShell legacy menu groups now generated from registry (single source of truth):
+    - `apps/desktop/src/renderer/ui/app/AppShell.tsx`
+  - Added read-only discoverability map screen:
+    - `apps/desktop/src/renderer/ui/screens/LegacyActionsMapScreen.tsx`
+  - Locked screen label consistency from menu action -> header label on key screens:
+    - `apps/desktop/src/renderer/ui/screens/MarksScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/ReportsScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/ExchangeScreen.tsx`
+    - `apps/desktop/src/renderer/ui/screens/PlannerScreen.tsx`
+- Strict-truth prep hardening (no flip):
+  - `apps/desktop/scripts/parity-status.cjs` now includes strict artifact intake checklist output and checksum command guidance.
+  - Added script-level lock test:
+    - `apps/desktop/scripts/__tests__/parity-status.test.cjs`
+  - Expanded plain-language intake instructions:
+    - `docs/parity/legacy-truth-evidence-lane.md`
+- Discoverability/E2E locks added:
+  - `apps/desktop/e2e/legacy-actions-map.e2e.spec.cjs`
+  - `apps/desktop/e2e/screen-action-label-consistency.e2e.spec.cjs`
+  - expanded `apps/desktop/e2e/menu-discoverability.e2e.spec.cjs`
+- Validation (this slice):
+  - `node --test apps/desktop/scripts/__tests__/parity-status.test.cjs` => PASS
+  - `bun run test:parity:truth` => PASS (`mode=not-ready`, non-blocking as expected)
+  - `bun x playwright test apps/desktop/e2e/menu-discoverability.e2e.spec.cjs apps/desktop/e2e/legacy-actions-map.e2e.spec.cjs apps/desktop/e2e/screen-action-label-consistency.e2e.spec.cjs` => PASS (`3 passed`)
+- Remaining deltas after Wave 10:
+  - strict lane remains conditional until fresh legacy truth artifacts are supplied and `strictReady=true` is committed.
+  - discoverability is functionally closed; optional visual clone/polish remains intentionally deferred.

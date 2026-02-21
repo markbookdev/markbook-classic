@@ -19,4 +19,5 @@
 | Backup/Restore | Partial | solid baseline, broaden parity options |
 | Exchange/Integrations | Partial (Tier-A shipped) | class exchange + SIS preview/apply/export + admin transfer package preview/apply/export shipped; broader chapter-13 adapters pending |
 | Packaging/Release hardening | Implemented | launch smoke and CI gates in place |
-| Strict legacy-truth parity lane | Partial (strict-ready) | manifest/checksum/schema validation + CI truth-readiness wiring + playbook are shipped; fresh outputs are still required to flip `strictReady=true` |
+| Strict legacy-truth parity lane | Partial (strict-ready) | manifest/checksum/schema validation + CI truth-readiness wiring + operator intake checklist/playbook are shipped; fresh outputs are still required to flip `strictReady=true` |
+| Visual/menu discoverability parity | Implemented (functional) | canonical action registry drives grouped legacy menus, pending actions are deterministic, and Legacy Actions Map + label consistency locks are shipped |

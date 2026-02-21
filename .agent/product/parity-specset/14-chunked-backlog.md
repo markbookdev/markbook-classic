@@ -197,6 +197,16 @@ Execution-ready chunk list for iterative delivery.
   - `rust/markbookd/tests/parity_fixture_preflight.rs`
   - `.github/workflows/quality-gates.yml`
 
+## EPIC-EVIDENCE-02-PREP: Strict-truth prep ergonomics (no flip)
+- Status:
+  - DONE (2026-02-21): parity-status now emits an operator intake checklist, script-level status tests are in place, and intake docs were expanded in plain language while keeping `strictReady=false`.
+- Objective:
+  - improve strict-truth operator ergonomics without ingesting artifacts or changing gate activation policy.
+- File targets:
+  - `apps/desktop/scripts/parity-status.cjs`
+  - `apps/desktop/scripts/__tests__/parity-status.test.cjs`
+  - `docs/parity/legacy-truth-evidence-lane.md`
+
 ## EPIC-SETUP-03: Setup/admin breadth closure
 - Status:
   - DONE (core breadth) (2026-02-21): additive attendance/comments/reports/security/printer setup defaults are shipped and wired to consuming screens.
@@ -224,8 +234,8 @@ Execution-ready chunk list for iterative delivery.
 
 ## EPIC-UX-02: Discoverability final pass
 - Status:
-  - IN PROGRESS (2026-02-21): deterministic action-state labeling is in place; final visual/menu parity polish remains.
+  - DONE (functional) (2026-02-21): AppShell legacy groups/actions are generated from a canonical action registry, pending actions show deterministic `Not implemented yet`, and Legacy Actions Map + label-consistency locks are shipped.
 - Objective:
   - complete discoverability parity without reintroducing legacy security/UI constraints.
 - Tests:
-  - Playwright: `menu-discoverability.e2e.spec.cjs`
+  - Playwright: `menu-discoverability.e2e.spec.cjs`, `legacy-actions-map.e2e.spec.cjs`, `screen-action-label-consistency.e2e.spec.cjs`
