@@ -30,6 +30,11 @@ test("legacy menu groups are discoverable and route to implemented screens", asy
     await groups.locator('summary:has-text("Comments")').click();
     await groups.getByRole("button", { name: "Remarks in Marks" }).click();
     await expect(page.getByTestId("marks-screen")).toBeVisible();
+
+    await groups.locator('summary:has-text("File")').click();
+    const pendingPrinter = groups.getByRole("button", { name: "Select Printer" });
+    await expect(pendingPrinter).toBeDisabled();
+    await expect(pendingPrinter).toHaveAttribute("title", "Not implemented yet");
   } finally {
     await app.close();
   }
